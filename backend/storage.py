@@ -108,6 +108,38 @@ def update_agent_result(claim_id: str, agent_name: str, data: dict):
     save_result(claim_id, result)
 
 
+# ── Human-in-the-loop: adjuster decision & notes ───────────────────────────────
+
+def set_adjuster_decision(claim_id: str, decision: str, adjuster: str, reason: str,
+                          ai_decision: str = "") -> dict:
+    """Record a human adjuster's final decision on a claim (overriding/confirming AI)."""
+    result = get_result(claim_id) or {"claim_id": claim_id, "agents": {}, "summary": {}}
+    record = {
+        "decision": decision,
+        "adjuster": adjuster or "Adjuster",
+        "reason": reason or "",
+        "ai_decision": ai_decision,
+        "overridden": bool(ai_decision) and decision != ai_decision,
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+    }
+    result["adjuster_decision"] = record
+    save_result(claim_id, result)
+    return record
+
+
+def add_adjuster_note(claim_id: str, author: str, text: str) -> dict:
+    """Append a free-text note to the claim's adjuster note thread."""
+    result = get_result(claim_id) or {"claim_id": claim_id, "agents": {}, "summary": {}}
+    note = {
+        "author": author or "Adjuster",
+        "text": text,
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+    }
+    result.setdefault("adjuster_notes", []).append(note)
+    save_result(claim_id, result)
+    return note
+
+
 # ── Image helpers ─────────────────────────────────────────────────────────────
 
 def get_claim_images(claim_id: str) -> list[str]:

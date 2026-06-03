@@ -8,6 +8,7 @@ from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Query, 
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 import storage
@@ -147,6 +148,20 @@ def get_claim(claim_id: str):
         raise HTTPException(status_code=404, detail="Claim not found")
     result = storage.get_result(claim_id)
     policy = storage.get_policy_by_phone(claim.get("phone", ""))
+
+    # Lazy backfill: compute settlement breakdown for claims investigated before
+    # the transparent-math feature existed, so older/seed claims still show it.
+    try:
+        summary = (result or {}).get("summary") or {}
+        if summary.get("decision") and not summary.get("settlement_breakdown"):
+            from services.settlement_calc import compute_settlement_breakdown
+            damage = (result.get("agents") or {}).get("damage_assessment", {})
+            bd = compute_settlement_breakdown(claim, policy, damage, summary["decision"])
+            if bd:
+                summary["settlement_breakdown"] = bd
+    except Exception:
+        pass
+
     return {"claim": claim, "result": result, "policy": policy}
 
 
@@ -249,6 +264,76 @@ async def stream(claim_id: str):
                 yield {"data": json.dumps({"type": "ping"})}
 
     return EventSourceResponse(event_generator())
+
+
+# ── Human-in-the-loop: Adjuster decision & notes ──────────────────────────────
+
+# Maps an adjuster's chosen decision to the claim's lifecycle status.
+_ADJUSTER_STATUS = {
+    "Approve":  "Approved",
+    "Reject":   "Rejected",
+    "Settle":   "Settled",
+    "Escalate": "Escalated",
+    "Request Info": "Pending Customer",
+}
+
+
+class AdjusterDecisionIn(BaseModel):
+    decision: str
+    adjuster: str = "Adjuster"
+    reason: str = ""
+
+
+class AdjusterNoteIn(BaseModel):
+    author: str = "Adjuster"
+    text: str
+
+
+@app.post("/api/claims/{claim_id}/adjuster/decision")
+def adjuster_decision(claim_id: str, payload: AdjusterDecisionIn):
+    if not storage.get_claim(claim_id):
+        raise HTTPException(status_code=404, detail="Claim not found")
+    if payload.decision not in _ADJUSTER_STATUS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid decision '{payload.decision}'. Allowed: {list(_ADJUSTER_STATUS)}",
+        )
+
+    result = storage.get_result(claim_id) or {}
+    ai_decision = (result.get("summary") or {}).get("decision", "")
+
+    record = storage.set_adjuster_decision(
+        claim_id, payload.decision, payload.adjuster, payload.reason, ai_decision
+    )
+    storage.update_claim_field(claim_id, "status", _ADJUSTER_STATUS[payload.decision])
+    return {"adjuster_decision": record, "status": _ADJUSTER_STATUS[payload.decision]}
+
+
+@app.post("/api/claims/{claim_id}/adjuster/notes")
+def adjuster_note(claim_id: str, payload: AdjusterNoteIn):
+    if not storage.get_claim(claim_id):
+        raise HTTPException(status_code=404, detail="Claim not found")
+    if not payload.text.strip():
+        raise HTTPException(status_code=422, detail="Note text cannot be empty")
+    note = storage.add_adjuster_note(claim_id, payload.author, payload.text.strip())
+    return {"note": note}
+
+
+# ── Customer Communication: auto-drafted decision letter (#7) ──────────────────
+
+@app.get("/api/claims/{claim_id}/letter")
+def decision_letter(claim_id: str):
+    claim = storage.get_claim(claim_id)
+    if not claim:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    result = storage.get_result(claim_id)
+    if not result or not (result.get("summary") or {}).get("decision"):
+        raise HTTPException(status_code=400, detail="Investigation not complete — run investigation first")
+    policy = storage.get_policy_by_phone(claim.get("phone", ""))
+
+    from services.letter_generator import draft_decision_letter
+    letter = draft_decision_letter(claim, result, policy)
+    return letter
 
 
 # ── Analytics ─────────────────────────────────────────────────────────────────

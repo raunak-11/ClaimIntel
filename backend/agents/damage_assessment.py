@@ -47,9 +47,11 @@ Report EVERY damage zone found, including:
   - Dents and creases at any severity
 
 ━━━ OTHER RULES ━━━
-- Use KB pricing data (if provided) for estimates; note OEM vs aftermarket
-- repair_estimate_INR min and max MUST differ by 15–30%: min = aftermarket/local, max = OEM/dealer
-  E.g. OEM ₹14,000 → min=11500, max=16500
+- DO NOT estimate repair costs in rupees — a separate pricing engine computes all costs.
+  Your job is to identify each damaged part, its severity, and the correct repair_type.
+- repair_type rules: "Replace" if the part is broken/shattered/crushed/torn or severely deformed;
+  "Repair" for dents/creases that can be hammered and repainted; "Paint" for scratches/scuffs only.
+  Glass, lights, mirrors and wheels that are damaged are always "Replace".
 - PLATE RULE: Set registration_plate_visible only if the plate text is physically legible in the image.
   Do NOT guess or copy the plate from the claim description. If unclear → false and null.
 - Return ONLY valid JSON — no markdown fences, no explanation text
@@ -61,9 +63,7 @@ Return a JSON object with exactly these fields:
       "part": "snake_case part name e.g. front_bumper, headlight_left, door_rear_right",
       "severity": "Minor|Moderate|Severe",
       "bounding_box": {{"image_index": 0, "x": 10, "y": 20, "w": 30, "h": 25}},
-      "repair_estimate_INR": {{"min": 5000, "max": 8000}},
-      "repair_type": "Replace|Repair|Paint",
-      "pricing_source": "OEM|Aftermarket|Estimate"
+      "repair_type": "Replace|Repair|Paint"
     }}
   ],
   "overall_severity": "Minor|Moderate|Severe",
@@ -77,6 +77,7 @@ Return a JSON object with exactly these fields:
   "pre_existing_damage_observed": false,
   "pre_existing_damage_notes": null,
   "multiple_vehicles_in_frame": false,
+  "image_quality_flags": ["any of: blurry, too_dark, overexposed, too_far, partial_view, low_resolution — or 'none' if photos are clear and usable"],
   "status": "completed",
   "summary": "Severity: X | Est. Repair: ₹X–₹X | Parts: N damaged | Vehicle Match: Yes/No/Unclear"
 }}
@@ -130,26 +131,20 @@ class DamageAssessmentAgent(BaseAgent):
                 h = 100 - y
             bb["x"], bb["y"], bb["w"], bb["h"] = round(x, 1), round(y, 1), round(w, 1), round(h, 1)
 
-        # ── Ensure every estimate has a real min/max range ────────────────────
-        for part in result.get("damaged_parts", []):
-            est = part.get("repair_estimate_INR")
-            if isinstance(est, dict):
-                lo = float(est.get("min") or 0)
-                hi = float(est.get("max") or 0)
-                if lo == hi and lo > 0:
-                    part["repair_estimate_INR"] = {
-                        "min": round(lo * 0.82 / 500) * 500,
-                        "max": round(lo * 1.18 / 500) * 500,
-                    }
-        total = result.get("total_repair_estimate")
-        if isinstance(total, dict):
-            lo = float(total.get("min") or 0)
-            hi = float(total.get("max") or 0)
-            if lo == hi and lo > 0:
-                result["total_repair_estimate"] = {
-                    "min": round(lo * 0.82 / 500) * 500,
-                    "max": round(lo * 1.18 / 500) * 500,
-                }
+        # ── Deterministic pricing engine ──────────────────────────────────────
+        # The vision model only classifies (part + severity + repair_type).
+        # The engine computes all rupee amounts from a segment-aware catalog,
+        # refined by live web prices when an API key is configured. This OVERRIDES
+        # any prices the LLM guessed, so estimates are reproducible and defensible.
+        try:
+            from services.pricing_engine import estimate_damage
+            pricing = estimate_damage(vehicle, result.get("damaged_parts", []), live=True)
+            result["total_repair_estimate"] = pricing["total_repair_estimate"]
+            result["vehicle_segment"] = pricing["segment"]
+            result["pricing_method"] = pricing["pricing_method"]
+            result["pricing_sources"] = pricing["pricing_sources"]
+        except Exception as e:
+            result["pricing_method"] = f"unavailable ({e})"
 
         # Garage estimate cross-check
         # Prefer manually entered amount; fall back to parsed estimate doc
@@ -189,4 +184,55 @@ class DamageAssessmentAgent(BaseAgent):
             result["garage_inflation_flag"] = False
             result["garage_inflation_note"] = None
 
+        # ── Image quality gate (#6 — data quality) ────────────────────────────
+        # Combine deterministic checks (photo count, plate legibility) with the
+        # vision model's own quality flags (blur, darkness, framing).
+        result["image_quality"] = self._image_quality_gate(result, image_count)
+
         return result
+
+    @staticmethod
+    def _image_quality_gate(result: dict, photo_count: int) -> dict:
+        issues: list[str] = []
+        blocking = False  # blocking issues should hold the claim for resubmission
+
+        if photo_count == 0:
+            issues.append("No damage photos submitted")
+            blocking = True
+        elif photo_count == 1:
+            issues.append("Only 1 photo provided — at least 2 angles recommended")
+
+        # Plate legibility (already validated above against the actual images)
+        if photo_count > 0 and result.get("registration_plate_visible") is False:
+            issues.append("Registration plate not legible in any photo")
+
+        # Vision-model quality flags
+        _LABELS = {
+            "blurry":         "Photos appear blurry",
+            "too_dark":       "Photos are too dark",
+            "overexposed":    "Photos are overexposed",
+            "too_far":        "Photos taken too far from the damage",
+            "partial_view":   "Damage only partially visible in frame",
+            "low_resolution": "Photo resolution too low for assessment",
+        }
+        llm_flags = result.get("image_quality_flags") or []
+        if isinstance(llm_flags, str):
+            llm_flags = [llm_flags]
+        seen_blocking_visual = False
+        for f in llm_flags:
+            key = str(f).strip().lower()
+            if key and key != "none" and key in _LABELS:
+                issues.append(_LABELS[key])
+                if key in ("blurry", "too_dark", "overexposed", "low_resolution"):
+                    seen_blocking_visual = True
+
+        if seen_blocking_visual and photo_count > 0:
+            blocking = True
+
+        return {
+            "photo_count":          photo_count,
+            "plate_visible":        bool(result.get("registration_plate_visible")),
+            "issues":               issues,
+            "gate_passed":          not blocking,
+            "resubmit_recommended": blocking,
+        }

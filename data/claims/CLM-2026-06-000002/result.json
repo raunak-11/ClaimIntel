@@ -1,0 +1,287 @@
+{
+  "claim_id": "CLM-2026-06-000002",
+  "agents": {
+    "damage_assessment": {
+      "damaged_parts": [
+        {
+          "part": "windshield_front",
+          "severity": "Severe",
+          "bounding_box": {
+            "image_index": 0,
+            "x": 10.0,
+            "y": 5.0,
+            "w": 80.0,
+            "h": 20.0
+          },
+          "repair_type": "Replace",
+          "repair_estimate_INR": {
+            "min": 6900,
+            "max": 11600
+          },
+          "pricing_source": "segment_catalog"
+        },
+        {
+          "part": "bonnet",
+          "severity": "Severe",
+          "bounding_box": {
+            "image_index": 0,
+            "x": 20.0,
+            "y": 25.0,
+            "w": 60.0,
+            "h": 30.0
+          },
+          "repair_type": "Replace",
+          "repair_estimate_INR": {
+            "min": 10500,
+            "max": 17300
+          },
+          "pricing_source": "segment_catalog"
+        },
+        {
+          "part": "front_bumper",
+          "severity": "Moderate",
+          "bounding_box": {
+            "image_index": 0,
+            "x": 15.0,
+            "y": 70.0,
+            "w": 40.0,
+            "h": 15.0
+          },
+          "repair_type": "Repair",
+          "repair_estimate_INR": {
+            "min": 3400,
+            "max": 4600
+          },
+          "pricing_source": "segment_catalog"
+        },
+        {
+          "part": "headlight_left",
+          "severity": "Minor",
+          "bounding_box": {
+            "image_index": 0,
+            "x": 25.0,
+            "y": 40.0,
+            "w": 15.0,
+            "h": 10.0
+          },
+          "repair_type": "Replace",
+          "repair_estimate_INR": {
+            "min": 3900,
+            "max": 8200
+          },
+          "pricing_source": "segment_catalog"
+        },
+        {
+          "part": "headlight_right",
+          "severity": "Minor",
+          "bounding_box": {
+            "image_index": 0,
+            "x": 60.0,
+            "y": 40.0,
+            "w": 15.0,
+            "h": 10.0
+          },
+          "repair_type": "Replace",
+          "repair_estimate_INR": {
+            "min": 3900,
+            "max": 8200
+          },
+          "pricing_source": "segment_catalog"
+        }
+      ],
+      "overall_severity": "Severe",
+      "total_repair_estimate": {
+        "min": 28600,
+        "max": 49900
+      },
+      "consistent_with_description": "High",
+      "notes": "The vehicle appears to be a Maruti Suzuki Baleno Alpha with severe damage to the bonnet and windshield.",
+      "vehicle_match_in_image": "Yes",
+      "vehicle_seen_description": "Maruti Suzuki Baleno Alpha, blue in color",
+      "registration_plate_visible": true,
+      "plate_text_in_image": "UP27AS2525",
+      "pre_existing_damage_observed": false,
+      "pre_existing_damage_notes": null,
+      "multiple_vehicles_in_frame": false,
+      "image_quality_flags": [
+        "none"
+      ],
+      "status": "completed",
+      "summary": "Severity: Severe | Est. Repair: ₹0–₹0 | Parts: 5 damaged | Vehicle Match: Yes",
+      "vehicle_segment": "Hatchback",
+      "pricing_method": "segment_catalog",
+      "pricing_sources": [
+        "segment_catalog"
+      ],
+      "garage_estimate_provided": true,
+      "garage_estimate_amount_inr": 50000.0,
+      "garage_vs_ai_variance_pct": 27.4,
+      "garage_inflation_flag": false,
+      "garage_inflation_note": "Garage estimate ₹50,000 is 27% higher than AI mid-estimate ₹39,250",
+      "image_quality": {
+        "photo_count": 1,
+        "plate_visible": true,
+        "issues": [
+          "Only 1 photo provided — at least 2 angles recommended"
+        ],
+        "gate_passed": true,
+        "resubmit_recommended": false
+      }
+    },
+    "fraud_intelligence": {
+      "fraud_score": 15,
+      "fraud_label": "Low",
+      "indicators": [],
+      "matched_schemes": [],
+      "kb_references": [
+        "FS-001"
+      ],
+      "policy_age_days": 942,
+      "nps_risk_level": "None",
+      "status": "completed",
+      "summary": "Fraud Risk: 15% (Low) | Top flag: NEW POLICY SYNDROME (MEDIUM RISK)"
+    },
+    "incident_reconstruction": {
+      "collision_type": "Rollover|Multi-point|Front impact",
+      "impact_direction": "Overhead or top-down impact with secondary front-end damage",
+      "reconstruction": "The vehicle was likely struck from above with significant force, causing the windshield and bonnet to be severely damaged. The front bumper and headlights also show damage, suggesting a secondary impact or collapse of the vehicle's front structure.",
+      "reconstruction_bullets": [
+        "The severe damage to the windshield and bonnet suggests a high-impact event, possibly involving another vehicle or object falling onto the vehicle.",
+        "The presence of moderate front bumper damage and minor headlight damage indicates a secondary impact or structural collapse.",
+        "The described incident of a vehicle flipping and landing on top of the claimant's vehicle is plausible given the extensive roof and front-end damage."
+      ],
+      "storyboard_panels": [
+        {
+          "panel": 1,
+          "title": "Pre-Incident",
+          "emoji": "🚗",
+          "description": "The claimant's vehicle, a Maruti Suzuki Baleno, was being driven near Karapakkam."
+        },
+        {
+          "panel": 2,
+          "title": "Point of Impact",
+          "emoji": "💥",
+          "description": "Another vehicle or object flipped and landed on top of the claimant's vehicle, causing severe damage to the windshield, bonnet, and front bumper."
+        },
+        {
+          "panel": 3,
+          "title": "Immediate Aftermath",
+          "emoji": "🔧",
+          "description": "The claimant's vehicle suffered significant damage, with the windshield shattered and the bonnet crumpled. The front bumper and headlights also sustained damage."
+        },
+        {
+          "panel": 4,
+          "title": "Evidence Summary",
+          "emoji": "🔍",
+          "description": "The physical evidence supports the claimant's story, with damage consistent with an overhead impact and subsequent front-end collapse."
+        }
+      ],
+      "damage_matches_story": true,
+      "confidence": 80,
+      "similar_historical_cases": [
+        "HIST-003"
+      ],
+      "inconsistencies": [],
+      "status": "completed",
+      "summary": "Most Probable: Rollover|Multi-point|Front impact | Confidence: 80% | Story Match: Yes"
+    },
+    "context_verification": {
+      "status": "completed",
+      "location_verified": true,
+      "geocoded_location": "Karapakkam, Zone 15 Sholinganallur, Chennai Corporation, Sholinganallur, Chennai, Tamil Nadu, 600096, India",
+      "coordinates": {
+        "lat": 12.9117073,
+        "lon": 80.2277203
+      },
+      "weather": "Overcast Clouds, 31.66°C, Humidity: 76%, Visibility: 10000m",
+      "traffic": "Moderate",
+      "policy_coverage_note": "No obvious coverage exclusions detected from policy document",
+      "policy_document_excerpt": "— POLICY DOCUMENT — POL-445566]\n145\nCOVERAGE DETAILS & CONDITIONS\n  OWN DAMAGE COVERAGE (Section I)\nAccidental Damage\nUp to IDV (Rs. 1,600,000) after deductibles\nFire and Exp\n  THIRD PARTY LIABILITY (Section II - Mandatory)\nThird Party Bodily Injury\nUnlimited as per Motor Vehicles Act, 1988\nThird Pa...",
+      "summary": "Weather: Overcast Clouds, 31.66°C, Humidity: 76%, Visibility: 10000m | Location: Verified ✓ | Policy: No obvious coverage exclusions detected from policy document"
+    },
+    "settlement_recommendation": {
+      "decision": "Approve",
+      "recommended_settlement": 34200,
+      "confidence": 90,
+      "decision_reasons": [
+        "Fraud score of 15 is below the IRDAI auto-approve threshold of 40",
+        "Damage assessment by Agent 1 indicates severe damage consistent with the incident description",
+        "Incident reconstruction by Agent 3 shows a confidence level of 80 that the damage matches the story",
+        "Location verification by Agent 4 confirms the incident location as plausible"
+      ],
+      "reasoning_trail": [
+        "Step 1: Damage Assessment indicates severe damage with a total repair estimate between ₹28,600 and ₹49,900",
+        "Step 2: Fraud Intelligence reports a low fraud score of 15 with no indicators or matched schemes",
+        "Step 3: Incident Reconstruction confirms the damage is consistent with the story with a confidence level of 80",
+        "Step 4: Context & Policy verification confirms the location and policy coverage with no obvious exclusions",
+        "Step 5: No historical precedents or known fraud schemes apply to this case",
+        "Step 6: Settlement Calculation applies IRDAI depreciation and deducts compulsory deductible of ₹1,000",
+        "Step 7: Final Decision is to approve the claim based on the low fraud score and consistent damage assessment"
+      ],
+      "kb_precedents_applied": [],
+      "deductibles_applied": 1000,
+      "status": "completed",
+      "summary": "Recommendation: Approve | Settlement: ₹24,950 | Confidence: 90%",
+      "settlement_breakdown": {
+        "repair_estimate": 50000,
+        "parts_value": 35000,
+        "labour_value": 15000,
+        "vehicle_age_years": 6.3,
+        "depreciation_pct": 50,
+        "depreciation": 17500,
+        "compulsory_deductible": 1000,
+        "salvage_value": 0,
+        "gst_rate_pct": 18,
+        "gst_on_labour": 2700,
+        "net_payable": 34200,
+        "applies": true,
+        "assumptions": "Parts/labour split assumed 70/30. Depreciation applied to the parts component per IRDAI age schedule. GST 18% on labour. Compulsory deductible Rs.1,000. Salvage assumed Rs.0 (no total loss)."
+      }
+    }
+  },
+  "summary": {
+    "fraud_risk_score": 15,
+    "fraud_risk_label": "Low",
+    "damage_consistency": "High",
+    "incident_consistency": "High",
+    "external_verification": "High",
+    "behavioural_analysis": "Low Risk",
+    "overall_confidence": 90,
+    "decision": "Approve",
+    "recommended_settlement": 34200,
+    "settlement_breakdown": {
+      "repair_estimate": 50000,
+      "parts_value": 35000,
+      "labour_value": 15000,
+      "vehicle_age_years": 6.3,
+      "depreciation_pct": 50,
+      "depreciation": 17500,
+      "compulsory_deductible": 1000,
+      "salvage_value": 0,
+      "gst_rate_pct": 18,
+      "gst_on_labour": 2700,
+      "net_payable": 34200,
+      "applies": true,
+      "assumptions": "Parts/labour split assumed 70/30. Depreciation applied to the parts component per IRDAI age schedule. GST 18% on labour. Compulsory deductible Rs.1,000. Salvage assumed Rs.0 (no total loss)."
+    },
+    "needs_human_review": false,
+    "routing_reasons": [],
+    "image_quality": {
+      "photo_count": 1,
+      "plate_visible": true,
+      "issues": [
+        "Only 1 photo provided — at least 2 angles recommended"
+      ],
+      "gate_passed": true,
+      "resubmit_recommended": false
+    }
+  },
+  "adjuster_decision": {
+    "decision": "Approve",
+    "adjuster": "Raunak",
+    "reason": "It looks fine",
+    "ai_decision": "Approve",
+    "overridden": false,
+    "timestamp": "2026-06-03 12:53"
+  }
+}

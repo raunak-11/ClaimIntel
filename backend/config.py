@@ -7,6 +7,11 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 OPENWEATHERMAP_API_KEY = os.getenv("OPENWEATHERMAP_API_KEY", "")
 
+# Live spare-part price lookup (optional). Set either one to enable
+# "from-the-internet" pricing in the damage estimation engine.
+SERPER_API_KEY = os.getenv("SERPER_API_KEY", "")   # serper.dev (Google, 2500 free)
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")   # tavily.com (1000/mo free)
+
 DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
 CLAIMS_CSV = os.path.join(DATA_DIR, "claims.csv")
 CLAIMS_DIR = os.path.join(DATA_DIR, "claims")

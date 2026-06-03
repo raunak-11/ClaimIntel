@@ -96,13 +96,40 @@ class SettlementRecommendationAgent(BaseAgent):
         # RAG: fetch settlement precedents + fraud scoring thresholds
         kb_context = get_settlement_context(fraud_score, damage_severity, claim_type)
 
+        def _trim(d: dict, keys: list) -> str:
+            return "\n".join(f"{k}: {d.get(k)}" for k in keys if d.get(k) is not None)
+
+        damage_summary = _trim(damage_data, [
+            "overall_severity", "total_repair_estimate", "consistent_with_description",
+            "vehicle_match_in_image", "pre_existing_damage_observed", "garage_inflation_flag",
+            "garage_vs_ai_variance_pct", "garage_estimate_amount_inr", "notes",
+        ])
+        fraud_summary = _trim(fraud_data, [
+            "fraud_score", "fraud_label", "indicators", "matched_schemes",
+            "kb_references", "nps_risk_level", "policy_age_days",
+        ])
+        recon = agents.get("incident_reconstruction", {})
+        recon_summary = _trim(recon, [
+            "collision_type", "damage_matches_story", "confidence",
+            "inconsistencies", "similar_historical_cases",
+        ])
+        ctx = agents.get("context_verification", {})
+        ctx_summary = _trim(ctx, [
+            "location_verified", "weather", "policy_coverage_note",
+        ])
+
+        claim_summary = "\n".join(
+            f"{k}: {v}" for k, v in claim.items()
+            if k not in ("description",)  # description already in damage/fraud context
+        )
+
         prompt = BASE_PROMPT.format(
             kb_context=kb_context,
-            claim_details="\n".join(f"{k}: {v}" for k, v in claim.items()),
-            damage=str(damage_data),
-            fraud=str(fraud_data),
-            reconstruction=str(agents.get("incident_reconstruction", {})),
-            context=str(agents.get("context_verification", {})),
+            claim_details=claim_summary,
+            damage=damage_summary,
+            fraud=fraud_summary,
+            reconstruction=recon_summary,
+            context=ctx_summary,
         )
         result = ask_json(prompt)
         result.setdefault("status", "completed")
