@@ -23,6 +23,7 @@ dist-ssr/
 
 # ── Generated data (rebuilt locally) ──────────────────────────────────────────
 data/vectorstore/
+data/price_cache.json
 
 # ── Editor / OS ───────────────────────────────────────────────────────────────
 .vscode/*

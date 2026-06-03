@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import SettlementBreakdown from './SettlementBreakdown'
 
 const DECISION_STYLES = {
   Approve:  { bg: 'bg-green-500/10',  border: 'border-green-500/40',  text: 'text-green-400',  badge: 'bg-green-500/20 text-green-300',  bar: 'bg-green-500' },
@@ -47,6 +48,7 @@ export default function ClaimDecision({ summary, settlementData }) {
 
   const confidence = summary?.overall_confidence ?? 0
   const reasons    = settlementData?.decision_reasons || []
+  const breakdown  = summary?.settlement_breakdown || settlementData?.settlement_breakdown
 
   return (
     <div className={`rounded-2xl border p-5 ${style.bg} ${style.border}`}>
@@ -69,12 +71,15 @@ export default function ClaimDecision({ summary, settlementData }) {
         <p className="text-xl font-bold text-white">
           ₹{Number(summary?.recommended_settlement ?? 0).toLocaleString('en-IN')}
         </p>
-        {settlementData?.deductibles_applied > 0 && (
+        {settlementData?.deductibles_applied > 0 && !breakdown && (
           <p className="text-xs text-slate-500 mt-1">
             Deductible applied: ₹{Number(settlementData.deductibles_applied).toLocaleString('en-IN')}
           </p>
         )}
       </div>
+
+      {/* Transparent settlement math (#2) */}
+      <SettlementBreakdown breakdown={breakdown} />
 
       {/* Confidence bar */}
       <div className="mb-4">

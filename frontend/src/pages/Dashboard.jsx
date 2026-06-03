@@ -63,7 +63,37 @@ import InvestigationSummary from '../components/InvestigationSummary'
 import StoryboardPanel from '../components/StoryboardPanel'
 import ClaimDecision from '../components/ClaimDecision'
 import EvidencePanel from '../components/EvidencePanel'
+import AdjusterPanel from '../components/AdjusterPanel'
+import DecisionLetter from '../components/DecisionLetter'
 import { SkeletonDashboard } from '../components/Skeleton'
+
+function ReviewBanner({ summary }) {
+  const needsReview = summary?.needs_human_review
+  const imgQ = summary?.image_quality
+  const imgIssue = imgQ && imgQ.resubmit_recommended
+  if (!needsReview && !imgIssue) return null
+
+  return (
+    <div className="space-y-2">
+      {needsReview && (
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3">
+          <p className="text-sm font-semibold text-amber-300 mb-1">⚠ Routed for human review</p>
+          <ul className="list-disc list-inside text-xs text-amber-200/90 space-y-0.5">
+            {(summary.routing_reasons || []).map((r, i) => <li key={i}>{r}</li>)}
+          </ul>
+        </div>
+      )}
+      {imgIssue && (
+        <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3">
+          <p className="text-sm font-semibold text-red-300 mb-1">📷 Image quality — resubmission recommended</p>
+          <ul className="list-disc list-inside text-xs text-red-200/90 space-y-0.5">
+            {(imgQ.issues || []).map((r, i) => <li key={i}>{r}</li>)}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function Dashboard() {
   const { claimId } = useParams()
@@ -138,6 +168,9 @@ export default function Dashboard() {
         <DownloadReportButton claimId={claimId} hasResult={hasResult} />
       </div>
 
+      {/* Routing / data-quality alerts (#6) */}
+      {hasResult && <ReviewBanner summary={summary} />}
+
       {/* Row 1: 3 columns */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <ClaimOverview claim={claim} policy={policy} />
@@ -167,6 +200,19 @@ export default function Dashboard() {
           claimDocs={claimDocs}
         />
       </div>
+
+      {/* Row 4: human-in-the-loop (#1) + customer letter (#7) */}
+      {hasResult && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <AdjusterPanel
+            claimId={claimId}
+            result={result}
+            aiDecision={summary.decision}
+            onUpdated={fetchResult}
+          />
+          <DecisionLetter claimId={claimId} />
+        </div>
+      )}
 
     </div>
   )
