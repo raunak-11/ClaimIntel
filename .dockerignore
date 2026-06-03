@@ -1,0 +1,36 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Data — bind-mounted at runtime, not baked into image
+data/vectorstore/
+
+# Editor / OS
+.vscode/
+.idea/
+*.DS_Store
+Thumbs.db
+
+# Secrets
+.env
+
+# Git
+.git/
+.gitignore
+
+# Docs / non-essential
+*.md
+Arch_Diagrams/
+FLOW.zip

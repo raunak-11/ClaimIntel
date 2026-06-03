@@ -1,0 +1,2 @@
+claim_id,policy_no,claimant,phone,vehicle,claim_type,incident_date,incident_location,claim_amount,description,status,created_at,garage_estimate_amount,garage_workshop_name,fir_number
+CLM-2026-06-000001,POL-112233,Aditya Nair,9567890123,Kia Seltos HTX Plus (TN12AJ1603),Motor - Own Damage,2026-05-31T16:53,"Guindy, Chennai",48500,"The vehicle met with a major accident because some vehicle hit me while being driven on a public road, resulting in damage to the front portion of the vehicle.",Escalated,2026-06-03,85000,Ganesh Motors,

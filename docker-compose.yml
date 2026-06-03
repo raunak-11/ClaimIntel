@@ -1,0 +1,55 @@
+# ClaimIntel — Docker Compose
+# Usage:  docker compose up --build
+# App:    http://localhost:3000
+#
+# API keys come from .env in this directory.
+# Seed data (claims, policies, KB) is bind-mounted from ./data — persists on the host.
+
+name: latest_motorclaim
+
+services:
+
+  # ── FastAPI Backend ──────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: claimintel-backend
+    ports:
+      - "8001:8001"          # also exposed directly for local curl / Postman
+    env_file:
+      - .env                  # GROQ_API_KEY, GEMINI_API_KEY, OPENWEATHERMAP_API_KEY
+    environment:
+      # Allow requests from both the nginx frontend and local dev browser
+      ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:5173"
+    volumes:
+      # Bind-mount so claims, uploads, results and the vectorstore all persist
+      - ./data:/app/data
+      # Persist ChromaDB's ONNX embedding model cache across container restarts.
+      # The model (~79 MB) is also baked into the image at build time, but this
+      # volume ensures it survives even if the image is rebuilt without the cache layer.
+      - chroma_model_cache:/root/.cache/chroma
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ── React + nginx Frontend ───────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: claimintel-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+# Named volumes — managed by Docker, persist across container restarts and rebuilds
+volumes:
+  chroma_model_cache:

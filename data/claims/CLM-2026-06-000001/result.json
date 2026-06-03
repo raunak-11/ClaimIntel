@@ -1,0 +1,211 @@
+{
+  "claim_id": "CLM-2026-06-000001",
+  "agents": {
+    "damage_assessment": {
+      "damaged_parts": [
+        {
+          "part": "bonnet",
+          "severity": "Severe",
+          "bounding_box": {
+            "image_index": 0,
+            "x": 20.0,
+            "y": 10.0,
+            "w": 60.0,
+            "h": 30.0
+          },
+          "repair_estimate_INR": {
+            "min": 18000,
+            "max": 28000
+          },
+          "repair_type": "Replace",
+          "pricing_source": "OEM"
+        },
+        {
+          "part": "front_bumper",
+          "severity": "Severe",
+          "bounding_box": {
+            "image_index": 0,
+            "x": 15.0,
+            "y": 50.0,
+            "w": 40.0,
+            "h": 20.0
+          },
+          "repair_estimate_INR": {
+            "min": 10500,
+            "max": 14000
+          },
+          "repair_type": "Replace",
+          "pricing_source": "OEM"
+        },
+        {
+          "part": "headlight_left",
+          "severity": "Severe",
+          "bounding_box": {
+            "image_index": 0,
+            "x": 10.0,
+            "y": 30.0,
+            "w": 20.0,
+            "h": 20.0
+          },
+          "repair_estimate_INR": {
+            "min": 14000,
+            "max": 18000
+          },
+          "repair_type": "Replace",
+          "pricing_source": "OEM"
+        },
+        {
+          "part": "radiator_grille",
+          "severity": "Moderate",
+          "bounding_box": {
+            "image_index": 0,
+            "x": 25.0,
+            "y": 40.0,
+            "w": 30.0,
+            "h": 15.0
+          },
+          "repair_estimate_INR": {
+            "min": 6000,
+            "max": 8000
+          },
+          "repair_type": "Repair",
+          "pricing_source": "OEM"
+        }
+      ],
+      "overall_severity": "Severe",
+      "total_repair_estimate": {
+        "min": 48500,
+        "max": 70000
+      },
+      "consistent_with_description": "High",
+      "notes": "The vehicle has severe damage to the front end, consistent with a high-speed impact. The bonnet, front bumper, and headlight are severely damaged.",
+      "vehicle_match_in_image": "Yes",
+      "vehicle_seen_description": "Kia Seltos HTX Plus, orange color",
+      "registration_plate_visible": true,
+      "plate_text_in_image": "TN12AJ1603",
+      "pre_existing_damage_observed": false,
+      "pre_existing_damage_notes": null,
+      "multiple_vehicles_in_frame": false,
+      "status": "completed",
+      "summary": "Severity: Severe | Est. Repair: ₹48,500–₹70,000 | Parts: 4 damaged | Vehicle Match: Yes",
+      "garage_estimate_provided": true,
+      "garage_estimate_amount_inr": 85000.0,
+      "garage_vs_ai_variance_pct": 43.5,
+      "garage_inflation_flag": true,
+      "garage_inflation_note": "Garage estimate ₹85,000 is 43% higher than AI mid-estimate ₹59,250"
+    },
+    "fraud_intelligence": {
+      "fraud_score": 40,
+      "fraud_label": "Medium",
+      "indicators": [
+        "Workshop Inflation — Garage estimate ₹85,000 is 44% above AI estimate (FS-004: Workshop Inflation Conspiracy)"
+      ],
+      "matched_schemes": [],
+      "kb_references": [
+        "FS-004",
+        "FI-INF-001"
+      ],
+      "policy_age_days": 654,
+      "nps_risk_level": "None",
+      "status": "completed",
+      "summary": "Fraud Risk: 40% (Medium) | Top flag: Workshop Inflation — Garage estimate ₹85,000 is 44% above AI estimate (FS-004: Workshop Inflation Conspiracy)"
+    },
+    "incident_reconstruction": {
+      "collision_type": "Front impact",
+      "impact_direction": "Direct frontal impact",
+      "reconstruction": "The vehicle was involved in a frontal collision with another object or vehicle, resulting in significant damage to the front end, including the bonnet, front bumper, and headlights.",
+      "reconstruction_bullets": [
+        "The damage pattern indicates a severe frontal collision with significant force applied to the front of the vehicle.",
+        "The extent of damage to multiple front-end components suggests a high-speed impact.",
+        "The consistency of the damage with a frontal collision scenario supports the claimant's story."
+      ],
+      "storyboard_panels": [
+        {
+          "panel": 1,
+          "title": "Pre-Incident",
+          "emoji": "🚗",
+          "description": "The Kia Seltos was being driven on a public road."
+        },
+        {
+          "panel": 2,
+          "title": "Point of Impact",
+          "emoji": "💥",
+          "description": "The vehicle collided with another object or vehicle, causing severe damage to the front end."
+        },
+        {
+          "panel": 3,
+          "title": "Immediate Aftermath",
+          "emoji": "🔧",
+          "description": "The vehicle was found with significant front-end damage, consistent with a high-impact collision."
+        },
+        {
+          "panel": 4,
+          "title": "Evidence Summary",
+          "emoji": "🔍",
+          "description": "The physical evidence supports a frontal collision scenario, consistent with the claimant's description."
+        }
+      ],
+      "damage_matches_story": true,
+      "confidence": 80,
+      "similar_historical_cases": [
+        "HIST-003"
+      ],
+      "inconsistencies": [],
+      "status": "completed",
+      "summary": "Most Probable: Front impact | Confidence: 80% | Story Match: Yes"
+    },
+    "context_verification": {
+      "status": "completed",
+      "location_verified": true,
+      "geocoded_location": "Guindy, Anna Salai (Mount Road), CMWSSB Division 160, Ward 160, Zone 12 Alandur, Chennai Corporation, Alandur, Chennai, Tamil Nadu, 600032, India",
+      "coordinates": {
+        "lat": 13.0086685,
+        "lon": 80.2126063
+      },
+      "weather": "Overcast Clouds, 33.86°C, Humidity: 70%, Visibility: 10000m",
+      "traffic": "Moderate",
+      "policy_coverage_note": "No obvious coverage exclusions detected from policy document",
+      "policy_document_excerpt": "— POLICY DOCUMENT — POL-112233]\n145\nCOVERAGE DETAILS & CONDITIONS\n  OWN DAMAGE COVERAGE (Section I)\nAccidental Damage\nUp to IDV (Rs. 1,600,000) after deductibles\nFire and Exp\n  THIRD PARTY LIABILITY (Section II - Mandatory)\nThird Party Bodily Injury\nUnlimited as per Motor Vehicles Act, 1988\nThird Pa...",
+      "summary": "Weather: Overcast Clouds, 33.86°C, Humidity: 70%, Visibility: 10000m | Location: Verified ✓ | Policy: No obvious coverage exclusions detected from policy document"
+    },
+    "settlement_recommendation": {
+      "decision": "Escalate",
+      "recommended_settlement": 0,
+      "confidence": 80,
+      "decision_reasons": [
+        "Fraud score of 40 indicates a medium risk, which requires escalation according to IRDAI guidelines",
+        "Workshop inflation flag (FS-004) is raised due to the garage estimate being 43% higher than the AI estimate",
+        "Damage is consistent with the story, but the high garage estimate and medium fraud score warrant further investigation",
+        "Incident location is verified, and policy coverage notes do not indicate any obvious exclusions",
+        "Historical precedent HIST-019 shows a similar pattern of workshop inflation, which supports the decision to escalate"
+      ],
+      "reasoning_trail": [
+        "Step 1: Damage Assessment indicates severe damage to the front end of the vehicle, with an estimated repair cost of ₹48,500–₹70,000",
+        "Step 2: Fraud Intelligence flags a medium fraud risk with a score of 40, citing workshop inflation as a key indicator",
+        "Step 3: Incident Reconstruction confirms a frontal collision, consistent with the claimant's story, with a confidence level of 80%",
+        "Step 4: Context and Policy verification confirms the incident location and policy coverage, with no obvious exclusions",
+        "Step 5: Historical Precedents, such as HIST-019, demonstrate a similar pattern of workshop inflation, supporting the decision to escalate",
+        "Step 6: Settlement Calculation is not applicable due to the decision to escalate",
+        "Step 7: Final Decision is to escalate the claim for further investigation due to the medium fraud risk and workshop inflation"
+      ],
+      "kb_precedents_applied": [
+        "HIST-019",
+        "FS-004"
+      ],
+      "deductibles_applied": 1000,
+      "status": "completed",
+      "summary": "Recommendation: Escalate | Settlement: ₹0 | Confidence: 80%"
+    }
+  },
+  "summary": {
+    "fraud_risk_score": 40,
+    "fraud_risk_label": "Medium",
+    "damage_consistency": "High",
+    "incident_consistency": "High",
+    "external_verification": "High",
+    "behavioural_analysis": "Medium Risk",
+    "overall_confidence": 80,
+    "decision": "Escalate",
+    "recommended_settlement": 0
+  }
+}

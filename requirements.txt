@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+python-multipart
+httpx
+google-genai
+groq
+pillow
+python-dotenv
+sse-starlette
+
+# RAG / Knowledge Base
+chromadb
+fpdf2
+PyMuPDF

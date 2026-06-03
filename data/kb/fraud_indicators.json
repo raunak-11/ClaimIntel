@@ -1,0 +1,216 @@
+{
+  "version": "1.0",
+  "last_updated": "2025-01-01",
+  "fraud_indicators": [
+    {
+      "id": "FI-POL-001",
+      "category": "Policy Red Flags",
+      "name": "New Policy Syndrome",
+      "description": "Policy issued within 90 days before the claim date. High-risk window where pre-existing damage is disguised as a new incident.",
+      "risk_weight": 30,
+      "severity": "High",
+      "investigation_action": "Verify policy inception date vs incident date. Check if any pre-inception survey was conducted. Confirm full premium was paid upfront rather than installments."
+    },
+    {
+      "id": "FI-POL-002",
+      "category": "Policy Red Flags",
+      "name": "Lapse-Reinstate Before Claim",
+      "description": "Policy was lapsed for more than 30 days and then reinstated within 60 days of the claim being filed. Suggests calculated reinstatement before staging an incident.",
+      "risk_weight": 25,
+      "severity": "High",
+      "investigation_action": "Request full payment history and reinstatement records. Check gap period and any vehicle usage during lapse."
+    },
+    {
+      "id": "FI-POL-003",
+      "category": "Policy Red Flags",
+      "name": "Simultaneous Multi-Policy",
+      "description": "Multiple active policies on the same vehicle from different insurers. Enables double or triple-dipping on the same claim.",
+      "risk_weight": 20,
+      "severity": "Medium",
+      "investigation_action": "Cross-check with IIB (Insurance Information Bureau). Contact other insurer to verify."
+    },
+    {
+      "id": "FI-CLM-001",
+      "category": "Claim Pattern Fraud",
+      "name": "Serial Claimant",
+      "description": "Policyholder has filed 3 or more claims in the past 24 months on any vehicle or policy. Statistically anomalous claim frequency.",
+      "risk_weight": 25,
+      "severity": "High",
+      "investigation_action": "Pull complete claim history across all policies. Look for pattern in location, workshop, or incident type."
+    },
+    {
+      "id": "FI-CLM-002",
+      "category": "Claim Pattern Fraud",
+      "name": "Pre-Renewal Claim Spike",
+      "description": "Claim filed within 30 days of policy renewal to inflate no-claim discount base or secure renewal.",
+      "risk_weight": 15,
+      "severity": "Medium",
+      "investigation_action": "Check policy renewal date. Verify FIR timestamp against claim filing time."
+    },
+    {
+      "id": "FI-CLM-003",
+      "category": "Claim Pattern Fraud",
+      "name": "Late Reporting Delay",
+      "description": "Incident reported more than 72 hours after occurrence without medical or logistical justification. Creates time for evidence manipulation.",
+      "risk_weight": 15,
+      "severity": "Medium",
+      "investigation_action": "Request written explanation for delay. Compare with any CCTV or FIR timestamps available."
+    },
+    {
+      "id": "FI-DMG-001",
+      "category": "Damage Inconsistency",
+      "name": "Pre-existing Damage in Photos",
+      "description": "Rust, faded paint, prior unrepaired dents, or worn parts visible in submitted photos indicate damage preceded the incident date.",
+      "risk_weight": 30,
+      "severity": "High",
+      "investigation_action": "Compare with any pre-inception survey photos. Request independent garage inspection report. Check VAHAN records for prior accidents."
+    },
+    {
+      "id": "FI-DMG-002",
+      "category": "Damage Inconsistency",
+      "name": "Physics Mismatch",
+      "description": "Damage location or pattern physically impossible given the described collision type, speed, and direction. E.g., right-side damage claimed from left-side impact.",
+      "risk_weight": 35,
+      "severity": "High",
+      "investigation_action": "Engage accident reconstruction expert. Request FIR with spot sketch if available. Check for CCTV at incident location."
+    },
+    {
+      "id": "FI-DMG-003",
+      "category": "Damage Inconsistency",
+      "name": "Selective High-Value Component Damage",
+      "description": "Expensive components (engine, transmission, airbags) claimed as damaged without proportionate visible body damage that would cause such internal damage.",
+      "risk_weight": 25,
+      "severity": "High",
+      "investigation_action": "Request detailed workshop inspection by empanelled surveyor. Verify airbag crash data recorder if available."
+    },
+    {
+      "id": "FI-DMG-004",
+      "category": "Damage Inconsistency",
+      "name": "Symmetrical Damage Anomaly",
+      "description": "Perfectly symmetrical damage on both sides of vehicle inconsistent with any standard collision scenario. Often indicates deliberate vandalism or staged damage.",
+      "risk_weight": 20,
+      "severity": "Medium",
+      "investigation_action": "Request site inspection. Look for tool marks vs impact deformation patterns."
+    },
+    {
+      "id": "FI-LOC-001",
+      "category": "Location and Circumstance Fraud",
+      "name": "Remote Isolated Location",
+      "description": "Accident reported in remote, unmanned area with no witnesses, no CCTV, and no other traffic. Provides no verification pathway.",
+      "risk_weight": 15,
+      "severity": "Medium",
+      "investigation_action": "Check vehicle telematics/GPS if available. Verify with local police station for any reports from that area."
+    },
+    {
+      "id": "FI-LOC-002",
+      "category": "Location and Circumstance Fraud",
+      "name": "Weather Claim Contradiction",
+      "description": "Flood, hail, or weather-related claim but official meteorological records show no such event at claimed location on claimed date.",
+      "risk_weight": 35,
+      "severity": "High",
+      "investigation_action": "Cross-check IMD (India Meteorological Department) data. Check OpenWeatherMap historical records for the exact date and coordinates."
+    },
+    {
+      "id": "FI-INF-001",
+      "category": "Inflation and Workshop Fraud",
+      "name": "Grossly Inflated Workshop Estimate",
+      "description": "Repair estimate from workshop exceeds market OEM rate by more than 50% without justification. Suggests workshop collusion.",
+      "risk_weight": 20,
+      "severity": "Medium",
+      "investigation_action": "Get second independent estimate. Check if workshop is on insurer's approved list. Verify parts availability and pricing via MAIA database."
+    },
+    {
+      "id": "FI-INF-002",
+      "category": "Inflation and Workshop Fraud",
+      "name": "OEM Parts Claimed on Old Vehicle",
+      "description": "OEM parts claimed for vehicle older than 7 years where aftermarket parts are standard and OEM availability is limited.",
+      "risk_weight": 15,
+      "severity": "Low",
+      "investigation_action": "Verify parts availability from OEM dealer. Apply depreciation schedule per IRDAI guidelines."
+    },
+    {
+      "id": "FI-BEH-001",
+      "category": "Behavioural Indicators",
+      "name": "Insistent on Specific Workshop",
+      "description": "Claimant refuses alternate workshops and insists on one specific garage not on insurer's approved panel.",
+      "risk_weight": 15,
+      "severity": "Medium",
+      "investigation_action": "Investigate relationship between claimant and workshop. Request cashless authorization only at approved garage."
+    },
+    {
+      "id": "FI-BEH-002",
+      "category": "Behavioural Indicators",
+      "name": "Excessive Familiarity with Process",
+      "description": "Claimant demonstrates unusual knowledge of claim procedures, exact document requirements, and settlement timelines — more than expected for a first-time claimant.",
+      "risk_weight": 10,
+      "severity": "Low",
+      "investigation_action": "Check if claimant or family member works in insurance industry. Review claim history."
+    }
+  ],
+  "known_fraud_schemes": [
+    {
+      "scheme_id": "FS-001",
+      "name": "New Policy Pre-Existing Damage Fraud",
+      "description": "Vehicle already damaged before policy inception. Policy taken out expressly to claim for damage that existed before coverage. Most common in comprehensive policies taken within 60 days of claim.",
+      "common_indicators": ["Policy age < 60 days", "No pre-inception survey", "Rust or weathering visible on damaged parts", "Damage inconsistent with described incident speed"],
+      "risk_level": "Critical",
+      "typical_fraud_score_range": "70-95",
+      "case_example": "HIST-010 — Renault Kwid, rust visible on headlights, policy 12 days old, rejected"
+    },
+    {
+      "scheme_id": "FS-002",
+      "name": "Staged Collision",
+      "description": "Two cooperating parties deliberately arrange a collision, typically in low-traffic areas with no witnesses. Both file claims with their respective insurers, or one files against the other's third-party cover.",
+      "common_indicators": ["No independent witnesses", "Both parties from same locality", "Minor visible damage but large repair claim", "No police FIR despite significant damage", "Both vehicles insured by same company"],
+      "risk_level": "High",
+      "typical_fraud_score_range": "60-85",
+      "case_example": "HIST-012 — VW Polo staged collision with vehicle from same locality, rejected"
+    },
+    {
+      "scheme_id": "FS-003",
+      "name": "Serial Theft or Total Loss Fraud",
+      "description": "Vehicle sold for parts or to a third party but reported as stolen or total-loss accident. FASTag and VAHAN records often expose vehicle movement post-reported-theft.",
+      "common_indicators": ["Multiple prior theft/total-loss claims", "Vehicle cannot be produced for inspection", "FIR in wrong jurisdiction", "FASTag data shows vehicle movement after reported theft"],
+      "risk_level": "Critical",
+      "typical_fraud_score_range": "80-99",
+      "case_example": "HIST-007 — Tata Safari, FASTag showed vehicle in Rajasthan after Bangalore theft claim"
+    },
+    {
+      "scheme_id": "FS-004",
+      "name": "Workshop Inflation Conspiracy",
+      "description": "Genuine minor accident used as opportunity to inflate repair estimates significantly. Workshop and claimant share the excess settlement. Common in non-cashless settlements.",
+      "common_indicators": ["Workshop not on approved panel", "Estimate 2x+ market rate", "Claimant demands reimbursement not cashless", "Same workshop used across multiple claims"],
+      "risk_level": "Medium",
+      "typical_fraud_score_range": "35-60",
+      "case_example": "HIST-006 — Honda Amaze, estimate 40% above market, settled at reduced amount"
+    },
+    {
+      "scheme_id": "FS-005",
+      "name": "Weather Claim Fabrication",
+      "description": "Claimant falsely reports vehicle damaged in hail, flood, or storm when no such event occurred at the claimed location and date. Weather data from IMD or OpenWeatherMap directly contradicts the claim.",
+      "common_indicators": ["No weather event recorded at location", "Damage inconsistent with claimed weather type", "Claim filed days after supposed weather event"],
+      "risk_level": "High",
+      "typical_fraud_score_range": "65-90",
+      "case_example": "HIST-004 — Hyundai Creta flood claim, no rainfall on date, pre-existing engine issues, rejected"
+    }
+  ],
+  "scoring_thresholds": {
+    "low_risk":    {"min": 0,  "max": 30, "label": "Low",    "action": "Auto-approve with standard verification"},
+    "medium_risk": {"min": 31, "max": 59, "label": "Medium", "action": "Enhanced manual review required before settlement"},
+    "high_risk":   {"min": 60, "max": 79, "label": "High",   "action": "Escalate to Special Investigations Unit (SIU)"},
+    "critical":    {"min": 80, "max": 100,"label": "Critical","action": "Reject pending SIU investigation and legal review"}
+  },
+  "irdai_guidelines": {
+    "depreciation_schedule": {
+      "0_to_6_months": "5%",
+      "6_to_12_months": "15%",
+      "1_to_2_years": "20%",
+      "2_to_3_years": "30%",
+      "3_to_4_years": "40%",
+      "4_to_5_years": "50%"
+    },
+    "total_loss_threshold": "75% of IDV",
+    "max_settlement_without_survey": 50000,
+    "mandatory_survey_above": 50000
+  }
+}

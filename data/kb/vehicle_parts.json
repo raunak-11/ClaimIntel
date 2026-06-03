@@ -1,0 +1,236 @@
+{
+  "version": "1.0",
+  "currency": "INR",
+  "last_updated": "2025-01-01",
+  "note": "OEM retail prices for Indian market. Labour rates are per-job estimates for Tier-1 cities. Aftermarket prices approx 40-55% of OEM. EV models have limited aftermarket availability.",
+  "vehicles": {
+    "Maruti Suzuki": {
+      "Swift Dzire": {
+        "segment": "Compact Sedan",
+        "year_range": "2017-2025",
+        "idv_range": {"min": 400000, "max": 750000},
+        "parts": {
+          "front_bumper": {"oem": 4800, "aftermarket": 2100, "labour": 800, "notes": "Includes bumper brackets and absorber"},
+          "rear_bumper": {"oem": 4200, "aftermarket": 1800, "labour": 700},
+          "bonnet": {"oem": 8500, "aftermarket": 4200, "labour": 1500, "notes": "Denting and painting adds 2500 if repairable"},
+          "front_left_door": {"oem": 12000, "aftermarket": 5800, "labour": 2500},
+          "front_right_door": {"oem": 12000, "aftermarket": 5800, "labour": 2500},
+          "rear_left_door": {"oem": 11000, "aftermarket": 5200, "labour": 2200},
+          "rear_right_door": {"oem": 11000, "aftermarket": 5200, "labour": 2200},
+          "windshield_front": {"oem": 6500, "aftermarket": 3000, "labour": 1200},
+          "windshield_rear": {"oem": 4500, "aftermarket": 1900, "labour": 800},
+          "headlight_left": {"oem": 5500, "aftermarket": 2400, "labour": 400},
+          "headlight_right": {"oem": 5500, "aftermarket": 2400, "labour": 400},
+          "tail_light_left": {"oem": 3500, "aftermarket": 1400, "labour": 300},
+          "tail_light_right": {"oem": 3500, "aftermarket": 1400, "labour": 300},
+          "fender_left": {"oem": 5000, "aftermarket": 2400, "labour": 1800, "notes": "OEM preferred; aftermarket fit quality varies"},
+          "fender_right": {"oem": 5000, "aftermarket": 2400, "labour": 1800},
+          "radiator": {"oem": 8500, "aftermarket": 4200, "labour": 2000},
+          "radiator_grille": {"oem": 1800, "aftermarket": 700, "labour": 300},
+          "boot_lid": {"oem": 7500, "aftermarket": 3500, "labour": 1500},
+          "door_mirror_left": {"oem": 2800, "aftermarket": 1100, "labour": 400},
+          "door_mirror_right": {"oem": 2800, "aftermarket": 1100, "labour": 400},
+          "airbag_driver": {"oem": 18000, "aftermarket": null, "labour": 3500, "notes": "OEM only; includes clock spring"},
+          "airbag_passenger": {"oem": 15000, "aftermarket": null, "labour": 3000},
+          "alloy_wheel": {"oem": 6500, "aftermarket": 3500, "labour": 500},
+          "steering_column": {"oem": 12000, "aftermarket": 5500, "labour": 3000}
+        },
+        "paint_per_panel_blending": 2500,
+        "typical_total_loss_threshold": 180000,
+        "common_repair_packages": {
+          "minor_front_end": {"parts": ["front_bumper", "headlight_left", "headlight_right", "radiator_grille"], "est_total": 14000},
+          "moderate_front_end": {"parts": ["front_bumper", "bonnet", "headlight_left", "headlight_right", "radiator", "fender_left"], "est_total": 38000},
+          "minor_rear": {"parts": ["rear_bumper", "tail_light_left", "tail_light_right"], "est_total": 10000},
+          "door_replacement": {"parts": ["front_left_door"], "est_total": 16000}
+        }
+      },
+      "Alto K10": {
+        "segment": "Hatchback",
+        "year_range": "2022-2025",
+        "idv_range": {"min": 300000, "max": 500000},
+        "parts": {
+          "front_bumper": {"oem": 3500, "aftermarket": 1500, "labour": 600},
+          "rear_bumper": {"oem": 3000, "aftermarket": 1200, "labour": 500},
+          "bonnet": {"oem": 6500, "aftermarket": 3000, "labour": 1200},
+          "front_left_door": {"oem": 9000, "aftermarket": 4200, "labour": 2000},
+          "windshield_front": {"oem": 5000, "aftermarket": 2400, "labour": 1000},
+          "headlight_left": {"oem": 4000, "aftermarket": 1700, "labour": 350},
+          "headlight_right": {"oem": 4000, "aftermarket": 1700, "labour": 350},
+          "radiator": {"oem": 6500, "aftermarket": 3000, "labour": 1800},
+          "fender_left": {"oem": 4000, "aftermarket": 1800, "labour": 1500}
+        },
+        "paint_per_panel_blending": 2000,
+        "typical_total_loss_threshold": 120000
+      }
+    },
+    "Honda": {
+      "City ZX": {
+        "segment": "Mid-size Sedan",
+        "year_range": "2020-2025",
+        "idv_range": {"min": 900000, "max": 1400000},
+        "parts": {
+          "front_bumper": {"oem": 9500, "aftermarket": 4500, "labour": 1200},
+          "rear_bumper": {"oem": 8500, "aftermarket": 3800, "labour": 1000},
+          "bonnet": {"oem": 16000, "aftermarket": 7800, "labour": 2200},
+          "front_left_door": {"oem": 24000, "aftermarket": 11000, "labour": 3500},
+          "front_right_door": {"oem": 24000, "aftermarket": 11000, "labour": 3500},
+          "rear_left_door": {"oem": 22000, "aftermarket": 10000, "labour": 3200},
+          "rear_right_door": {"oem": 22000, "aftermarket": 10000, "labour": 3200},
+          "windshield_front": {"oem": 13000, "aftermarket": 6000, "labour": 1800},
+          "windshield_rear": {"oem": 9000, "aftermarket": 4000, "labour": 1200},
+          "headlight_left": {"oem": 20000, "aftermarket": 9000, "labour": 600},
+          "headlight_right": {"oem": 20000, "aftermarket": 9000, "labour": 600},
+          "tail_light_left": {"oem": 12000, "aftermarket": 5500, "labour": 400},
+          "tail_light_right": {"oem": 12000, "aftermarket": 5500, "labour": 400},
+          "fender_left": {"oem": 10000, "aftermarket": 4800, "labour": 2500},
+          "fender_right": {"oem": 10000, "aftermarket": 4800, "labour": 2500},
+          "radiator": {"oem": 15000, "aftermarket": 7500, "labour": 2500},
+          "boot_lid": {"oem": 18000, "aftermarket": 8500, "labour": 2000},
+          "airbag_driver": {"oem": 26000, "aftermarket": null, "labour": 5000},
+          "airbag_passenger": {"oem": 22000, "aftermarket": null, "labour": 4500},
+          "alloy_wheel": {"oem": 12000, "aftermarket": 6500, "labour": 600}
+        },
+        "paint_per_panel_blending": 3500,
+        "typical_total_loss_threshold": 600000,
+        "common_repair_packages": {
+          "minor_front_end": {"parts": ["front_bumper", "headlight_left", "radiator_grille"], "est_total": 31000},
+          "moderate_front_end": {"parts": ["front_bumper", "bonnet", "headlight_left", "headlight_right", "radiator", "fender_left"], "est_total": 85000},
+          "door_replacement": {"parts": ["front_left_door"], "est_total": 30000}
+        }
+      },
+      "Amaze": {
+        "segment": "Compact Sedan",
+        "year_range": "2018-2025",
+        "idv_range": {"min": 500000, "max": 850000},
+        "parts": {
+          "front_bumper": {"oem": 7000, "aftermarket": 3200, "labour": 1000},
+          "bonnet": {"oem": 12000, "aftermarket": 5800, "labour": 1800},
+          "front_left_door": {"oem": 18000, "aftermarket": 8500, "labour": 3000},
+          "windshield_front": {"oem": 9000, "aftermarket": 4200, "labour": 1500},
+          "headlight_left": {"oem": 12000, "aftermarket": 5500, "labour": 500},
+          "headlight_right": {"oem": 12000, "aftermarket": 5500, "labour": 500},
+          "fender_left": {"oem": 7500, "aftermarket": 3500, "labour": 2200}
+        },
+        "paint_per_panel_blending": 3000,
+        "typical_total_loss_threshold": 380000
+      }
+    },
+    "Toyota": {
+      "Innova Crysta": {
+        "segment": "Premium MPV",
+        "year_range": "2016-2025",
+        "idv_range": {"min": 1200000, "max": 2200000},
+        "parts": {
+          "front_bumper": {"oem": 13500, "aftermarket": 6000, "labour": 1500},
+          "rear_bumper": {"oem": 11000, "aftermarket": 4800, "labour": 1200},
+          "bonnet": {"oem": 28000, "aftermarket": 13000, "labour": 3500},
+          "front_left_door": {"oem": 35000, "aftermarket": 16000, "labour": 4500},
+          "front_right_door": {"oem": 35000, "aftermarket": 16000, "labour": 4500},
+          "rear_left_door": {"oem": 32000, "aftermarket": 14500, "labour": 4200},
+          "rear_right_door": {"oem": 32000, "aftermarket": 14500, "labour": 4200},
+          "sliding_door_left": {"oem": 38000, "aftermarket": 17000, "labour": 5000},
+          "sliding_door_right": {"oem": 38000, "aftermarket": 17000, "labour": 5000},
+          "windshield_front": {"oem": 20000, "aftermarket": 9000, "labour": 2500},
+          "headlight_left": {"oem": 25000, "aftermarket": 11000, "labour": 800},
+          "headlight_right": {"oem": 25000, "aftermarket": 11000, "labour": 800},
+          "tail_light_left": {"oem": 14000, "aftermarket": 6500, "labour": 500},
+          "tail_light_right": {"oem": 14000, "aftermarket": 6500, "labour": 500},
+          "fender_left": {"oem": 17000, "aftermarket": 8000, "labour": 3000},
+          "fender_right": {"oem": 17000, "aftermarket": 8000, "labour": 3000},
+          "radiator": {"oem": 25000, "aftermarket": 11500, "labour": 3500},
+          "airbag_driver": {"oem": 32000, "aftermarket": null, "labour": 6000},
+          "airbag_passenger": {"oem": 28000, "aftermarket": null, "labour": 5500},
+          "alloy_wheel": {"oem": 18000, "aftermarket": 9500, "labour": 700}
+        },
+        "paint_per_panel_blending": 5500,
+        "typical_total_loss_threshold": 1200000,
+        "common_repair_packages": {
+          "minor_front_end": {"parts": ["front_bumper", "headlight_left", "radiator_grille"], "est_total": 42000},
+          "moderate_front_end": {"parts": ["front_bumper", "bonnet", "headlight_left", "headlight_right", "radiator", "fender_left"], "est_total": 120000}
+        }
+      }
+    },
+    "Hyundai": {
+      "Creta SX": {
+        "segment": "Mid-size SUV",
+        "year_range": "2020-2025",
+        "idv_range": {"min": 1000000, "max": 1600000},
+        "parts": {
+          "front_bumper": {"oem": 10500, "aftermarket": 4800, "labour": 1200},
+          "rear_bumper": {"oem": 9000, "aftermarket": 4200, "labour": 1000},
+          "bonnet": {"oem": 20000, "aftermarket": 9500, "labour": 2800},
+          "front_left_door": {"oem": 28000, "aftermarket": 13000, "labour": 4000},
+          "front_right_door": {"oem": 28000, "aftermarket": 13000, "labour": 4000},
+          "rear_left_door": {"oem": 25000, "aftermarket": 11500, "labour": 3800},
+          "rear_right_door": {"oem": 25000, "aftermarket": 11500, "labour": 3800},
+          "windshield_front": {"oem": 15000, "aftermarket": 7000, "labour": 2000},
+          "windshield_rear": {"oem": 10000, "aftermarket": 4500, "labour": 1500},
+          "headlight_left": {"oem": 22000, "aftermarket": 10000, "labour": 700},
+          "headlight_right": {"oem": 22000, "aftermarket": 10000, "labour": 700},
+          "tail_light_left": {"oem": 15000, "aftermarket": 7000, "labour": 500},
+          "tail_light_right": {"oem": 15000, "aftermarket": 7000, "labour": 500},
+          "fender_left": {"oem": 11000, "aftermarket": 5200, "labour": 2800},
+          "fender_right": {"oem": 11000, "aftermarket": 5200, "labour": 2800},
+          "radiator": {"oem": 18000, "aftermarket": 8500, "labour": 3000},
+          "boot_lid": {"oem": 22000, "aftermarket": 10500, "labour": 2500},
+          "airbag_driver": {"oem": 30000, "aftermarket": null, "labour": 5500},
+          "alloy_wheel": {"oem": 14000, "aftermarket": 7500, "labour": 600}
+        },
+        "paint_per_panel_blending": 4200,
+        "typical_total_loss_threshold": 800000,
+        "common_repair_packages": {
+          "minor_front_end": {"parts": ["front_bumper", "headlight_left", "radiator_grille"], "est_total": 35000},
+          "moderate_front_end": {"parts": ["front_bumper", "bonnet", "headlight_left", "headlight_right", "radiator", "fender_left"], "est_total": 95000}
+        }
+      }
+    },
+    "Tata": {
+      "Nexon EV": {
+        "segment": "Compact SUV (Electric)",
+        "year_range": "2020-2025",
+        "idv_range": {"min": 1200000, "max": 1800000},
+        "notes": "EV-specific parts have very limited aftermarket availability. Many components are TATA-only.",
+        "parts": {
+          "front_bumper": {"oem": 12500, "aftermarket": null, "labour": 1500, "notes": "Includes radar sensor bracket on top variants"},
+          "rear_bumper": {"oem": 10500, "aftermarket": null, "labour": 1200},
+          "bonnet": {"oem": 22000, "aftermarket": null, "labour": 3000},
+          "front_left_door": {"oem": 30000, "aftermarket": null, "labour": 4500},
+          "front_right_door": {"oem": 30000, "aftermarket": null, "labour": 4500},
+          "rear_left_door": {"oem": 27000, "aftermarket": null, "labour": 4000},
+          "rear_right_door": {"oem": 27000, "aftermarket": null, "labour": 4000},
+          "windshield_front": {"oem": 18000, "aftermarket": 8000, "labour": 2200},
+          "headlight_left": {"oem": 26000, "aftermarket": null, "labour": 800},
+          "headlight_right": {"oem": 26000, "aftermarket": null, "labour": 800},
+          "tail_light_left": {"oem": 16000, "aftermarket": null, "labour": 600},
+          "tail_light_right": {"oem": 16000, "aftermarket": null, "labour": 600},
+          "fender_left": {"oem": 13500, "aftermarket": null, "labour": 3000},
+          "fender_right": {"oem": 13500, "aftermarket": null, "labour": 3000},
+          "battery_pack_partial": {"oem": 500000, "aftermarket": null, "labour": 25000, "notes": "Partial cell replacement; full pack replacement is 850000+"},
+          "battery_pack_full": {"oem": 850000, "aftermarket": null, "labour": 30000, "notes": "Requires TATA EV service centre only"},
+          "charging_port": {"oem": 18000, "aftermarket": null, "labour": 5000},
+          "onboard_charger": {"oem": 45000, "aftermarket": null, "labour": 8000},
+          "airbag_driver": {"oem": 32000, "aftermarket": null, "labour": 6000},
+          "alloy_wheel": {"oem": 16000, "aftermarket": 8500, "labour": 700}
+        },
+        "paint_per_panel_blending": 4800,
+        "typical_total_loss_threshold": 900000,
+        "ev_specific_notes": "Battery damage assessment requires TATA-authorised EV specialist. HV battery inspection mandatory after any collision regardless of visible damage. High-voltage safety protocol adds 8000-15000 to any claim."
+      }
+    }
+  },
+  "standard_labour_rates_per_hour": {
+    "tier_1_city": {"rate": 600, "examples": ["Mumbai", "Delhi", "Bangalore", "Chennai", "Hyderabad", "Pune"]},
+    "tier_2_city": {"rate": 380, "examples": ["Ahmedabad", "Jaipur", "Lucknow", "Bhopal", "Indore", "Nagpur"]},
+    "tier_3_city": {"rate": 220, "examples": ["Smaller cities and towns"]},
+    "oem_authorised_dealer_premium": "30-50% above standard rates"
+  },
+  "depreciation_on_parts_irdai": {
+    "0_to_6_months": 0,
+    "6_to_12_months": 5,
+    "1_to_2_years": 10,
+    "2_to_3_years": 15,
+    "3_to_4_years": 25,
+    "4_to_5_years": 35,
+    "above_5_years": 50
+  }
+}
