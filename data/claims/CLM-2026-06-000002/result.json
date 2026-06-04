@@ -4,6 +4,23 @@
     "damage_assessment": {
       "damaged_parts": [
         {
+          "part": "bonnet",
+          "severity": "Severe",
+          "bounding_box": {
+            "image_index": 0,
+            "x": 20.0,
+            "y": 15.0,
+            "w": 60.0,
+            "h": 30.0
+          },
+          "repair_type": "Replace",
+          "repair_estimate_INR": {
+            "min": 10500,
+            "max": 17300
+          },
+          "pricing_source": "segment_catalog"
+        },
+        {
           "part": "windshield_front",
           "severity": "Severe",
           "bounding_box": {
@@ -21,31 +38,14 @@
           "pricing_source": "segment_catalog"
         },
         {
-          "part": "bonnet",
-          "severity": "Severe",
-          "bounding_box": {
-            "image_index": 0,
-            "x": 20.0,
-            "y": 25.0,
-            "w": 60.0,
-            "h": 30.0
-          },
-          "repair_type": "Replace",
-          "repair_estimate_INR": {
-            "min": 10500,
-            "max": 17300
-          },
-          "pricing_source": "segment_catalog"
-        },
-        {
           "part": "front_bumper",
           "severity": "Moderate",
           "bounding_box": {
             "image_index": 0,
-            "x": 15.0,
+            "x": 40.0,
             "y": 70.0,
-            "w": 40.0,
-            "h": 15.0
+            "w": 20.0,
+            "h": 10.0
           },
           "repair_type": "Repair",
           "repair_estimate_INR": {
@@ -53,49 +53,15 @@
             "max": 4600
           },
           "pricing_source": "segment_catalog"
-        },
-        {
-          "part": "headlight_left",
-          "severity": "Minor",
-          "bounding_box": {
-            "image_index": 0,
-            "x": 25.0,
-            "y": 40.0,
-            "w": 15.0,
-            "h": 10.0
-          },
-          "repair_type": "Replace",
-          "repair_estimate_INR": {
-            "min": 3900,
-            "max": 8200
-          },
-          "pricing_source": "segment_catalog"
-        },
-        {
-          "part": "headlight_right",
-          "severity": "Minor",
-          "bounding_box": {
-            "image_index": 0,
-            "x": 60.0,
-            "y": 40.0,
-            "w": 15.0,
-            "h": 10.0
-          },
-          "repair_type": "Replace",
-          "repair_estimate_INR": {
-            "min": 3900,
-            "max": 8200
-          },
-          "pricing_source": "segment_catalog"
         }
       ],
       "overall_severity": "Severe",
       "total_repair_estimate": {
-        "min": 28600,
-        "max": 49900
+        "min": 20800,
+        "max": 33500
       },
       "consistent_with_description": "High",
-      "notes": "The vehicle appears to be a Maruti Suzuki Baleno Alpha with severe damage to the bonnet and windshield.",
+      "notes": "The bonnet and windshield are severely damaged, consistent with a high-speed impact. The front bumper shows signs of moderate damage.",
       "vehicle_match_in_image": "Yes",
       "vehicle_seen_description": "Maruti Suzuki Baleno Alpha, blue in color",
       "registration_plate_visible": true,
@@ -107,17 +73,17 @@
         "none"
       ],
       "status": "completed",
-      "summary": "Severity: Severe | Est. Repair: ₹0–₹0 | Parts: 5 damaged | Vehicle Match: Yes",
+      "summary": "Severity: Severe | Est. Repair: ₹150,000–₹250,000 | Parts: 3 damaged | Vehicle Match: Yes",
       "vehicle_segment": "Hatchback",
       "pricing_method": "segment_catalog",
       "pricing_sources": [
         "segment_catalog"
       ],
       "garage_estimate_provided": true,
-      "garage_estimate_amount_inr": 50000.0,
-      "garage_vs_ai_variance_pct": 27.4,
-      "garage_inflation_flag": false,
-      "garage_inflation_note": "Garage estimate ₹50,000 is 27% higher than AI mid-estimate ₹39,250",
+      "garage_estimate_amount_inr": 40000.0,
+      "garage_vs_ai_variance_pct": 47.3,
+      "garage_inflation_flag": true,
+      "garage_inflation_note": "Garage estimate ₹40,000 is 47% higher than AI mid-estimate ₹27,150",
       "image_quality": {
         "photo_count": 1,
         "plate_visible": true,
@@ -129,139 +95,169 @@
       }
     },
     "fraud_intelligence": {
-      "fraud_score": 15,
-      "fraud_label": "Low",
-      "indicators": [],
+      "fraud_score": 42,
+      "fraud_label": "Medium",
+      "indicators": [
+        "EXCESSIVE FAMILIARITY WITH PROCESS (Low)",
+        "Serial Claimant (High)",
+        "Workshop Inflation (High)"
+      ],
       "matched_schemes": [],
       "kb_references": [
-        "FS-001"
+        "FS-001",
+        "FI-INF-001"
       ],
       "policy_age_days": 942,
       "nps_risk_level": "None",
       "status": "completed",
-      "summary": "Fraud Risk: 15% (Low) | Top flag: NEW POLICY SYNDROME (MEDIUM RISK)"
+      "summary": "Fraud Risk: 42% (Medium) | Top flag: NEW POLICY SYNDROME"
     },
     "incident_reconstruction": {
-      "collision_type": "Rollover|Multi-point|Front impact",
-      "impact_direction": "Overhead or top-down impact with secondary front-end damage",
-      "reconstruction": "The vehicle was likely struck from above with significant force, causing the windshield and bonnet to be severely damaged. The front bumper and headlights also show damage, suggesting a secondary impact or collapse of the vehicle's front structure.",
+      "collision_type": "Front impact",
+      "impact_direction": "Frontal impact, likely from a stationary or slow-moving object",
+      "reconstruction": "The vehicle likely collided with a stationary object or a vehicle that was moving at a much slower speed. The severe damage to the bonnet, windshield, and front bumper suggests a significant impact.",
       "reconstruction_bullets": [
-        "The severe damage to the windshield and bonnet suggests a high-impact event, possibly involving another vehicle or object falling onto the vehicle.",
-        "The presence of moderate front bumper damage and minor headlight damage indicates a secondary impact or structural collapse.",
-        "The described incident of a vehicle flipping and landing on top of the claimant's vehicle is plausible given the extensive roof and front-end damage."
+        "The severe damage to the bonnet, windshield, and front bumper indicates a high-energy impact.",
+        "The lack of mention of another vehicle or object involved in the claim suggests a possible single-vehicle incident or a scenario where the other party is not identified.",
+        "The damage pattern is consistent with a frontal impact but does not fully align with the claimant's description of another vehicle falling upon their car."
       ],
       "storyboard_panels": [
         {
           "panel": 1,
           "title": "Pre-Incident",
           "emoji": "🚗",
-          "description": "The claimant's vehicle, a Maruti Suzuki Baleno, was being driven near Karapakkam."
+          "description": "The vehicle was being driven when the incident occurred."
         },
         {
           "panel": 2,
           "title": "Point of Impact",
           "emoji": "💥",
-          "description": "Another vehicle or object flipped and landed on top of the claimant's vehicle, causing severe damage to the windshield, bonnet, and front bumper."
+          "description": "The vehicle collided with an object or another vehicle, resulting in severe front-end damage."
         },
         {
           "panel": 3,
           "title": "Immediate Aftermath",
           "emoji": "🔧",
-          "description": "The claimant's vehicle suffered significant damage, with the windshield shattered and the bonnet crumpled. The front bumper and headlights also sustained damage."
+          "description": "The vehicle sustained significant damage to its front end, including the bonnet, windshield, and front bumper."
         },
         {
           "panel": 4,
           "title": "Evidence Summary",
           "emoji": "🔍",
-          "description": "The physical evidence supports the claimant's story, with damage consistent with an overhead impact and subsequent front-end collapse."
+          "description": "The physical evidence suggests a frontal impact, but the claimant's story may not fully align with the damage pattern."
         }
       ],
-      "damage_matches_story": true,
-      "confidence": 80,
+      "damage_matches_story": false,
+      "confidence": 60,
       "similar_historical_cases": [
-        "HIST-003"
+        "HIST-012",
+        "HIST-010"
       ],
-      "inconsistencies": [],
+      "inconsistencies": [
+        "The claimant's story does not fully align with the damage pattern.",
+        "There is no mention of another vehicle or object involved in the claim."
+      ],
       "status": "completed",
-      "summary": "Most Probable: Rollover|Multi-point|Front impact | Confidence: 80% | Story Match: Yes"
+      "summary": "Most Probable: Front impact | Confidence: 60% | Story Match: No"
     },
     "context_verification": {
       "status": "completed",
       "location_verified": true,
-      "geocoded_location": "Karapakkam, Zone 15 Sholinganallur, Chennai Corporation, Sholinganallur, Chennai, Tamil Nadu, 600096, India",
+      "geocoded_location": "Zone 14 Perungudi, Chennai Corporation, Sholinganallur, Chennai, Tamil Nadu, India",
       "coordinates": {
-        "lat": 12.9117073,
-        "lon": 80.2277203
+        "lat": 12.9710239,
+        "lon": 80.2418051
       },
-      "weather": "Overcast Clouds, 31.66°C, Humidity: 76%, Visibility: 10000m",
+      "weather": "Overcast Clouds, 38.41°C, Humidity: 48%, Visibility: 10000m",
       "traffic": "Moderate",
       "policy_coverage_note": "No obvious coverage exclusions detected from policy document",
       "policy_document_excerpt": "— POLICY DOCUMENT — POL-445566]\n145\nCOVERAGE DETAILS & CONDITIONS\n  OWN DAMAGE COVERAGE (Section I)\nAccidental Damage\nUp to IDV (Rs. 1,600,000) after deductibles\nFire and Exp\n  THIRD PARTY LIABILITY (Section II - Mandatory)\nThird Party Bodily Injury\nUnlimited as per Motor Vehicles Act, 1988\nThird Pa...",
-      "summary": "Weather: Overcast Clouds, 31.66°C, Humidity: 76%, Visibility: 10000m | Location: Verified ✓ | Policy: No obvious coverage exclusions detected from policy document"
+      "summary": "Weather: Overcast Clouds, 38.41°C, Humidity: 48%, Visibility: 10000m | Location: Verified ✓ | Policy: No obvious coverage exclusions detected from policy document"
     },
     "settlement_recommendation": {
-      "decision": "Approve",
-      "recommended_settlement": 34200,
-      "confidence": 90,
+      "decision": "Escalate",
+      "recommended_settlement": 0,
+      "confidence": 80,
       "decision_reasons": [
-        "Fraud score of 15 is below the IRDAI auto-approve threshold of 40",
-        "Damage assessment by Agent 1 indicates severe damage consistent with the incident description",
-        "Incident reconstruction by Agent 3 shows a confidence level of 80 that the damage matches the story",
-        "Location verification by Agent 4 confirms the incident location as plausible"
+        "Fraud score of 42 indicates a medium risk, which requires escalation as per IRDAI guidelines",
+        "Workshop inflation flag is raised by Agent 1, indicating a potential Workshop Inflation Conspiracy (FS-004)",
+        "Damage pattern does not fully align with the claimant's story, as reported by Agent 3 with 60% confidence",
+        "Garage estimate amount (₹40,000) exceeds the AI-estimated range (₹20,800 - ₹33,500) by 47.3%, suggesting potential inflation"
       ],
       "reasoning_trail": [
-        "Step 1: Damage Assessment indicates severe damage with a total repair estimate between ₹28,600 and ₹49,900",
-        "Step 2: Fraud Intelligence reports a low fraud score of 15 with no indicators or matched schemes",
-        "Step 3: Incident Reconstruction confirms the damage is consistent with the story with a confidence level of 80",
-        "Step 4: Context & Policy verification confirms the location and policy coverage with no obvious exclusions",
-        "Step 5: No historical precedents or known fraud schemes apply to this case",
-        "Step 6: Settlement Calculation applies IRDAI depreciation and deducts compulsory deductible of ₹1,000",
-        "Step 7: Final Decision is to approve the claim based on the low fraud score and consistent damage assessment"
+        "Step 1: Damage Assessment indicates severe damage with a high consistency with the description, but also raises a workshop inflation flag",
+        "Step 2: Fraud Intelligence reports a medium fraud score of 42, with indicators of excessive familiarity with the process, serial claimant, and workshop inflation",
+        "Step 3: Incident Reconstruction suggests that the damage pattern does not fully align with the claimant's story, with a confidence level of 60%",
+        "Step 4: Context & Policy verification confirms the location and policy coverage, but does not address the inconsistencies in the claim",
+        "Step 5: Historical Precedents, such as HIST-019, demonstrate the importance of investigating workshop inflation and serial claims",
+        "Step 6: Settlement Calculation is not applicable due to the escalation decision",
+        "Step 7: Final Decision is to escalate the claim due to the medium fraud score, workshop inflation, and inconsistencies in the damage pattern and claimant's story"
       ],
-      "kb_precedents_applied": [],
+      "kb_precedents_applied": [
+        "HIST-019",
+        "FS-004"
+      ],
       "deductibles_applied": 1000,
       "status": "completed",
-      "summary": "Recommendation: Approve | Settlement: ₹24,950 | Confidence: 90%",
+      "summary": "Recommendation: Escalate | Settlement: ₹0 | Confidence: 80%",
       "settlement_breakdown": {
-        "repair_estimate": 50000,
-        "parts_value": 35000,
-        "labour_value": 15000,
+        "repair_estimate": 33500,
+        "assessed_fair_value": 27150,
+        "assessed_band_min": 20800,
+        "assessed_band_max": 33500,
+        "benchmark_source": "Segment parts catalog",
+        "amount_claimed": 40000,
+        "overclaim_pct": 47.3,
+        "overclaim_band": "inflated",
+        "overclaim_note": "Claimed ₹40,000 is 47% above the assessed fair value of ₹27,150 — strong workshop-inflation signal (FS-004). Payout capped at the OEM ceiling ₹33,500; ₹6,500 disallowed pending surveyor review.",
+        "disallowed_inflation": 6500,
+        "parts_value": 23450,
+        "labour_value": 10050,
         "vehicle_age_years": 6.3,
         "depreciation_pct": 50,
-        "depreciation": 17500,
+        "depreciation": 11725,
         "compulsory_deductible": 1000,
         "salvage_value": 0,
         "gst_rate_pct": 18,
-        "gst_on_labour": 2700,
-        "net_payable": 34200,
-        "applies": true,
+        "gst_on_labour": 1809,
+        "net_payable": 22584,
+        "applies": false,
         "assumptions": "Parts/labour split assumed 70/30. Depreciation applied to the parts component per IRDAI age schedule. GST 18% on labour. Compulsory deductible Rs.1,000. Salvage assumed Rs.0 (no total loss)."
       }
     }
   },
   "summary": {
-    "fraud_risk_score": 15,
-    "fraud_risk_label": "Low",
+    "fraud_risk_score": 42,
+    "fraud_risk_label": "Medium",
     "damage_consistency": "High",
-    "incident_consistency": "High",
+    "incident_consistency": "Low",
     "external_verification": "High",
-    "behavioural_analysis": "Low Risk",
-    "overall_confidence": 90,
-    "decision": "Approve",
-    "recommended_settlement": 34200,
+    "behavioural_analysis": "Medium Risk",
+    "overall_confidence": 80,
+    "decision": "Escalate",
+    "recommended_settlement": 0,
     "settlement_breakdown": {
-      "repair_estimate": 50000,
-      "parts_value": 35000,
-      "labour_value": 15000,
+      "repair_estimate": 33500,
+      "assessed_fair_value": 27150,
+      "assessed_band_min": 20800,
+      "assessed_band_max": 33500,
+      "benchmark_source": "Segment parts catalog",
+      "amount_claimed": 40000,
+      "overclaim_pct": 47.3,
+      "overclaim_band": "inflated",
+      "overclaim_note": "Claimed ₹40,000 is 47% above the assessed fair value of ₹27,150 — strong workshop-inflation signal (FS-004). Payout capped at the OEM ceiling ₹33,500; ₹6,500 disallowed pending surveyor review.",
+      "disallowed_inflation": 6500,
+      "parts_value": 23450,
+      "labour_value": 10050,
       "vehicle_age_years": 6.3,
       "depreciation_pct": 50,
-      "depreciation": 17500,
+      "depreciation": 11725,
       "compulsory_deductible": 1000,
       "salvage_value": 0,
       "gst_rate_pct": 18,
-      "gst_on_labour": 2700,
-      "net_payable": 34200,
-      "applies": true,
+      "gst_on_labour": 1809,
+      "net_payable": 22584,
+      "applies": false,
       "assumptions": "Parts/labour split assumed 70/30. Depreciation applied to the parts component per IRDAI age schedule. GST 18% on labour. Compulsory deductible Rs.1,000. Salvage assumed Rs.0 (no total loss)."
     },
     "needs_human_review": false,
@@ -277,11 +273,11 @@
     }
   },
   "adjuster_decision": {
-    "decision": "Approve",
+    "decision": "Escalate",
     "adjuster": "Raunak",
-    "reason": "It looks fine",
-    "ai_decision": "Approve",
+    "reason": "the amount claimed was too high and the story is not matching.",
+    "ai_decision": "Escalate",
     "overridden": false,
-    "timestamp": "2026-06-03 12:53"
+    "timestamp": "2026-06-04 09:07"
   }
 }

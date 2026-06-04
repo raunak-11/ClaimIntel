@@ -252,6 +252,23 @@ def _rule_based_flags(claim: dict, damage: dict, docs: dict | None = None) -> li
 
     # ── Flags 11–14: Visual fraud signals from Agent 1 ────────────────────────
     if damage:
+        # No visible damage at all, yet a claim was filed — claiming on an
+        # undamaged vehicle, wrong/old photos, or pre-incident images. Only raise
+        # when photos were actually submitted (otherwise it's a documentation gap,
+        # handled by the image-quality gate, not a fraud signal).
+        photos_present = bool(storage.get_claim_images(claim.get("claim_id", "")))
+        no_damage = damage.get("damage_present") is False or (
+            isinstance(damage.get("damaged_parts"), list)
+            and len(damage.get("damaged_parts")) == 0
+            and damage.get("total_repair_estimate", {}).get("max", 0) in (0, None)
+        )
+        if photos_present and no_damage:
+            flags.append(
+                "No visible damage detected in the submitted photos despite a claim being filed "
+                "— vehicle appears undamaged; possible invalid claim, wrong/old photos, or "
+                "pre-incident images (FI-DMG-002: Physics Mismatch)"
+            )
+
         match = damage.get("vehicle_match_in_image")
         if match == "No":
             seen = damage.get("vehicle_seen_description", "unknown vehicle")
@@ -307,11 +324,18 @@ def _rule_based_flags(claim: dict, damage: dict, docs: dict | None = None) -> li
         )
     elif damage.get("garage_estimate_provided") and damage.get("garage_vs_ai_variance_pct") is not None:
         variance = damage.get("garage_vs_ai_variance_pct", 0) or 0
+        garage_amt = damage.get("garage_estimate_amount_inr", 0) or 0
         if variance < -35:
-            garage_amt = damage.get("garage_estimate_amount_inr", 0) or 0
             flags.append(
                 f"Garage estimate ₹{garage_amt:,.0f} is {abs(variance):.0f}% below AI estimate "
                 f"— suspicious underdeclaration (possible cash settlement bypass)"
+            )
+        elif variance > 25:
+            # Above the normal estimate range but below the hard 40% inflation line:
+            # not conclusive on its own — surface for surveyor line-item review.
+            flags.append(
+                f"Garage estimate ₹{garage_amt:,.0f} is {variance:.0f}% above the assessed "
+                f"fair value — elevated estimate; verify line items (may or may not be fraud)"
             )
 
     # Flag 16: No FIR for theft or third-party claim

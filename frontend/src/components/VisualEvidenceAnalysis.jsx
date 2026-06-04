@@ -12,7 +12,7 @@ const SEVERITY_LABEL_COLOR = {
   Minor:    'text-green-400 bg-green-500/15 border-green-500/30',
 }
 
-export default function VisualEvidenceAnalysis({ imageUrls, damagedParts, onDeleteImage }) {
+export default function VisualEvidenceAnalysis({ imageUrls, damagedParts, noDamage, noDamageReason, onDeleteImage }) {
   const [activeIdx, setActiveIdx] = useState(0)
   const imgRef    = useRef()
   const canvasRef = useRef()
@@ -213,6 +213,19 @@ export default function VisualEvidenceAnalysis({ imageUrls, damagedParts, onDele
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Affirmative no-damage state — vehicle assessed as undamaged */}
+      {noDamage && (
+        <div className="flex items-start gap-2 rounded-lg border border-green-500/30 bg-green-500/5 px-3 py-2.5">
+          <span className="text-green-400 text-sm mt-0.5">✓</span>
+          <div>
+            <p className="text-xs font-semibold text-green-300">No visible damage detected</p>
+            <p className="text-[11px] text-slate-400 leading-relaxed mt-0.5">
+              {noDamageReason || 'The vehicle appears intact in the submitted photos. No parts were assessed as damaged, so no repair cost was estimated.'}
+            </p>
+          </div>
         </div>
       )}
 

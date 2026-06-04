@@ -276,9 +276,12 @@ function DocumentsTab({ claimDocs, agents }) {
 export default function EvidencePanel({ imageUrls, agents, settlement, onDeleteImage, claimDocs }) {
   const [tab, setTab] = useState('evidence')
 
-  const damagedParts = agents?.damage_assessment?.damaged_parts || []
+  const damageAgent  = agents?.damage_assessment
+  const damagedParts = damageAgent?.damaged_parts || []
   const trail        = settlement?.reasoning_trail || []
   const fraudAgent   = agents?.fraud_intelligence
+  // Only show an affirmative "no damage" once the damage agent has actually run.
+  const noDamage = !!damageAgent && damageAgent.status === 'completed' && damagedParts.length === 0
 
   return (
     <div className="bg-slate-900 rounded-2xl border border-slate-700 p-5">
@@ -291,7 +294,13 @@ export default function EvidencePanel({ imageUrls, agents, settlement, onDeleteI
 
       {tab === 'evidence' && (
         <>
-          <VisualEvidenceAnalysis imageUrls={imageUrls} damagedParts={damagedParts} onDeleteImage={onDeleteImage} />
+          <VisualEvidenceAnalysis
+            imageUrls={imageUrls}
+            damagedParts={damagedParts}
+            noDamage={noDamage}
+            noDamageReason={damageAgent?.no_damage_reason}
+            onDeleteImage={onDeleteImage}
+          />
           <KBSources settlement={settlement} fraudAgent={fraudAgent} />
         </>
       )}

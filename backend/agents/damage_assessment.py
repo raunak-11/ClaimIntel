@@ -15,13 +15,27 @@ def _extract_reg_no(vehicle_str: str) -> str:
     return ""
 
 BASE_PROMPT = """You are an expert vehicle damage assessor and fraud detection specialist with access to OEM parts pricing data.
-Analyze ALL provided images of a damaged vehicle and produce a COMPLETE, exhaustive damage report along with visual fraud verification signals.
+Analyze ALL provided images of a vehicle (which MAY OR MAY NOT be damaged) and produce an accurate, evidence-based damage report along with visual fraud verification signals.
 
 {kb_context}
 
 Claim description: {description}
 Registered vehicle (from policy): {vehicle}
 Number of images provided: {{image_count}}
+
+━━━ #1 RULE — DO NOT HALLUCINATE DAMAGE (read first) ━━━
+- Report a part as damaged ONLY if you can CLEARLY SEE actual physical damage on it in the image.
+- An UNDAMAGED vehicle is a VALID and EXPECTED result. If the car looks intact, return an EMPTY
+  "damaged_parts" list and set "damage_present": false. That is the CORRECT answer for a clean car —
+  do NOT invent damage to fill the report.
+- NEVER mistake any of the following for damage:
+    reflections, shadows, sun glare, lens flare, dirt, dust, mud splatter, water droplets, wet/rainy
+    surfaces, normal panel gaps and trim lines, rubber moulding, badges/logos, number plates, antennas,
+    tinted or dark glass, the dark colour of the paint itself, or background objects mirrored on the body.
+- A part being VISIBLE is NOT the same as a part being DAMAGED. Seeing a headlight does not mean the
+  headlight is damaged. Only report it if it is cracked, broken, shattered, deformed, or detached.
+- If you are NOT sure whether something is real damage or just one of the artefacts above → do NOT report it.
+- It is far worse to invent damage that is not there than to miss a tiny scratch. WHEN IN DOUBT, LEAVE IT OUT.
 
 ━━━ BOUNDING BOX RULES (read carefully) ━━━
 - Coordinates are PERCENTAGE-BASED: x,y = top-left corner (0–100%), w,h = width/height (0–100%)
@@ -31,42 +45,52 @@ Number of images provided: {{image_count}}
 - A tight box for a bumper in the lower-left would be: {{"image_index": 0, "x": 5, "y": 62, "w": 38, "h": 22}}
 - A tight box for a headlight on the right side would be: {{"image_index": 0, "x": 68, "y": 30, "w": 20, "h": 18}}
 
-━━━ COMPREHENSIVE DAMAGE SCAN (check EVERY zone) ━━━
-Systematically inspect every visible component — do NOT stop at the most obvious damage:
+━━━ DAMAGE SCAN (inspect every zone — but report ONLY what is clearly damaged) ━━━
+Systematically inspect every visible component, then report a zone ONLY if it shows real, visible damage:
   Front zone : front bumper, grille, hood/bonnet, headlights (L+R), foglights, tow hook cover
   Side zone  : all doors, side mirrors, sills/rockers, fenders (front+rear), wheel arches, A/B/C pillars
   Rear zone  : rear bumper, boot/tailgate, tail lights (L+R), reverse lights, exhaust tip
   Glass/roof : windshield, all side windows, rear glass, sunroof panel, roof panel, wiper blades
   Wheels     : all 4 tyres (check bulges/flats), alloy/steel rims (kerb damage), wheel arch liners
   Underbody  : report if visible — suspension, skid plates, exhaust
-Report EVERY damage zone found, including:
-  - Minor scratches and paint scuffs (even 2–5 cm)
-  - Paint transfer from the other vehicle
-  - Misaligned or ill-fitting panels (gap inconsistencies)
-  - Cracked, chipped, or broken lights/glass
-  - Dents and creases at any severity
+Genuine damage — when ACTUALLY VISIBLE — should be reported, including clear scratches/scuffs, paint
+transfer, misaligned panels, cracked/broken lights or glass, and dents or creases. But every part you
+report MUST have concrete, describable damage you can point to. Do not report a part just because it
+exists in the photo.
 
 ━━━ OTHER RULES ━━━
 - DO NOT estimate repair costs in rupees — a separate pricing engine computes all costs.
-  Your job is to identify each damaged part, its severity, and the correct repair_type.
+  Your job is to identify each damaged part, its severity, confidence, and the correct repair_type.
+- For EACH damaged part you MUST provide:
+    "confidence": High = unmistakable, clearly visible damage; Medium = likely damage but angle/lighting
+                  limits certainty; Low = you suspect damage but cannot clearly confirm it.
+    "visible_evidence": one short phrase naming the EXACT damage and where, e.g.
+                  "deep horizontal scrape across lower front bumper, paint missing". If you cannot
+                  describe concrete visible damage here, DELETE the part — do not report it.
 - repair_type rules: "Replace" if the part is broken/shattered/crushed/torn or severely deformed;
   "Repair" for dents/creases that can be hammered and repainted; "Paint" for scratches/scuffs only.
   Glass, lights, mirrors and wheels that are damaged are always "Replace".
+- CONSISTENCY: If the description claims an accident/damage but you see NO damage, set
+  "consistent_with_description": "Low" and explain in notes. If you see damage matching the story, "High".
 - PLATE RULE: Set registration_plate_visible only if the plate text is physically legible in the image.
   Do NOT guess or copy the plate from the claim description. If unclear → false and null.
 - Return ONLY valid JSON — no markdown fences, no explanation text
 
 Return a JSON object with exactly these fields:
 {{
+  "damage_present": true,
+  "no_damage_reason": null,
   "damaged_parts": [
     {{
       "part": "snake_case part name e.g. front_bumper, headlight_left, door_rear_right",
       "severity": "Minor|Moderate|Severe",
+      "confidence": "High|Medium|Low",
+      "visible_evidence": "exact damage seen and where",
       "bounding_box": {{"image_index": 0, "x": 10, "y": 20, "w": 30, "h": 25}},
       "repair_type": "Replace|Repair|Paint"
     }}
   ],
-  "overall_severity": "Minor|Moderate|Severe",
+  "overall_severity": "None|Minor|Moderate|Severe",
   "total_repair_estimate": {{"min": 0, "max": 0}},
   "consistent_with_description": "High|Medium|Low",
   "notes": "Brief assessment including any pricing basis observations",
@@ -81,6 +105,9 @@ Return a JSON object with exactly these fields:
   "status": "completed",
   "summary": "Severity: X | Est. Repair: ₹X–₹X | Parts: N damaged | Vehicle Match: Yes/No/Unclear"
 }}
+
+If the vehicle is undamaged: set "damage_present": false, "damaged_parts": [], "overall_severity": "None",
+"no_damage_reason" to a short explanation, and make "summary" say "No visible damage detected".
 """
 
 
@@ -107,6 +134,13 @@ class DamageAssessmentAgent(BaseAgent):
             # No images submitted — plate cannot be verified at all
             result["registration_plate_visible"] = False
             result["plate_text_in_image"] = None
+
+        # ── No-damage guard + low-confidence filter (anti-hallucination) ──────
+        # The vision model can invent phantom damage on a clean car (reflections,
+        # shadows, dark paint). We (a) quarantine Low-confidence detections so we
+        # never PRICE a guess, and (b) honour an explicit "no damage" verdict so
+        # an undamaged vehicle yields a zero estimate, not a fabricated one.
+        self._apply_no_damage_guard(result, bool(image_paths))
 
         # ── Validate and clamp every bounding box ─────────────────────────────
         max_img_idx = max(image_count - 1, 0)
@@ -190,6 +224,55 @@ class DamageAssessmentAgent(BaseAgent):
         result["image_quality"] = self._image_quality_gate(result, image_count)
 
         return result
+
+    @staticmethod
+    def _apply_no_damage_guard(result: dict, has_images: bool) -> None:
+        """Reconcile the model's damage list against its own confidence + the
+        explicit no-damage flag, mutating `result` in place.
+
+        - Low-confidence parts are moved to `low_confidence_observations` (kept
+          for the adjuster, but NOT drawn or priced) so a guess never becomes a payout.
+        - If nothing confident remains (or the model said so), the vehicle is treated
+          as undamaged: empty parts, zero estimate, severity "None".
+        """
+        parts = result.get("damaged_parts")
+        if not isinstance(parts, list):
+            parts = []
+
+        kept, low_conf = [], []
+        for p in parts:
+            if not isinstance(p, dict):
+                continue
+            if str(p.get("confidence", "")).strip().lower() == "low":
+                low_conf.append(p)
+            else:
+                kept.append(p)
+
+        result["damaged_parts"] = kept
+        if low_conf:
+            result["low_confidence_observations"] = low_conf
+
+        # Reconcile the explicit flag with what actually survived filtering.
+        damage_present = result.get("damage_present")
+        if damage_present is None:
+            damage_present = len(kept) > 0
+        if not kept:
+            damage_present = False
+        result["damage_present"] = damage_present
+
+        if not damage_present:
+            result["damaged_parts"] = []
+            result["overall_severity"] = "None"
+            result["total_repair_estimate"] = {"min": 0, "max": 0}
+            if not result.get("no_damage_reason"):
+                result["no_damage_reason"] = (
+                    "No clearly visible damage detected in the submitted photos."
+                    if has_images else "No photos submitted — damage could not be assessed."
+                )
+            result["summary"] = (
+                "No visible damage detected" if has_images
+                else "No photos submitted — damage not assessed"
+            )
 
     @staticmethod
     def _image_quality_gate(result: dict, photo_count: int) -> dict:

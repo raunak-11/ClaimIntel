@@ -151,9 +151,15 @@ def get_claim(claim_id: str):
 
     # Lazy backfill: compute settlement breakdown for claims investigated before
     # the transparent-math feature existed, so older/seed claims still show it.
+    # Also upgrade breakdowns that predate the fair-value check (no
+    # `assessed_fair_value` field) so existing claims gain the benchmark audit
+    # without a full re-investigation.
     try:
         summary = (result or {}).get("summary") or {}
-        if summary.get("decision") and not summary.get("settlement_breakdown"):
+        existing_bd = summary.get("settlement_breakdown") or {}
+        needs_bd = not existing_bd
+        needs_upgrade = bool(existing_bd) and "assessed_fair_value" not in existing_bd
+        if summary.get("decision") and (needs_bd or needs_upgrade):
             from services.settlement_calc import compute_settlement_breakdown
             damage = (result.get("agents") or {}).get("damage_assessment", {})
             bd = compute_settlement_breakdown(claim, policy, damage, summary["decision"])

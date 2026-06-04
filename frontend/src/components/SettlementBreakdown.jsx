@@ -20,6 +20,75 @@ function Row({ label, value, sign, sub, strong }) {
   )
 }
 
+const BAND_STYLE = {
+  aligned:  { dot: 'bg-green-400', text: 'text-green-300', ring: 'border-green-500/40 bg-green-500/5',  label: 'Consistent with assessed value' },
+  elevated: { dot: 'bg-amber-400', text: 'text-amber-300', ring: 'border-amber-500/40 bg-amber-500/5',  label: 'Elevated — may or may not be fraud' },
+  inflated: { dot: 'bg-red-400',   text: 'text-red-300',   ring: 'border-red-500/40 bg-red-500/5',      label: 'Inflated — workshop-inflation signal' },
+}
+
+function BenchmarkAudit({ breakdown }) {
+  const assessed = breakdown.assessed_fair_value
+  const claimed  = breakdown.amount_claimed
+  // Nothing to compare against (no independent estimate) → skip the block
+  if (!assessed) return null
+
+  const band = breakdown.overclaim_band
+  const style = BAND_STYLE[band] || BAND_STYLE.aligned
+  const pct = breakdown.overclaim_pct
+  const pctTxt = pct == null ? null : `${pct > 0 ? '+' : ''}${pct}%`
+
+  return (
+    <div className={`rounded-lg border ${style.ring} px-3 py-2.5 mb-3`}>
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+          Fair-value check
+        </span>
+        {band && (
+          <span className={`inline-flex items-center gap-1.5 text-[10px] font-semibold ${style.text}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
+            {style.label}{pctTxt ? ` (${pctTxt})` : ''}
+          </span>
+        )}
+      </div>
+
+      <div className="flex items-baseline justify-between py-0.5">
+        <div>
+          <span className="text-xs text-slate-300">Assessed fair value</span>
+          {breakdown.benchmark_source && (
+            <span className="block text-[10px] text-slate-500">
+              {breakdown.benchmark_source}
+              {breakdown.assessed_band_min && breakdown.assessed_band_max
+                ? ` · band ${inr(breakdown.assessed_band_min)}–${inr(breakdown.assessed_band_max)}`
+                : ''}
+            </span>
+          )}
+        </div>
+        <span className="text-sm font-mono text-slate-200">{inr(assessed)}</span>
+      </div>
+
+      {claimed != null && (
+        <div className="flex items-baseline justify-between py-0.5">
+          <span className="text-xs text-slate-400">Amount claimed (garage)</span>
+          <span className={`text-sm font-mono ${style.text}`}>{inr(claimed)}</span>
+        </div>
+      )}
+
+      {breakdown.disallowed_inflation > 0 && (
+        <div className="flex items-baseline justify-between py-0.5">
+          <span className="text-xs text-slate-400">Disallowed (inflation)</span>
+          <span className="text-sm font-mono text-red-400">− {inr(breakdown.disallowed_inflation)}</span>
+        </div>
+      )}
+
+      {breakdown.overclaim_note && (
+        <p className={`text-[10px] leading-relaxed mt-1.5 ${band === 'aligned' ? 'text-slate-500' : style.text}`}>
+          {breakdown.overclaim_note}
+        </p>
+      )}
+    </div>
+  )
+}
+
 export default function SettlementBreakdown({ breakdown }) {
   const [open, setOpen] = useState(true)
   if (!breakdown) return null
@@ -44,7 +113,12 @@ export default function SettlementBreakdown({ breakdown }) {
 
       {open && (
         <div className="px-3 pb-3">
-          <Row label="Repair estimate" value={breakdown.repair_estimate} />
+          <BenchmarkAudit breakdown={breakdown} />
+          <Row
+            label="Approved repair basis"
+            sub={breakdown.overclaim_band === 'inflated' ? 'capped at assessed ceiling' : undefined}
+            value={breakdown.repair_estimate}
+          />
           <Row
             label="Depreciation (parts)"
             sub={`${breakdown.depreciation_pct}%${breakdown.vehicle_age_years != null ? ` · vehicle age ~${breakdown.vehicle_age_years} yr` : ''}`}
