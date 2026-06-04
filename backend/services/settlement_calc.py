@@ -50,21 +50,113 @@ def _vehicle_age_years(policy: dict, claim: dict) -> Optional[float]:
         return None
 
 
-def _repair_mid(damage: dict) -> float:
-    """AI mid-point repair estimate, preferring a real garage estimate when it is
-    within a sane band of the AI estimate (not flagged as inflation)."""
+# ── Over-claim bands ────────────────────────────────────────────────────────────
+# How far the claimed/garage amount may sit ABOVE the independent assessed value
+# before it stops looking normal. Mirrors real surveyor practice: a quote a little
+# over the assessed cost is routine; a large gap is the workshop-inflation pattern.
+ALIGNED_TOLERANCE_PCT = 10   # within +10% of assessed → perfectly normal
+INFLATION_PCT         = 40   # beyond +40% → inflation; cap payout at assessed ceiling
+
+_SOURCE_LABELS = {
+    "live_web":        "Live web market prices",
+    "vehicle_catalog": "OEM parts catalog (exact model)",
+    "segment_catalog": "Segment parts catalog",
+}
+
+
+def _assess_repair(damage: dict) -> dict:
+    """Decide the repair amount the settlement is built on, treating the AI/engine
+    estimate as the *independent assessed value* (the surveyor) and the garage /
+    policyholder figure as the *claimed amount* being audited against it.
+
+    Returns the approved repair basis plus the benchmark-vs-claim audit fields so
+    the UI can show "this claim is reasonable / may or may not be fraud / inflated".
+    """
     est = damage.get("total_repair_estimate") or {}
     lo = float(est.get("min") or 0) if isinstance(est, dict) else 0.0
     hi = float(est.get("max") or 0) if isinstance(est, dict) else 0.0
-    ai_mid = (lo + hi) / 2 if hi > 0 else float(lo)
+    assessed_mid = (lo + hi) / 2 if hi > 0 else float(lo)
+    assessed_max = hi if hi > 0 else assessed_mid
 
-    # If a garage estimate was provided and not flagged as inflated, use it —
-    # it reflects the actual workshop quote the customer will settle against.
-    if damage.get("garage_estimate_provided") and not damage.get("garage_inflation_flag"):
-        garage = float(damage.get("garage_estimate_amount_inr") or 0)
-        if garage > 0:
-            return garage
-    return ai_mid
+    claimed = 0.0
+    if damage.get("garage_estimate_provided"):
+        try:
+            claimed = float(damage.get("garage_estimate_amount_inr") or 0)
+        except (ValueError, TypeError):
+            claimed = 0.0
+
+    source = damage.get("pricing_method") or "segment_catalog"
+    source_label = _SOURCE_LABELS.get(source, "Parts catalog")
+
+    out = {
+        "assessed_fair_value": round(assessed_mid) if assessed_mid > 0 else None,
+        "assessed_band_min":   round(lo) if lo > 0 else None,
+        "assessed_band_max":   round(assessed_max) if assessed_max > 0 else None,
+        "benchmark_source":    source_label,
+        "amount_claimed":      round(claimed) if claimed > 0 else None,
+        "overclaim_pct":       None,
+        "overclaim_band":      None,
+        "overclaim_note":      None,
+        "disallowed_inflation": 0,
+    }
+
+    # No independent assessment available → fall back to whatever figure we have.
+    if assessed_mid <= 0:
+        out["approved_basis"] = round(claimed)
+        return out
+
+    # No claimed/garage figure → settle on the assessed fair value itself.
+    if claimed <= 0:
+        out["approved_basis"] = round(assessed_mid)
+        out["overclaim_note"] = (
+            f"No garage quote provided — settled on the independently assessed "
+            f"fair value of ₹{assessed_mid:,.0f} ({source_label})."
+        )
+        return out
+
+    overclaim_pct = (claimed - assessed_mid) / assessed_mid * 100
+
+    if overclaim_pct <= ALIGNED_TOLERANCE_PCT:
+        band = "aligned"
+    elif overclaim_pct <= INFLATION_PCT:
+        band = "elevated"
+    else:
+        band = "inflated"
+
+    # Approved basis: honour the actual claimed amount unless it is inflated,
+    # in which case cap at the OEM-priced ceiling and disallow the excess.
+    if band == "inflated":
+        basis = min(claimed, assessed_max)
+    else:
+        basis = claimed
+    disallowed = max(0.0, claimed - basis)
+
+    if band == "aligned":
+        note = (
+            f"Claimed ₹{claimed:,.0f} is consistent with the independently "
+            f"assessed fair value of ₹{assessed_mid:,.0f} ({source_label})."
+        )
+    elif band == "elevated":
+        note = (
+            f"Claimed ₹{claimed:,.0f} is {overclaim_pct:.0f}% above the assessed "
+            f"fair value of ₹{assessed_mid:,.0f} — above the normal range but "
+            f"within tolerance. May or may not be fraud; surveyor line-item review "
+            f"recommended."
+        )
+    else:  # inflated
+        note = (
+            f"Claimed ₹{claimed:,.0f} is {overclaim_pct:.0f}% above the assessed "
+            f"fair value of ₹{assessed_mid:,.0f} — strong workshop-inflation "
+            f"signal (FS-004). Payout capped at the OEM ceiling ₹{basis:,.0f}; "
+            f"₹{disallowed:,.0f} disallowed pending surveyor review."
+        )
+
+    out["approved_basis"]      = round(basis)
+    out["overclaim_pct"]       = round(overclaim_pct, 1)
+    out["overclaim_band"]      = band
+    out["overclaim_note"]      = note
+    out["disallowed_inflation"] = round(disallowed)
+    return out
 
 
 def compute_settlement_breakdown(
@@ -74,7 +166,8 @@ def compute_settlement_breakdown(
     decision: str,
 ) -> Optional[dict]:
     """Return an itemised settlement breakdown, or None if no repair estimate exists."""
-    repair = round(_repair_mid(damage or {}))
+    assess = _assess_repair(damage or {})
+    repair = round(assess.get("approved_basis") or 0)
     if repair <= 0:
         return None
 
@@ -94,6 +187,19 @@ def compute_settlement_breakdown(
 
     return {
         "repair_estimate":       repair,
+        # ── Independent benchmark vs claimed-amount audit (#fair-value) ──────────
+        # `repair_estimate` above is the APPROVED basis (claimed amount, capped at
+        # the assessed ceiling when inflated). These fields expose how that figure
+        # was reconciled against the surveyor-equivalent assessed value.
+        "assessed_fair_value":   assess.get("assessed_fair_value"),
+        "assessed_band_min":     assess.get("assessed_band_min"),
+        "assessed_band_max":     assess.get("assessed_band_max"),
+        "benchmark_source":      assess.get("benchmark_source"),
+        "amount_claimed":        assess.get("amount_claimed"),
+        "overclaim_pct":         assess.get("overclaim_pct"),
+        "overclaim_band":        assess.get("overclaim_band"),
+        "overclaim_note":        assess.get("overclaim_note"),
+        "disallowed_inflation":  assess.get("disallowed_inflation", 0),
         "parts_value":           round(parts_value),
         "labour_value":          round(labour_value),
         "vehicle_age_years":     round(age, 1) if age is not None else None,
