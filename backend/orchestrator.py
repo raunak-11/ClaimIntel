@@ -170,6 +170,24 @@ async def run_pipeline(claim_id: str, claim: dict, queue: asyncio.Queue):
     if is_ineligible:
         decision = "Reject"
 
+    # ── Hard consistency guard (story mismatch) ───────────────────────────────
+    # If incident reconstruction found the visible damage does NOT match the
+    # claimant's account, the claim must not be auto-approved. A story mismatch
+    # is a material validity/fraud signal that needs a human adjudicator. Like
+    # the eligibility guard above, this deterministically overrides an LLM
+    # "Approve" — the model only recommends; a hard mismatch wins.
+    story_mismatch = reconstruction.get("damage_matches_story") is False
+    story_mismatch_blocked = decision == "Approve" and story_mismatch
+    if story_mismatch_blocked:
+        decision = "Escalate"
+        settlement["recommended_settlement"] = 0
+        prior = settlement.get("decision_reasons") or []
+        settlement["decision_reasons"] = [
+            "Auto-approval blocked: incident reconstruction found the visible damage "
+            "does not match the claimant's account (story mismatch). Escalated for human review.",
+            *prior,
+        ]
+
     # ── #2 Settlement breakdown (transparent, deterministic math) ─────────────
     breakdown = None
     try:
@@ -205,6 +223,12 @@ async def run_pipeline(claim_id: str, claim: dict, queue: asyncio.Queue):
     if img_q and not img_q.get("gate_passed", True):
         issues = "; ".join(img_q.get("issues", [])) or "image quality insufficient"
         routing_reasons.append(f"Image quality gate not passed: {issues}")
+
+    if story_mismatch_blocked:
+        routing_reasons.append(
+            "Incident reconstruction: visible damage does not match the claimant's "
+            "account (story mismatch) — auto-approval blocked, needs human review"
+        )
 
     needs_human_review = bool(routing_reasons)
 

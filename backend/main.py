@@ -293,7 +293,6 @@ async def stream(claim_id: str):
 _ADJUSTER_STATUS = {
     "Approve":  "Approved",
     "Reject":   "Rejected",
-    "Settle":   "Settled",
     "Escalate": "Escalated",
     "Request Info": "Pending Customer",
 }
@@ -469,7 +468,7 @@ def analytics():
         vehicle = c.get("vehicle", "Unknown")
         if human_decision:
             human_reviewed += 1
-            if human_decision in ("Approve", "Settle"):
+            if human_decision == "Approve":
                 total_settled += amount
                 if amount > 0:
                     settlement_by_vehicle.setdefault(vehicle, []).append(amount)
@@ -506,7 +505,7 @@ def analytics():
             leakage_prevented += claimed          # full ask blocked
         leakage_prevented += disallowed           # inflation trimmed (any claim)
 
-        if human_decision in ("Approve", "Settle"):
+        if human_decision == "Approve":
             deductions_recovered += (
                 int(breakdown.get("depreciation") or 0)
                 + int(breakdown.get("compulsory_deductible") or 0)

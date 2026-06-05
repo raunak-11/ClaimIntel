@@ -1,3 +1,27 @@
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+function fmtDate(str) {
+  if (!str) return '—'
+  try {
+    if (str.includes('T')) {
+      // datetime-local: "2026-03-28T18:00" or full ISO "2026-06-05T10:23:45.123456"
+      const d = new Date(str)
+      if (isNaN(d)) return str
+      const day = String(d.getDate()).padStart(2, '0')
+      const mon = MONTHS[d.getMonth()]
+      const yr  = d.getFullYear()
+      const hr  = String(d.getHours()).padStart(2, '0')
+      const min = String(d.getMinutes()).padStart(2, '0')
+      return `${day} ${mon} ${yr}, ${hr}:${min}`
+    }
+    // date-only: "2026-03-28" — parse manually to avoid UTC-offset drift
+    const [yr, mo, dy] = str.split('-').map(Number)
+    return `${String(dy).padStart(2,'0')} ${MONTHS[mo-1]} ${yr}`
+  } catch {
+    return str
+  }
+}
+
 function premiumPaidTillIncident(policy, incidentDateStr) {
   try {
     const start    = new Date(policy.policy_start)
@@ -21,9 +45,9 @@ export default function ClaimOverview({ claim, policy }) {
   const claimFields = [
     { label: 'Policy No.',     value: claim.policy_no },
     { label: 'Type',           value: claim.claim_type },
-    { label: 'Incident Date',  value: claim.incident_date },
+    { label: 'Incident Date',  value: fmtDate(claim.incident_date) },
     { label: 'Location',       value: claim.incident_location },
-    { label: 'Submitted',      value: claim.created_at },
+    { label: 'Submitted',      value: fmtDate(claim.created_at) },
   ]
 
   const paidTillIncident = policy
@@ -82,11 +106,11 @@ export default function ClaimOverview({ claim, policy }) {
           <div className="grid grid-cols-2 gap-2">
             <div className="bg-slate-800 rounded-lg px-3 py-2">
               <p className="text-xs text-slate-500 mb-0.5">Policy Start</p>
-              <p className="text-sm text-slate-200">{policy.policy_start}</p>
+              <p className="text-sm text-slate-200">{fmtDate(policy.policy_start)}</p>
             </div>
             <div className="bg-slate-800 rounded-lg px-3 py-2">
               <p className="text-xs text-slate-500 mb-0.5">Policy End</p>
-              <p className="text-sm text-slate-200">{policy.policy_end}</p>
+              <p className="text-sm text-slate-200">{fmtDate(policy.policy_end)}</p>
             </div>
             <div className="bg-slate-800 rounded-lg px-3 py-2">
               <p className="text-xs text-slate-500 mb-0.5">Annual Premium</p>
