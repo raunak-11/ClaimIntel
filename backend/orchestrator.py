@@ -2,6 +2,7 @@ import asyncio
 from typing import Any
 
 import storage
+from config import SURVEYOR_THRESHOLD
 
 
 async def run_pipeline(claim_id: str, claim: dict, queue: asyncio.Queue):
@@ -23,7 +24,19 @@ async def run_pipeline(claim_id: str, claim: dict, queue: asyncio.Queue):
         ("settlement_recommendation", SettlementRecommendationAgent()),
     ]
 
-    context: dict[str, Any] = {"claim": claim, "agents": {}}
+    claim_type_lower = (claim.get("claim_type") or "").lower()
+    is_theft = "theft" in claim_type_lower
+    is_tp    = "third party" in claim_type_lower or "third-party" in claim_type_lower
+
+    context: dict[str, Any] = {
+        "claim": claim,
+        "agents": {},
+        "claim_type_flags": {
+            "is_theft": is_theft,
+            "is_third_party": is_tp,
+            "is_own_damage": not is_theft and not is_tp,
+        },
+    }
 
     # Parse any uploaded supporting documents (estimate / FIR) before agents run
     try:
@@ -41,18 +54,67 @@ async def run_pipeline(claim_id: str, claim: dict, queue: asyncio.Queue):
         context["docs"] = {"estimate": None, "fir": None}
 
     storage.update_claim_field(claim_id, "status", "Under Investigation")
+    # Clear any previous adjuster decision so a re-investigation starts clean.
+    # Notes are preserved (they remain useful context for the new adjudicator).
+    prev = storage.get_result(claim_id) or {}
+    if prev.get("adjuster_decision"):
+        prev.pop("adjuster_decision", None)
+        storage.save_result(claim_id, prev)
+
+    flags = context["claim_type_flags"]
 
     for agent_name, agent in agent_sequence:
         await queue.put({"type": "agent_start", "agent": agent_name})
         try:
-            result = await asyncio.to_thread(agent.run, context)
+            # ── Claim-type branching ───────────────────────────────────────────
+            # Theft: no own-vehicle damage photos, settlement = IDV payout.
+            # Third-party: own-vehicle damage may exist but liability is separate.
+            # Skip/stub agents that don't apply to the claim type.
+            if agent_name == "damage_assessment" and flags["is_theft"]:
+                result = {
+                    "status": "completed",
+                    "damage_present": False,
+                    "no_damage_reason": "Theft claim — no own-vehicle damage photos expected.",
+                    "damaged_parts": [],
+                    "overall_severity": "None",
+                    "total_repair_estimate": {"min": 0, "max": 0},
+                    "consistent_with_description": "High",
+                    "notes": "Theft claim: damage assessment not applicable. Settlement will be based on IDV.",
+                    "vehicle_match_in_image": "Unclear",
+                    "image_quality": {"gate_passed": True, "issues": [], "photo_count": 0},
+                    "summary": "Theft claim — IDV settlement path",
+                }
+            elif agent_name == "incident_reconstruction" and flags["is_theft"]:
+                result = {
+                    "status": "completed",
+                    "collision_type": "Theft",
+                    "damage_matches_story": True,
+                    "confidence": 80,
+                    "reconstruction": "Vehicle reported stolen. No collision reconstruction applicable.",
+                    "reconstruction_bullets": [
+                        "Claim type is theft — no impact damage to reconstruct.",
+                        "FIR verification is the primary evidence check.",
+                        "Story consistency depends on FIR match, not visual damage.",
+                    ],
+                    "inconsistencies": [],
+                    "summary": "Theft — no reconstruction applicable | Confidence: 80%",
+                }
+            else:
+                result = await asyncio.to_thread(agent.run, context)
+
             context["agents"][agent_name] = result
             storage.update_agent_result(claim_id, agent_name, result)
             # After damage assessment, write the AI-estimated amount back to CSV
             if agent_name == "damage_assessment":
                 est = result.get("total_repair_estimate", {})
-                amount = est.get("min", 0) if isinstance(est, dict) else 0
+                # Use mid-point so downstream agents see a representative value
+                lo = float(est.get("min", 0) if isinstance(est, dict) else 0)
+                hi = float(est.get("max", 0) if isinstance(est, dict) else 0)
+                amount = int((lo + hi) / 2) if hi > 0 else int(lo)
                 storage.update_claim_field(claim_id, "claim_amount", str(amount))
+                # Also push into in-memory context so fraud flags (A2) and
+                # settlement (A5) read the real estimate, not the stale 0.
+                context["claim"]["claim_amount"] = amount
             await queue.put({"type": "agent_done", "agent": agent_name, "result": result})
         except Exception as exc:
             error_data = {"status": "error", "error": str(exc)}
@@ -95,7 +157,18 @@ async def run_pipeline(claim_id: str, claim: dict, queue: asyncio.Queue):
         "Low": "Low Risk", "Medium": "Medium Risk", "High": "High Risk"
     }.get(fraud_label, "Unknown")
 
+    # ── Hard eligibility guard (policy expiry / pre-inception) ───────────────
+    # Coverage is a binary fact — if the incident is outside the policy period,
+    # no LLM reasoning can override it. Check before trusting the LLM decision.
+    eligibility_fail = context_v.get("policy_coverage_note", "")
+    is_ineligible = any(
+        kw in eligibility_fail.upper()
+        for kw in ("POLICY EXPIRED", "PRE-INCEPTION", "NOT ELIGIBLE")
+    )
+
     decision = settlement.get("decision", "Pending")
+    if is_ineligible:
+        decision = "Reject"
 
     # ── #2 Settlement breakdown (transparent, deterministic math) ─────────────
     breakdown = None
@@ -166,7 +239,7 @@ async def run_pipeline(claim_id: str, claim: dict, queue: asyncio.Queue):
         final_status = "Investigation Error"
     elif needs_human_review:
         final_status = "Pending Review"
-    elif decision == "Escalate" and (final_amount > 50000 or has_estimate_only):
+    elif decision == "Escalate" and (final_amount > SURVEYOR_THRESHOLD or has_estimate_only):
         final_status = "Survey Required"
     else:
         final_status = {

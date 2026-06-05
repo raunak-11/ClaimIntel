@@ -4,7 +4,7 @@ import os
 from datetime import datetime
 from typing import AsyncGenerator
 
-from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, Header, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
@@ -13,6 +13,17 @@ from sse_starlette.sse import EventSourceResponse
 
 import storage
 from config import CLAIMS_DIR
+
+# ── Demo role guard ───────────────────────────────────────────────────────────
+# Matches the frontend's hardcoded credentials. For production, replace with a
+# real token/session check. This guards the API from direct unauthenticated calls.
+_ROLE_MAP = {"user": "user", "adjudicator": "adjudicator"}
+
+
+def _require_adjudicator(x_role: str = Header(default="")):
+    """FastAPI dependency — rejects non-adjudicator callers on protected routes."""
+    if x_role.lower() != "adjudicator":
+        raise HTTPException(status_code=403, detail="Adjudicator role required")
 
 app = FastAPI(title="ClaimIntel API", version="1.0.0")
 
@@ -238,7 +249,7 @@ def get_claim_docs(claim_id: str):
 
 # ── Investigation ─────────────────────────────────────────────────────────────
 
-@app.post("/api/claims/{claim_id}/investigate")
+@app.post("/api/claims/{claim_id}/investigate", dependencies=[__import__('fastapi').Depends(_require_adjudicator)])
 async def investigate(claim_id: str, background_tasks: BackgroundTasks):
     claim = storage.get_claim(claim_id)
     if not claim:
@@ -260,14 +271,18 @@ async def stream(claim_id: str):
     queue = get_sse_queue(claim_id)
 
     async def event_generator() -> AsyncGenerator[dict, None]:
-        while True:
-            try:
-                event = await asyncio.wait_for(queue.get(), timeout=60)
-                yield {"data": json.dumps(event)}
-                if event.get("type") == "done":
-                    break
-            except asyncio.TimeoutError:
-                yield {"data": json.dumps({"type": "ping"})}
+        try:
+            while True:
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=60)
+                    yield {"data": json.dumps(event)}
+                    if event.get("type") == "done":
+                        break
+                except asyncio.TimeoutError:
+                    yield {"data": json.dumps({"type": "ping"})}
+        finally:
+            # Remove the queue once the stream closes to prevent memory growth.
+            _sse_queues.pop(claim_id, None)
 
     return EventSourceResponse(event_generator())
 
@@ -295,7 +310,7 @@ class AdjusterNoteIn(BaseModel):
     text: str
 
 
-@app.post("/api/claims/{claim_id}/adjuster/decision")
+@app.post("/api/claims/{claim_id}/adjuster/decision", dependencies=[__import__('fastapi').Depends(_require_adjudicator)])
 def adjuster_decision(claim_id: str, payload: AdjusterDecisionIn):
     if not storage.get_claim(claim_id):
         raise HTTPException(status_code=404, detail="Claim not found")
@@ -315,7 +330,7 @@ def adjuster_decision(claim_id: str, payload: AdjusterDecisionIn):
     return {"adjuster_decision": record, "status": _ADJUSTER_STATUS[payload.decision]}
 
 
-@app.post("/api/claims/{claim_id}/adjuster/notes")
+@app.post("/api/claims/{claim_id}/adjuster/notes", dependencies=[__import__('fastapi').Depends(_require_adjudicator)])
 def adjuster_note(claim_id: str, payload: AdjusterNoteIn):
     if not storage.get_claim(claim_id):
         raise HTTPException(status_code=404, detail="Claim not found")

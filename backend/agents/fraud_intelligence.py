@@ -3,7 +3,7 @@ from datetime import datetime
 
 import storage
 from agents.base_agent import BaseAgent
-from config import NPS_HIGH_DAYS, NPS_LOW_DAYS, NPS_MEDIUM_DAYS
+from config import NPS_HIGH_DAYS, NPS_LOW_DAYS, NPS_MEDIUM_DAYS, SURVEYOR_THRESHOLD
 from services.gemini_client import ask_json
 from services.rag_client import get_fraud_kb_context
 
@@ -81,8 +81,11 @@ def _rule_based_flags(claim: dict, damage: dict, docs: dict | None = None) -> li
         amount = float(claim.get("claim_amount", 0))
         if amount > 500000:
             flags.append(f"Claim amount ₹{amount:,.0f} exceeds ₹5,00,000 — potential total loss territory")
-        elif amount > 200000:
-            flags.append(f"Claim amount ₹{amount:,.0f} exceeds ₹2,00,000 — mandatory surveyor required (IRDAI)")
+        elif amount > SURVEYOR_THRESHOLD:
+            flags.append(
+                f"Claim amount ₹{amount:,.0f} exceeds ₹{SURVEYOR_THRESHOLD:,} "
+                f"— mandatory surveyor required (IRDAI)"
+            )
     except (ValueError, TypeError):
         pass
 
@@ -430,8 +433,35 @@ class FraudIntelligenceAgent(BaseAgent):
             nps_medium_1=NPS_MEDIUM_DAYS + 1,
             nps_low=NPS_LOW_DAYS,
         )
+        # ── Deterministic base score from rule flags ──────────────────────────
+        # Each CRITICAL flag contributes 35 pts; each regular flag contributes
+        # 8 pts; NPS flags use their tier weights. The LLM may only move the
+        # final score within ±15 of this base — preventing run-to-run variance
+        # on identical evidence.
+        base_score = 0
+        for f in flags:
+            fu = f.upper()
+            if "CRITICAL" in fu:
+                base_score += 35
+            elif "NEW POLICY SYNDROME — HIGH" in fu:
+                base_score += 30
+            elif "NEW POLICY SYNDROME — MEDIUM" in fu:
+                base_score += 17
+            elif "NEW POLICY SYNDROME — LOW" in fu:
+                base_score += 7
+            else:
+                base_score += 8
+        base_score = min(base_score, 95)
+
         result = ask_json(prompt)
         result.setdefault("status", "completed")
+
+        # Clamp the LLM score to base ± 15 to keep it reproducible
+        llm_score = int(result.get("fraud_score") or 0)
+        clamped = max(base_score - 15, min(base_score + 15, llm_score))
+        clamped = max(0, min(100, clamped))
+        result["fraud_score"] = clamped
+        result["fraud_score_base"] = base_score   # expose for transparency
 
         # Always populate NPS fields authoritatively from Python (not LLM)
         result["policy_age_days"] = age_days

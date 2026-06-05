@@ -34,10 +34,77 @@ def _depreciation_pct(age_years: float) -> int:
     return 50  # 4+ years caps at 50% under the standard schedule
 
 
-COMPULSORY_DEDUCTIBLE = 1000   # IRDAI standard compulsory deductible (private car)
-PARTS_FRACTION   = 0.70        # assumption: ~70% of a repair bill is parts
-LABOUR_FRACTION  = 0.30        # ~30% labour
-GST_LABOUR_RATE  = 0.18        # 18% GST on labour component
+# IRDAI compulsory deductible by engine displacement (private car)
+COMP_DED_SMALL = 1000   # ≤ 1500 cc
+COMP_DED_LARGE = 2000   # > 1500 cc  (Innova, Scorpio, BMW etc.)
+
+# Total-loss threshold — if repair ≥ this % of sum insured, it's a total loss
+TOTAL_LOSS_PCT = 75
+
+PARTS_FRACTION   = 0.70   # ~70% of a repair invoice is parts
+LABOUR_FRACTION  = 0.30   # ~30% labour
+GST_LABOUR_RATE  = 0.18   # 18% GST on labour
+GST_PARTS_RATE   = 0.28   # 28% GST on most replaced parts (metal, plastic)
+GST_GLASS_RATE   = 0.18   # 18% GST on glass
+
+# IRDAI material-specific depreciation — overrides the blanket age-slab for
+# parts whose depreciation is fixed regardless of vehicle age.
+# Key = canonical part name fragment;  value = fixed depreciation %
+MATERIAL_DEP_OVERRIDES: dict[str, int] = {
+    # Glass — 0% depreciation (IRDAI: no depreciation on glass parts)
+    "windshield": 0, "glass": 0, "rear_glass": 0,
+    # Tyres, tubes, batteries — 50% regardless of age
+    "tyre": 50, "tire": 50, "battery": 50, "tube": 50,
+    # Rubber/plastic — 50%
+    "rubber": 50, "plastic": 50,
+    # Fibre-reinforced parts — 30%
+    "fibreglass": 30, "fibre": 30,
+}
+
+
+def _part_dep_pct(part_name: str, age_dep_pct: int) -> int:
+    """Return the correct depreciation % for a part — material overrides beat age slab."""
+    key = (part_name or "").lower()
+    for fragment, fixed_pct in MATERIAL_DEP_OVERRIDES.items():
+        if fragment in key:
+            return fixed_pct
+    return age_dep_pct
+
+
+def _compulsory_deductible(policy: dict) -> int:
+    """₹1,000 for ≤1,500cc; ₹2,000 for >1,500cc (IRDAI motor private-car schedule)."""
+    try:
+        cc = int(str(policy.get("engine_cc") or "0").strip())
+        if cc == 0:          # EV or unknown → use small-car rate
+            return COMP_DED_SMALL
+        return COMP_DED_LARGE if cc > 1500 else COMP_DED_SMALL
+    except (ValueError, TypeError):
+        return COMP_DED_SMALL
+
+
+def _voluntary_deductible(policy: dict) -> int:
+    try:
+        return int(float(str(policy.get("voluntary_deductible") or "0").strip()))
+    except (ValueError, TypeError):
+        return 0
+
+
+def _is_zero_dep(policy: dict) -> bool:
+    return str(policy.get("zero_dep") or "").strip().lower() in ("yes", "true", "1")
+
+
+def _ncb_pct(policy: dict) -> int:
+    try:
+        return int(float(str(policy.get("ncb_pct") or "0").strip()))
+    except (ValueError, TypeError):
+        return 0
+
+
+def _sum_insured(policy: dict) -> int:
+    try:
+        return int(float(str(policy.get("sum_insured") or "0").strip()))
+    except (ValueError, TypeError):
+        return 0
 
 
 def _vehicle_age_years(policy: dict, claim: dict) -> Optional[float]:
@@ -165,32 +232,119 @@ def compute_settlement_breakdown(
     damage: dict,
     decision: str,
 ) -> Optional[dict]:
-    """Return an itemised settlement breakdown, or None if no repair estimate exists."""
+    """Return an itemised, IRDAI-aligned settlement breakdown.
+
+    Handles: total-loss/IDV path, material-wise depreciation, zero-dep add-on,
+    engine-cc compulsory deductible, voluntary deductible, parts + labour GST,
+    IDV/sum-insured payout cap, and NCB impact advisory.
+    """
+    policy = policy or {}
     assess = _assess_repair(damage or {})
     repair = round(assess.get("approved_basis") or 0)
-    if repair <= 0:
+    si     = _sum_insured(policy)
+
+    # ── Total-loss check ────────────────────────────────────────────────────────
+    # If repair ≥ 75% of sum insured, the vehicle is a constructive total loss.
+    # Settlement = IDV (sum insured) − salvage, not repair cost.
+    is_total_loss = False
+    total_loss_note = None
+    if repair <= 0 and si <= 0:
         return None
 
-    age = _vehicle_age_years(policy or {}, claim or {})
-    dep_pct = _depreciation_pct(age) if age is not None else 0
+    if si > 0 and repair > 0 and repair >= (TOTAL_LOSS_PCT / 100) * si:
+        is_total_loss = True
+        salvage       = round(si * 0.05)   # typical 5% salvage assumption
+        total_loss_note = (
+            f"Repair estimate ₹{repair:,} is ≥ {TOTAL_LOSS_PCT}% of sum insured "
+            f"₹{si:,} — treated as constructive total loss. "
+            f"Settlement = IDV − salvage (₹{si:,} − ₹{salvage:,})."
+        )
+        repair = si   # settle on IDV
 
-    parts_value  = repair * PARTS_FRACTION
-    labour_value = repair * LABOUR_FRACTION
+    # ── Policy add-ons & deductibles ────────────────────────────────────────────
+    zero_dep  = _is_zero_dep(policy)
+    comp_ded  = _compulsory_deductible(policy)
+    vol_ded   = _voluntary_deductible(policy)
+    total_ded = comp_ded + vol_ded
 
-    depreciation = round(parts_value * dep_pct / 100)
-    gst          = round(labour_value * GST_LABOUR_RATE)
-    deductible   = COMPULSORY_DEDUCTIBLE
-    salvage      = 0
+    # ── Depreciation (material-specific, per IRDAI) ─────────────────────────────
+    age     = _vehicle_age_years(policy, claim or {})
+    age_dep = _depreciation_pct(age) if age is not None else 0
 
-    net = round(repair - depreciation - deductible - salvage + gst)
+    depreciation = 0
+    dep_note      = ""
+    if is_total_loss:
+        dep_note = "Total loss — depreciation not applicable (IDV already accounts for age)."
+    elif zero_dep:
+        dep_note = "Zero-Depreciation add-on active — no depreciation deducted."
+    else:
+        damaged_parts = (damage or {}).get("damaged_parts") or []
+        if damaged_parts:
+            # Per-part material depreciation
+            for p in damaged_parts:
+                est   = p.get("repair_estimate_INR") or {}
+                p_min = float(est.get("min") or 0)
+                p_max = float(est.get("max") or 0)
+                p_mid = (p_min + p_max) / 2 if p_max > 0 else p_min
+                p_parts_val = p_mid * PARTS_FRACTION
+                p_dep_pct   = _part_dep_pct(p.get("part", ""), age_dep)
+                depreciation += p_parts_val * p_dep_pct / 100
+            depreciation = round(depreciation)
+        else:
+            # Fallback: blanket 70% parts assumption
+            depreciation = round(repair * PARTS_FRACTION * age_dep / 100)
+        dep_note = (
+            f"Material-specific depreciation (IRDAI): glass 0%, rubber/tyre 50%, "
+            f"metal {age_dep}% — vehicle age ~{round(age, 1) if age else '?'} yr."
+        )
+
+    # ── GST (parts 28% / labour 18%) ───────────────────────────────────────────
+    if is_total_loss:
+        gst_parts  = 0
+        gst_labour = 0
+    else:
+        parts_value  = repair * PARTS_FRACTION
+        labour_value = repair * LABOUR_FRACTION
+        gst_parts    = round(parts_value  * GST_PARTS_RATE)
+        gst_labour   = round(labour_value * GST_LABOUR_RATE)
+
+    salvage = round(si * 0.05) if is_total_loss else 0
+
+    # ── Net payable ─────────────────────────────────────────────────────────────
+    net = round(repair - depreciation - total_ded - salvage + gst_parts + gst_labour)
     net = max(net, 0)
 
+    # Cap at sum insured / IDV — you can never receive more than the IDV
+    if si > 0:
+        net = min(net, si)
+
+    # ── NCB advisory ────────────────────────────────────────────────────────────
+    ncb = _ncb_pct(policy)
+    ncb_advisory = None
+    if ncb > 0 and decision == "Approve":
+        annual_premium = float(policy.get("annual_premium") or 0)
+        ncb_saving     = round(annual_premium * ncb / 100)
+        ncb_advisory   = (
+            f"Approving this claim will reset your {ncb}% No-Claim Bonus. "
+            f"That NCB was saving you approximately ₹{ncb_saving:,} per year on your premium. "
+            f"Consider whether the claim amount justifies losing this discount."
+        )
+
+    assumptions = (
+        f"Depreciation: {'Zero-Dep active — waived' if zero_dep else dep_note} | "
+        f"Deductibles: compulsory ₹{comp_ded:,} + voluntary ₹{vol_ded:,} | "
+        f"GST: 28% on parts, 18% on labour | "
+        f"Payout capped at sum insured ₹{si:,}."
+    ) if not is_total_loss else (
+        f"Total loss settlement: IDV ₹{si:,} − salvage ₹{salvage:,} | "
+        f"Deductibles: ₹{total_ded:,} | Payout capped at IDV."
+    )
+
     return {
+        "is_total_loss":         is_total_loss,
+        "total_loss_note":       total_loss_note,
         "repair_estimate":       repair,
-        # ── Independent benchmark vs claimed-amount audit (#fair-value) ──────────
-        # `repair_estimate` above is the APPROVED basis (claimed amount, capped at
-        # the assessed ceiling when inflated). These fields expose how that figure
-        # was reconciled against the surveyor-equivalent assessed value.
+        # Fair-value audit fields (from _assess_repair)
         "assessed_fair_value":   assess.get("assessed_fair_value"),
         "assessed_band_min":     assess.get("assessed_band_min"),
         "assessed_band_max":     assess.get("assessed_band_max"),
@@ -200,23 +354,27 @@ def compute_settlement_breakdown(
         "overclaim_band":        assess.get("overclaim_band"),
         "overclaim_note":        assess.get("overclaim_note"),
         "disallowed_inflation":  assess.get("disallowed_inflation", 0),
-        "parts_value":           round(parts_value),
-        "labour_value":          round(labour_value),
+        # Depreciation
+        "zero_dep":              zero_dep,
         "vehicle_age_years":     round(age, 1) if age is not None else None,
-        "depreciation_pct":      dep_pct,
+        "depreciation_pct":      0 if (zero_dep or is_total_loss) else age_dep,
         "depreciation":          depreciation,
-        "compulsory_deductible": deductible,
-        "salvage_value":         salvage,
+        "depreciation_note":     dep_note,
+        # Deductibles
+        "compulsory_deductible": comp_ded,
+        "voluntary_deductible":  vol_ded,
+        "total_deductible":      total_ded,
+        # GST
+        "gst_parts":             gst_parts,
+        "gst_on_labour":         gst_labour,
         "gst_rate_pct":          int(GST_LABOUR_RATE * 100),
-        "gst_on_labour":         gst,
+        # Final
+        "salvage_value":         salvage,
         "net_payable":           net,
-        # Whether this net figure is what the customer actually receives.
-        # For Reject/Escalate nothing is paid yet, but the math is still shown
-        # so an adjuster can see the "if approved" figure.
-        "applies":               decision == "Approve",
-        "assumptions": (
-            "Parts/labour split assumed 70/30. Depreciation applied to the parts "
-            "component per IRDAI age schedule. GST 18% on labour. Compulsory "
-            "deductible Rs.1,000. Salvage assumed Rs.0 (no total loss)."
-        ),
+        "sum_insured_cap":       si,
+        "applies":               decision in ("Approve", "Settle"),
+        # NCB
+        "ncb_pct":               ncb,
+        "ncb_advisory":          ncb_advisory,
+        "assumptions":           assumptions,
     }

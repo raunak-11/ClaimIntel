@@ -113,24 +113,68 @@ export default function SettlementBreakdown({ breakdown }) {
 
       {open && (
         <div className="px-3 pb-3">
+
+          {/* Total-loss banner */}
+          {breakdown.is_total_loss && (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 mb-3">
+              <p className="text-xs font-semibold text-red-300 mb-0.5">Constructive Total Loss</p>
+              <p className="text-[10px] text-red-200/80 leading-relaxed">{breakdown.total_loss_note}</p>
+            </div>
+          )}
+
+          {/* Zero-dep badge */}
+          {breakdown.zero_dep && (
+            <div className="inline-flex items-center gap-1.5 text-[10px] font-semibold bg-green-500/15 text-green-300 border border-green-500/30 rounded-full px-2.5 py-1 mb-2">
+              ✓ Zero-Depreciation add-on active — no depreciation applied
+            </div>
+          )}
+
           <BenchmarkAudit breakdown={breakdown} />
+
           <Row
-            label="Approved repair basis"
+            label={breakdown.is_total_loss ? 'IDV (sum insured)' : 'Approved repair basis'}
             sub={breakdown.overclaim_band === 'inflated' ? 'capped at assessed ceiling' : undefined}
             value={breakdown.repair_estimate}
           />
-          <Row
-            label="Depreciation (parts)"
-            sub={`${breakdown.depreciation_pct}%${breakdown.vehicle_age_years != null ? ` · vehicle age ~${breakdown.vehicle_age_years} yr` : ''}`}
-            value={breakdown.depreciation}
-            sign="-"
-          />
-          <Row label="Compulsory deductible" value={breakdown.compulsory_deductible} sign="-" />
+
+          {/* Depreciation — hide if zero-dep or total loss */}
+          {!breakdown.zero_dep && !breakdown.is_total_loss && (
+            <Row
+              label="Depreciation (parts)"
+              sub={breakdown.depreciation_note || `${breakdown.depreciation_pct}% · vehicle age ~${breakdown.vehicle_age_years} yr`}
+              value={breakdown.depreciation}
+              sign="-"
+            />
+          )}
+
+          {/* Deductibles */}
+          <Row label={`Compulsory deductible`} value={breakdown.compulsory_deductible} sign="-" />
+          {breakdown.voluntary_deductible > 0 && (
+            <Row label="Voluntary deductible" value={breakdown.voluntary_deductible} sign="-" />
+          )}
+
+          {/* Salvage on total loss */}
           {breakdown.salvage_value > 0 && (
             <Row label="Salvage value" value={breakdown.salvage_value} sign="-" />
           )}
-          <Row label={`GST on labour (${breakdown.gst_rate_pct}%)`} value={breakdown.gst_on_labour} sign="+" />
+
+          {/* GST — parts + labour */}
+          {breakdown.gst_parts > 0 && (
+            <Row label="GST on parts (28%)" value={breakdown.gst_parts} sign="+" />
+          )}
+          {breakdown.gst_on_labour > 0 && (
+            <Row label={`GST on labour (${breakdown.gst_rate_pct}%)`} value={breakdown.gst_on_labour} sign="+" />
+          )}
+
           <Row label="Net payable" value={breakdown.net_payable} strong />
+
+          {/* NCB advisory */}
+          {breakdown.ncb_advisory && (
+            <div className="mt-3 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
+              <p className="text-[10px] font-semibold text-amber-300 mb-0.5">NCB Impact Advisory</p>
+              <p className="text-[10px] text-amber-200/80 leading-relaxed">{breakdown.ncb_advisory}</p>
+            </div>
+          )}
 
           {breakdown.assumptions && (
             <p className="text-[10px] text-slate-500 leading-relaxed mt-2 italic">
