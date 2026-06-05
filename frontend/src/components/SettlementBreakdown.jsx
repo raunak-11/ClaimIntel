@@ -160,7 +160,7 @@ export default function SettlementBreakdown({ breakdown }) {
 
           {/* GST — parts + labour */}
           {breakdown.gst_parts > 0 && (
-            <Row label="GST on parts (28%)" value={breakdown.gst_parts} sign="+" />
+            <Row label="GST on parts (18%)" value={breakdown.gst_parts} sign="+" />
           )}
           {breakdown.gst_on_labour > 0 && (
             <Row label={`GST on labour (${breakdown.gst_rate_pct}%)`} value={breakdown.gst_on_labour} sign="+" />

@@ -44,7 +44,7 @@ TOTAL_LOSS_PCT = 75
 PARTS_FRACTION   = 0.70   # ~70% of a repair invoice is parts
 LABOUR_FRACTION  = 0.30   # ~30% labour
 GST_LABOUR_RATE  = 0.18   # 18% GST on labour
-GST_PARTS_RATE   = 0.28   # 28% GST on most replaced parts (metal, plastic)
+GST_PARTS_RATE   = 0.18   # 18% GST on parts
 GST_GLASS_RATE   = 0.18   # 18% GST on glass
 
 # IRDAI material-specific depreciation — overrides the blanket age-slab for
