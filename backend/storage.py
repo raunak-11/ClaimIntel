@@ -1,10 +1,14 @@
 import csv
 import json
 import os
+import threading
 from datetime import datetime
 from typing import Optional
 
 from config import CLAIMS_CSV, CLAIMS_DIR, DATA_DIR, POLICIES_CSV
+
+# File-level lock — prevents concurrent investigations clobbering the same CSV row.
+_csv_lock = threading.Lock()
 
 CSV_FIELDS = [
     "claim_id", "policy_no", "claimant", "phone", "vehicle",
@@ -17,6 +21,7 @@ POLICY_FIELDS = [
     "policy_no", "phone", "customer_name", "vehicle_make", "vehicle_model",
     "vehicle_year", "vehicle_reg_no", "coverage_type", "sum_insured",
     "policy_start", "policy_end", "annual_premium",
+    "engine_cc", "zero_dep", "voluntary_deductible", "ncb_pct",
 ]
 
 
@@ -51,14 +56,15 @@ def save_claim(claim_data: dict):
 
 
 def update_claim_field(claim_id: str, field: str, value: str):
-    claims = get_all_claims()
-    for c in claims:
-        if c["claim_id"] == claim_id:
-            c[field] = value
-    with open(CLAIMS_CSV, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
-        writer.writeheader()
-        writer.writerows(claims)
+    with _csv_lock:
+        claims = get_all_claims()
+        for c in claims:
+            if c["claim_id"] == claim_id:
+                c[field] = value
+        with open(CLAIMS_CSV, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
+            writer.writeheader()
+            writer.writerows(claims)
 
 
 # ── Policy helpers ────────────────────────────────────────────────────────────

@@ -143,7 +143,6 @@ class ContextVerificationAgent(BaseAgent):
             "geocoded_location": geo.get("display", location) if geo else location,
             "coordinates": {"lat": geo["lat"], "lon": geo["lon"]} if geo else None,
             "weather": weather,
-            "traffic": "Moderate",
             "policy_coverage_note": coverage_note,
             "policy_document_excerpt": policy_summary or "Policy document not indexed — run scripts/build_vectorstore.py",
             "summary": (

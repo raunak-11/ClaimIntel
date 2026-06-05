@@ -24,6 +24,9 @@ NPS_MEDIUM_DAYS = int(os.getenv("NPS_MEDIUM_DAYS", "90"))   # 31–90  → Mediu
 NPS_LOW_DAYS    = int(os.getenv("NPS_LOW_DAYS",    "180"))  # 91–180 → Low risk
                                                              # >180   → no flag
 
+# IRDAI motor claim thresholds — single source of truth used by all agents
+SURVEYOR_THRESHOLD = int(os.getenv("SURVEYOR_THRESHOLD", "50000"))  # mandatory survey above ₹50k
+
 # Knowledge base and vector store paths
 KB_DIR = os.path.join(DATA_DIR, "kb")
 POLICIES_PDF_DIR = os.path.join(KB_DIR, "policies")
