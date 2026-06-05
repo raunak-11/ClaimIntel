@@ -4,7 +4,6 @@ import api from '../utils/api'
 const DECISIONS = [
   { key: 'Approve',      label: 'Approve',      cls: 'bg-green-600 hover:bg-green-700' },
   { key: 'Reject',       label: 'Reject',       cls: 'bg-red-600 hover:bg-red-700' },
-  { key: 'Settle',       label: 'Settle',       cls: 'bg-emerald-600 hover:bg-emerald-700' },
   { key: 'Escalate',     label: 'Escalate',     cls: 'bg-amber-600 hover:bg-amber-700' },
   { key: 'Request Info', label: 'Request Info', cls: 'bg-slate-600 hover:bg-slate-700' },
 ]

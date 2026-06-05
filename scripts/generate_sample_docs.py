@@ -464,15 +464,17 @@ def generate_estimate(data: dict, output_path: str):
 
     def total_row(label, amount, bold=False):
         pdf.set_font("Helvetica", "B" if bold else "", 9)
-        w = 30
-        pdf.cell(170 - w, 6.5, "", ln=False)
+        label_w = 42
+        amount_w = 30
+        table_w = label_w + amount_w
+        pdf.set_x(pdf.w - pdf.r_margin - table_w)
         if bold:
             pdf.set_fill_color(232, 244, 255)
-            pdf.cell(w, 6.5, _s(label), fill=True, border=1, ln=False)
-            pdf.cell(0, 6.5, _s(f"Rs. {amount:,}"), fill=True, border=1, align="R", ln=True)
+            pdf.cell(label_w, 6.5, _s(label), fill=True, border=1, ln=False)
+            pdf.cell(amount_w, 6.5, _s(f"Rs. {amount:,}"), fill=True, border=1, align="R", ln=True)
         else:
-            pdf.cell(w, 6.5, _s(label), border=1, ln=False)
-            pdf.cell(0, 6.5, _s(f"Rs. {amount:,}"), border=1, align="R", ln=True)
+            pdf.cell(label_w, 6.5, _s(label), border=1, ln=False)
+            pdf.cell(amount_w, 6.5, _s(f"Rs. {amount:,}"), border=1, align="R", ln=True)
 
     total_row("Sub-Total", subtotal)
     total_row("CGST @ 9%", cgst)
@@ -487,15 +489,44 @@ def generate_estimate(data: dict, output_path: str):
         pdf.multi_cell(0, 5.5, _s(f"Note: {data['note']}"))
         pdf.set_text_color(0, 0, 0)
 
-    pdf.ln(6)
-    # Signature lines
+    if pdf.will_page_break(32):
+        pdf.add_page()
+    else:
+        pdf.ln(6)
+
+    # Signature block
+    content_w = pdf.w - pdf.l_margin - pdf.r_margin
+    col_gap = 12
+    col_w = (content_w - col_gap) / 2
+    y = pdf.get_y()
+    left_x = pdf.l_margin
+    right_x = pdf.l_margin + col_w + col_gap
+
+    pdf.set_draw_color(90, 90, 90)
+    pdf.set_line_width(0.25)
+    pdf.line(left_x + 2, y + 11, left_x + col_w - 2, y + 11)
+    pdf.line(right_x + 2, y + 11, right_x + col_w - 2, y + 11)
+
+    pdf.set_font("Helvetica", "BI", 10)
+    pdf.set_text_color(25, 25, 25)
+    pdf.set_xy(left_x + 4, y + 4)
+    pdf.cell(col_w - 8, 5, _s(f"Sd/- {cust['name']}"), align="C")
+    pdf.set_xy(right_x + 4, y + 4)
+    pdf.cell(col_w - 8, 5, _s(f"Sd/- {ws['name']}"), align="C")
+
     pdf.set_font("Helvetica", "", 9)
-    pdf.cell(90, 5, "Customer Signature: ______________________", ln=False)
-    pdf.cell(90, 5, "Authorised Signatory: ______________________", ln=True)
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_xy(left_x, y + 13)
+    pdf.cell(col_w, 5, "Customer Signature", ln=False)
+    pdf.set_xy(right_x, y + 13)
+    pdf.cell(col_w, 5, "Authorised Signatory", ln=True)
+
     pdf.set_font("Helvetica", "I", 8)
     pdf.set_text_color(120, 120, 120)
-    pdf.cell(90, 5, f"({cust['name']})", ln=False)
-    pdf.cell(90, 5, _s(f"({ws['name']})"), ln=True)
+    pdf.set_xy(left_x, y + 18)
+    pdf.cell(col_w, 5, _s(f"({cust['name']})"), ln=False)
+    pdf.set_xy(right_x, y + 18)
+    pdf.cell(col_w, 5, _s(f"({ws['name']})"), ln=True)
     pdf.set_text_color(0, 0, 0)
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -521,8 +552,8 @@ def generate_fir(data: dict, output_path: str):
     pdf.set_font("Helvetica", "B", 9)
     pdf.set_fill_color(240, 247, 240)
     pdf.cell(58, 7, _s(f"FIR No.:  {data['fir_no']}"), border=1, fill=True, ln=False)
-    pdf.cell(58, 7, _s(f"Police Station:  {data['police_station'].split(',')[0]}"), border=1, fill=True, ln=False)
-    pdf.cell(58, 7, _s(f"Date & Time Filed:  {data['date_filed']}  {data['date_filed_time']}"), border=1, fill=True, ln=True)
+    pdf.cell(116, 7, _s(f"Date & Time Filed:  {data['date_filed']}  {data['date_filed_time']}"), border=1, fill=True, ln=True)
+    pdf.cell(174, 7, _s(f"Police Station:  {data['police_station'].split(',')[0]}"), border=1, fill=True, ln=True)
     pdf.ln(3)
 
     def section(title: str):
@@ -534,15 +565,16 @@ def generate_fir(data: dict, output_path: str):
         pdf.set_text_color(0, 0, 0)
         pdf.ln(1)
 
-    CONTENT_W = 174  # 210 - 18(L) - 18(R)
+    CONTENT_W = pdf.w - pdf.l_margin - pdf.r_margin
 
     def fkv(k, v, w_k=60):
+        pdf.set_x(pdf.l_margin)
         pdf.set_font("Helvetica", "", 9)
         pdf.set_text_color(80, 80, 80)
         pdf.cell(w_k, 6, _s(k) + ":", ln=False)
         pdf.set_text_color(20, 20, 20)
         pdf.set_font("Helvetica", "B", 9)
-        pdf.multi_cell(CONTENT_W - w_k, 6, _s(str(v)))
+        pdf.multi_cell(CONTENT_W - w_k, 6, _s(str(v)), new_x="LMARGIN", new_y="NEXT")
         pdf.set_text_color(0, 0, 0)
 
     # Section 1: Complainant
@@ -589,25 +621,56 @@ def generate_fir(data: dict, output_path: str):
         pdf.set_draw_color(200, 0, 0)
         pdf.set_font("Helvetica", "B", 8)
         pdf.set_text_color(180, 0, 0)
-        pdf.multi_cell(0, 6, _s(
+        fraud_note = data.get(
+            "fraud_note",
             "[FOR DEMO PURPOSES ONLY] "
             "This FIR contains intentional mismatches for fraud detection testing: "
             "(1) Incident date in FIR is 15 May 2025 but claim states 18 May 2025 (3-day mismatch). "
             "(2) Location in FIR is OMR Road but claim states Outer Ring Road. "
             "(3) Vehicle reg in FIR is TN-07-GH-1234 but policy vehicle is TN-07-CD-5678."
-        ), border=1)
+        )
+        pdf.multi_cell(0, 6, _s(fraud_note), border=1)
         pdf.set_text_color(0, 0, 0)
         pdf.set_draw_color(0, 0, 0)
 
-    pdf.ln(8)
-    # Signatures
+    if pdf.will_page_break(34):
+        pdf.add_page()
+    else:
+        pdf.ln(8)
+
+    # Signature block
+    col_gap = 12
+    col_w = (CONTENT_W - col_gap) / 2
+    y = pdf.get_y()
+    left_x = pdf.l_margin
+    right_x = pdf.l_margin + col_w + col_gap
+    officer_name = data["officer"].split(",")[0]
+
+    pdf.set_draw_color(90, 90, 90)
+    pdf.set_line_width(0.25)
+    pdf.line(left_x + 2, y + 11, left_x + col_w - 2, y + 11)
+    pdf.line(right_x + 2, y + 11, right_x + col_w - 2, y + 11)
+
+    pdf.set_font("Helvetica", "BI", 10)
+    pdf.set_text_color(25, 25, 25)
+    pdf.set_xy(left_x + 4, y + 4)
+    pdf.cell(col_w - 8, 5, _s(f"Sd/- {comp['name']}"), align="C")
+    pdf.set_xy(right_x + 4, y + 4)
+    pdf.cell(col_w - 8, 5, _s(f"Sd/- {officer_name}"), align="C")
+
     pdf.set_font("Helvetica", "", 9)
-    pdf.cell(87, 5, "Complainant Signature: ______________________", ln=False)
-    pdf.cell(87, 5, "Station Officer Signature & Stamp: ____________", ln=True)
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_xy(left_x, y + 13)
+    pdf.cell(col_w, 5, "Complainant Signature", ln=False)
+    pdf.set_xy(right_x, y + 13)
+    pdf.cell(col_w, 5, "Station Officer Signature & Stamp", ln=True)
+
     pdf.set_font("Helvetica", "I", 8)
     pdf.set_text_color(120, 120, 120)
-    pdf.cell(87, 5, _s(f"({comp['name']})"), ln=False)
-    pdf.cell(87, 5, _s(f"({data['officer'].split(',')[0]})"), ln=True)
+    pdf.set_xy(left_x, y + 18)
+    pdf.cell(col_w, 5, _s(f"({comp['name']})"), ln=False)
+    pdf.set_xy(right_x, y + 18)
+    pdf.cell(col_w, 5, _s(f"({officer_name})"), ln=True)
     pdf.set_text_color(0, 0, 0)
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)

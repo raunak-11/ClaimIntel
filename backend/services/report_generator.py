@@ -103,19 +103,24 @@ class ClaimPDF(FPDF):
         self.set_auto_page_break(auto=True, margin=20)
 
     def header(self):
-        # Thin top rule
+        y = self.get_y()
+        row_h = 8
+        # ClaimIntel brand — left, anchored to same Y
+        self.set_font("Helvetica", "B", 11)
+        self.set_text_color(*C_INDIGO)
+        self.set_xy(12, y)
+        self.cell(60, row_h, "ClaimIntel", align="L")
+        # Report descriptor — right, same Y and same height so both sit on the same baseline
+        self.set_font("Helvetica", "", 7.5)
+        self.set_text_color(*C_MUTED)
+        self.set_xy(72, y)
+        self.cell(126, row_h, _s(f"AI Motor Insurance Investigation Report  |  {self.claim_id}"), align="R")
+        # Separator line
         self.set_draw_color(*C_MID)
         self.set_line_width(0.4)
-        # Brand line
-        self.set_font("Helvetica", "B", 8)
-        self.set_text_color(*C_INDIGO)
-        self.cell(60, 6, "ClaimIntel", align="L")
-        self.set_font("Helvetica", "", 7)
-        self.set_text_color(*C_MUTED)
-        self.cell(0, 6, _s(f"AI Motor Insurance Investigation Report  |  {self.claim_id}"), align="R")
-        self.ln(2)
+        self.set_y(y + row_h + 1)
         self.line(12, self.get_y(), 198, self.get_y())
-        self.ln(4)
+        self.ln(3)
 
     def footer(self):
         self.set_y(-14)
@@ -125,8 +130,8 @@ class ClaimPDF(FPDF):
         self.set_font("Helvetica", "I", 7)
         self.set_text_color(*C_MUTED)
         self.cell(0, 5,
-                  _s(f"Page {self.page_no()}  |  Confidential — For Insurance Use Only  |  "
-                     f"Generated {datetime.now().strftime('%d %b %Y %I:%M %p')}"),
+                  _s(f"Page {self.page_no()}  |  Confidential - For Insurance Use Only  |  "
+                     f"Generated {datetime.now().strftime('%d %b %Y')}"),
                   align="C")
 
 
@@ -533,18 +538,14 @@ def generate_claim_report(claim: dict, result: dict) -> bytes:
 
     loc_ok  = context.get("location_verified", False)
     loc_str = context.get("geocoded_location", claim.get("incident_location", "—"))
+    coverage_note = context.get("policy_coverage_note", "—")
+    coverage_note = coverage_note.replace("\n", " ").replace("\r", " ").strip()
+    if len(coverage_note) > 90:
+        coverage_note = coverage_note[:87] + "..."
     _kv_row(pdf, "Location Verified", "Yes" if loc_ok else "No",  alt=True)
     _kv_row(pdf, "Geocoded Location", loc_str[:70],               alt=False)
     _kv_row(pdf, "Weather",           context.get("weather", "—")[:70], alt=True)
-    _kv_row(pdf, "Policy Coverage",   context.get("policy_coverage_note", "—")[:70], alt=False)
-    if context.get("policy_document_excerpt"):
-        pdf.ln(2)
-        pdf.set_font("Helvetica", "I", 7.5)
-        pdf.set_text_color(*C_MUTED)
-        pdf.multi_cell(0, 5,
-                       _s("Policy Extract: " + context["policy_document_excerpt"][:300]),
-                       new_x="LMARGIN", new_y="NEXT")
-        pdf.set_text_color(*C_DARK)
+    _kv_row(pdf, "Policy Coverage",   coverage_note,              alt=False)
     pdf.ln(4)
 
     # ══════════════════════════════════════════════════════════════════════════

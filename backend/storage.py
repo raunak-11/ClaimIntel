@@ -21,7 +21,7 @@ POLICY_FIELDS = [
     "policy_no", "phone", "customer_name", "vehicle_make", "vehicle_model",
     "vehicle_year", "vehicle_reg_no", "coverage_type", "sum_insured",
     "policy_start", "policy_end", "annual_premium",
-    "engine_cc", "zero_dep", "voluntary_deductible", "ncb_pct",
+    "engine_cc", "voluntary_deductible", "ncb_pct",
 ]
 
 
@@ -202,7 +202,26 @@ def get_claim_docs(claim_id: str) -> dict:
 
 
 def generate_claim_id() -> str:
+    """Next claim ID for the current month.
+
+    Uses the HIGHEST existing sequence number + 1, scanning BOTH the CSV rows
+    and the claim directories on disk. Counting rows alone is unsafe: if a CSV
+    row is deleted, the count drops and the next claim would reuse an ID whose
+    folder still holds the previous claim's photos/docs/result.json — leaking
+    one claimant's evidence into another's case. Taking max+1 over the union of
+    CSV IDs and on-disk folders guarantees a never-before-used ID.
+    """
     today = datetime.now().strftime("%Y-%m")
-    existing = get_all_claims()
-    count = sum(1 for r in existing if r["claim_id"].startswith(f"CLM-{today}")) + 1
-    return f"CLM-{today}-{count:06d}"
+    prefix = f"CLM-{today}-"
+
+    used: set[str] = {r["claim_id"] for r in get_all_claims() if r.get("claim_id", "").startswith(prefix)}
+    if os.path.isdir(CLAIMS_DIR):
+        used.update(name for name in os.listdir(CLAIMS_DIR) if name.startswith(prefix))
+
+    max_seq = 0
+    for cid in used:
+        try:
+            max_seq = max(max_seq, int(cid.rsplit("-", 1)[1]))
+        except (ValueError, IndexError):
+            continue
+    return f"{prefix}{max_seq + 1:06d}"

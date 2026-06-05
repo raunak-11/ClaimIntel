@@ -101,7 +101,7 @@ export default function Analytics() {
           sub="across investigated claims"
         />
         <StatCard
-          label="Settled (Approved)"
+          label="Approved Payouts"
           value={`₹${totals.total_settled.toLocaleString('en-IN')}`}
           sub={`${totals.human_reviewed ?? 0} human-reviewed`}
         />

@@ -18,7 +18,7 @@ def _geocode(location: str) -> dict | None:
             NOMINATIM_URL,
             params={"q": location, "format": "json", "limit": 1},
             headers={"User-Agent": "ClaimIntel/1.0"},
-            timeout=10,
+            timeout=5,
         )
         data = r.json()
         if data:
@@ -39,7 +39,7 @@ def _get_weather(lat: float, lon: float) -> str:
         r = httpx.get(
             OWM_URL,
             params={"lat": lat, "lon": lon, "appid": OPENWEATHERMAP_API_KEY, "units": "metric"},
-            timeout=10,
+            timeout=5,
         )
         data = r.json()
         desc = data["weather"][0]["description"].title()

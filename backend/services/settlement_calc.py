@@ -43,9 +43,7 @@ TOTAL_LOSS_PCT = 75
 
 PARTS_FRACTION   = 0.70   # ~70% of a repair invoice is parts
 LABOUR_FRACTION  = 0.30   # ~30% labour
-GST_LABOUR_RATE  = 0.18   # 18% GST on labour
-GST_PARTS_RATE   = 0.18   # 18% GST on parts
-GST_GLASS_RATE   = 0.18   # 18% GST on glass
+GST_RATE         = 0.18   # 18% GST — already baked into the repair invoice total
 
 # IRDAI material-specific depreciation — overrides the blanket age-slab for
 # parts whose depreciation is fixed regardless of vehicle age.
@@ -89,9 +87,6 @@ def _voluntary_deductible(policy: dict) -> int:
         return 0
 
 
-def _is_zero_dep(policy: dict) -> bool:
-    return str(policy.get("zero_dep") or "").strip().lower() in ("yes", "true", "1")
-
 
 def _ncb_pct(policy: dict) -> int:
     try:
@@ -119,11 +114,19 @@ def _vehicle_age_years(policy: dict, claim: dict) -> Optional[float]:
 
 # ── Over-claim bands ────────────────────────────────────────────────────────────
 # How far the claimed/garage amount may sit ABOVE the independent assessed value
-# before it stops looking normal. Mirrors real surveyor practice: a quote a little
-# over the assessed cost is routine; a large gap is the workshop-inflation pattern.
-ALIGNED_TOLERANCE_PCT  = 10   # within +10% of assessed → perfectly normal
-INFLATION_PCT          = 40   # beyond +40% → inflation; cap payout at assessed ceiling
-UNDERCLAIM_PCT         = 20   # more than 20% below assessed → flag as under-claim
+# ── Fair-value risk bands (variance between claimed and assessed) ──────────────
+# These thresholds classify the garage quote relative to the AI fair value.
+# They are FRAUD DETECTION SIGNALS ONLY and never affect the payout.
+CONSISTENT_RANGE = 20   # within ±20% → Auto Process
+REVIEW_PCT       = 40   # +20% to +40% → Review Required
+                         # > +40%       → Investigation Required
+
+# Recommended actions per band — displayed to adjudicator, no effect on math
+BAND_ACTIONS = {
+    "consistent":    "Auto Process",
+    "review":        "Review Required",
+    "investigate":   "Investigation Required",
+}
 
 _SOURCE_LABELS = {
     "live_web":        "Live web market prices",
@@ -133,16 +136,18 @@ _SOURCE_LABELS = {
 
 
 def _assess_repair(damage: dict) -> dict:
-    """Decide the repair amount the settlement is built on, treating the AI/engine
-    estimate as the *independent assessed value* (the surveyor) and the garage /
-    policyholder figure as the *claimed amount* being audited against it.
+    """Fair-value analysis: fraud/anomaly detection only.
 
-    Returns the approved repair basis plus the benchmark-vs-claim audit fields so
-    the UI can show "this claim is reasonable / may or may not be fraud / inflated".
+    Compares the garage quoted amount against the AI's independently assessed
+    fair value and produces a risk band + recommended action for the adjudicator.
+
+    THE ASSESSED FAIR VALUE NEVER AFFECTS THE PAYOUT. The garage quote is always
+    used as the approved repair basis. This function only supplies the audit fields
+    that appear in the Fair Value Analysis section of the UI.
     """
     est = damage.get("total_repair_estimate") or {}
-    lo = float(est.get("min") or 0) if isinstance(est, dict) else 0.0
-    hi = float(est.get("max") or 0) if isinstance(est, dict) else 0.0
+    lo  = float(est.get("min") or 0) if isinstance(est, dict) else 0.0
+    hi  = float(est.get("max") or 0) if isinstance(est, dict) else 0.0
     assessed_mid = (lo + hi) / 2 if hi > 0 else float(lo)
     assessed_max = hi if hi > 0 else assessed_mid
 
@@ -153,94 +158,77 @@ def _assess_repair(damage: dict) -> dict:
         except (ValueError, TypeError):
             claimed = 0.0
 
-    source = damage.get("pricing_method") or "segment_catalog"
+    source       = damage.get("pricing_method") or "segment_catalog"
     source_label = _SOURCE_LABELS.get(source, "Parts catalog")
 
     out = {
         "assessed_fair_value": round(assessed_mid) if assessed_mid > 0 else None,
-        "assessed_band_min":   round(lo) if lo > 0 else None,
+        "assessed_band_min":   round(lo)           if lo > 0          else None,
         "assessed_band_max":   round(assessed_max) if assessed_max > 0 else None,
         "benchmark_source":    source_label,
-        "amount_claimed":      round(claimed) if claimed > 0 else None,
+        "amount_claimed":      round(claimed)      if claimed > 0     else None,
         "overclaim_pct":       None,
         "overclaim_band":      None,
         "overclaim_note":      None,
+        "recommended_action":  None,
         "disallowed_inflation": 0,
     }
 
-    # No independent assessment available → fall back to whatever figure we have.
+    # No independent assessment — use whatever figure is available as repair basis
     if assessed_mid <= 0:
         out["approved_basis"] = round(claimed)
         return out
 
-    # No claimed/garage figure → settle on the assessed fair value itself.
+    # No garage quote — use the assessed fair value as repair basis
     if claimed <= 0:
-        out["approved_basis"] = round(assessed_mid)
-        out["overclaim_note"] = (
-            f"No garage quote provided — settled on the independently assessed "
-            f"fair value of ₹{assessed_mid:,.0f} ({source_label})."
+        out["approved_basis"]  = round(assessed_mid)
+        out["overclaim_band"]  = "consistent"
+        out["recommended_action"] = BAND_ACTIONS["consistent"]
+        out["overclaim_note"]  = (
+            f"No garage quote provided — repair basis is the independently "
+            f"assessed fair value of ₹{assessed_mid:,.0f} ({source_label})."
         )
         return out
 
-    overclaim_pct = (claimed - assessed_mid) / assessed_mid * 100
+    variance_pct = (claimed - assessed_mid) / assessed_mid * 100
 
-    if overclaim_pct <= ALIGNED_TOLERANCE_PCT:
-        band = "aligned"
-    elif overclaim_pct <= INFLATION_PCT:
-        band = "elevated"
+    # ── Risk band classification (fraud signal only, no payout effect) ─────────
+    if variance_pct > REVIEW_PCT:
+        band = "investigate"
+    elif variance_pct > CONSISTENT_RANGE:
+        band = "review"
     else:
-        band = "inflated"
+        band = "consistent"   # covers ±20% (both above and below)
 
-    # Approved basis: honour the actual claimed amount unless it is inflated,
-    # in which case cap at the OEM-priced ceiling and disallow the excess.
-    if band == "inflated":
-        basis = min(claimed, assessed_max)
-    else:
-        basis = claimed
-    disallowed = max(0.0, claimed - basis)
+    action = BAND_ACTIONS[band]
 
-    if band == "aligned":
+    # Adjudicator notes per band
+    if band == "consistent":
         note = (
-            f"Claimed ₹{claimed:,.0f} is consistent with the independently "
-            f"assessed fair value of ₹{assessed_mid:,.0f} ({source_label})."
+            f"Claimed ₹{claimed:,.0f} is within ±20% of the assessed fair value "
+            f"of ₹{assessed_mid:,.0f} ({source_label}) — repair cost is consistent."
         )
-    elif band == "elevated":
+    elif band == "review":
         note = (
-            f"Claimed ₹{claimed:,.0f} is {overclaim_pct:.0f}% above the assessed "
-            f"fair value of ₹{assessed_mid:,.0f} — above the normal range but "
-            f"within tolerance. May or may not be fraud; surveyor line-item review "
-            f"recommended."
+            f"Claimed ₹{claimed:,.0f} is {variance_pct:.1f}% above the assessed "
+            f"fair value of ₹{assessed_mid:,.0f} — review required."
         )
-    else:  # inflated
+    else:  # investigate
         note = (
-            f"Claimed ₹{claimed:,.0f} is {overclaim_pct:.0f}% above the assessed "
-            f"fair value of ₹{assessed_mid:,.0f} — strong workshop-inflation "
-            f"signal (FS-004). Payout capped at the OEM ceiling ₹{basis:,.0f}; "
-            f"₹{disallowed:,.0f} disallowed pending surveyor review."
+            f"Claimed ₹{claimed:,.0f} is {variance_pct:.1f}% above the assessed "
+            f"fair value of ₹{assessed_mid:,.0f} — significant variance, "
+            f"investigation required."
         )
 
-    out["approved_basis"]       = round(basis)
-    out["overclaim_pct"]        = round(overclaim_pct, 1)
-    out["overclaim_band"]       = band
-    out["overclaim_note"]       = note
-    out["disallowed_inflation"]  = round(disallowed)
+    # Repair basis is ALWAYS the garage quote — fair value is signal only
+    out["approved_basis"]    = round(claimed)
+    out["overclaim_pct"]     = round(variance_pct, 1)
+    out["overclaim_band"]    = band
+    out["overclaim_note"]    = note
+    out["recommended_action"] = action
+    out["disallowed_inflation"] = 0
 
-    # ── Under-claim advisory ───────────────────────────────────────────────────
-    # If the customer claimed significantly LESS than the independently assessed
-    # value, they will be under-compensated even before deductions. Flag it so
-    # the adjudicator can advise the customer to revise their claim upward.
-    underclaim_advisory = None
-    if overclaim_pct < -(UNDERCLAIM_PCT):
-        gap = round(assessed_mid - claimed)
-        underclaim_advisory = (
-            f"Customer claimed ₹{claimed:,.0f} but the independently assessed "
-            f"repair cost is ₹{assessed_mid:,.0f} — the claim is "
-            f"₹{gap:,.0f} ({abs(overclaim_pct):.0f}%) below the assessed value. "
-            f"The customer may be unaware that deductions (depreciation, deductible) "
-            f"will further reduce their payout. Advise the customer to revise their "
-            f"claim to the full assessed amount of ₹{round(assessed_max):,.0f} before settlement."
-        )
-    out["underclaim_advisory"] = underclaim_advisory
+    out["underclaim_advisory"] = None
     return out
 
 
@@ -279,8 +267,7 @@ def compute_settlement_breakdown(
         )
         repair = si   # settle on IDV
 
-    # ── Policy add-ons & deductibles ────────────────────────────────────────────
-    zero_dep  = _is_zero_dep(policy)
+    # ── Policy deductibles ────────────────────────────────────────────────────────
     comp_ded  = _compulsory_deductible(policy)
     vol_ded   = _voluntary_deductible(policy)
     total_ded = comp_ded + vol_ded
@@ -293,8 +280,6 @@ def compute_settlement_breakdown(
     dep_note      = ""
     if is_total_loss:
         dep_note = "Total loss — depreciation not applicable (IDV already accounts for age)."
-    elif zero_dep:
-        dep_note = "Zero-Depreciation add-on active — no depreciation deducted."
     else:
         damaged_parts = (damage or {}).get("damaged_parts") or []
         if damaged_parts:
@@ -316,20 +301,22 @@ def compute_settlement_breakdown(
             f"metal {age_dep}% — vehicle age ~{round(age, 1) if age else '?'} yr."
         )
 
-    # ── GST (parts 28% / labour 18%) ───────────────────────────────────────────
+    # ── GST (already embedded — informational only) ─────────────────────────────
+    # Indian repair invoices quote a GST-INCLUSIVE grand total: the garage's
+    # ₹X already contains 18% GST. Adding GST again on top would double-count it
+    # and wipe out the depreciation/deductible reductions. So we DO NOT add GST
+    # to the payout — we only surface the GST already inside the repair total
+    # (total − total/1.18) for transparency.
     if is_total_loss:
-        gst_parts  = 0
-        gst_labour = 0
+        gst_included = 0
     else:
-        parts_value  = repair * PARTS_FRACTION
-        labour_value = repair * LABOUR_FRACTION
-        gst_parts    = round(parts_value  * GST_PARTS_RATE)
-        gst_labour   = round(labour_value * GST_LABOUR_RATE)
+        gst_included = round(repair - repair / (1 + GST_RATE))
 
     salvage = round(si * 0.05) if is_total_loss else 0
 
     # ── Net payable ─────────────────────────────────────────────────────────────
-    net = round(repair - depreciation - total_ded - salvage + gst_parts + gst_labour)
+    # Repair total is GST-inclusive, so deductions simply reduce it.
+    net = round(repair - depreciation - total_ded - salvage)
     net = max(net, 0)
 
     # Cap at sum insured / IDV — you can never receive more than the IDV
@@ -349,9 +336,9 @@ def compute_settlement_breakdown(
         )
 
     assumptions = (
-        f"Depreciation: {'Zero-Dep active — waived' if zero_dep else dep_note} | "
+        f"Depreciation: {dep_note} | "
         f"Deductibles: compulsory ₹{comp_ded:,} + voluntary ₹{vol_ded:,} | "
-        f"GST: 28% on parts, 18% on labour | "
+        f"GST: 18% included in repair total | "
         f"Payout capped at sum insured ₹{si:,}."
     ) if not is_total_loss else (
         f"Total loss settlement: IDV ₹{si:,} − salvage ₹{salvage:,} | "
@@ -371,27 +358,27 @@ def compute_settlement_breakdown(
         "overclaim_pct":         assess.get("overclaim_pct"),
         "overclaim_band":        assess.get("overclaim_band"),
         "overclaim_note":        assess.get("overclaim_note"),
-        "disallowed_inflation":  assess.get("disallowed_inflation", 0),
+        "recommended_action":    assess.get("recommended_action"),
+        "disallowed_inflation":  0,
         "underclaim_advisory":   assess.get("underclaim_advisory"),
+        "settlement_basis":      "Human Approved Amount",
         # Depreciation
-        "zero_dep":              zero_dep,
         "vehicle_age_years":     round(age, 1) if age is not None else None,
-        "depreciation_pct":      0 if (zero_dep or is_total_loss) else age_dep,
+        "depreciation_pct":      0 if is_total_loss else age_dep,
         "depreciation":          depreciation,
         "depreciation_note":     dep_note,
         # Deductibles
         "compulsory_deductible": comp_ded,
         "voluntary_deductible":  vol_ded,
         "total_deductible":      total_ded,
-        # GST
-        "gst_parts":             gst_parts,
-        "gst_on_labour":         gst_labour,
-        "gst_rate_pct":          int(GST_LABOUR_RATE * 100),
+        # GST (already included in the GST-inclusive repair total — informational)
+        "gst_included":          gst_included,
+        "gst_rate_pct":          int(GST_RATE * 100),
         # Final
         "salvage_value":         salvage,
         "net_payable":           net,
         "sum_insured_cap":       si,
-        "applies":               decision in ("Approve", "Settle"),
+        "applies":               decision == "Approve",
         # NCB
         "ncb_pct":               ncb,
         "ncb_advisory":          ncb_advisory,

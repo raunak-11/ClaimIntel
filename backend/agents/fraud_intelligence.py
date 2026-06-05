@@ -463,6 +463,16 @@ class FraudIntelligenceAgent(BaseAgent):
         result["fraud_score"] = clamped
         result["fraud_score_base"] = base_score   # expose for transparency
 
+        # Derive the label from the final score so it always matches the decision
+        # bands (Approve <40 / Escalate 40–69 / Reject 70+). The LLM sometimes
+        # mislabels (e.g. tags a 47 as "High"); Python is authoritative.
+        if clamped >= 70:
+            result["fraud_label"] = "High"
+        elif clamped >= 40:
+            result["fraud_label"] = "Medium"
+        else:
+            result["fraud_label"] = "Low"
+
         # Always populate NPS fields authoritatively from Python (not LLM)
         result["policy_age_days"] = age_days
         if 0 <= age_days <= NPS_HIGH_DAYS:

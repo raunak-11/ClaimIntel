@@ -20,40 +20,43 @@ function Row({ label, value, sign, sub, strong }) {
   )
 }
 
-const BAND_STYLE = {
-  aligned:  { dot: 'bg-green-400', text: 'text-green-300', ring: 'border-green-500/40 bg-green-500/5',  label: 'Consistent with assessed value' },
-  elevated: { dot: 'bg-amber-400', text: 'text-amber-300', ring: 'border-amber-500/40 bg-amber-500/5',  label: 'Elevated — may or may not be fraud' },
-  inflated: { dot: 'bg-red-400',   text: 'text-red-300',   ring: 'border-red-500/40 bg-red-500/5',      label: 'Inflated — workshop-inflation signal' },
+// ── Band configuration: style + action badge ───────────────────────────────────
+const BAND_CONFIG = {
+  consistent:  { dot: 'bg-green-400',  text: 'text-green-300',  ring: 'border-green-500/40 bg-green-500/5',  label: 'Consistent', actionCls: 'bg-green-500/20 text-green-300 border-green-500/40' },
+  review:      { dot: 'bg-amber-400',  text: 'text-amber-300',  ring: 'border-amber-500/40 bg-amber-500/5',  label: 'Elevated',   actionCls: 'bg-amber-500/20 text-amber-300 border-amber-500/40' },
+  investigate: { dot: 'bg-red-400',    text: 'text-red-300',    ring: 'border-red-500/40 bg-red-500/5',      label: 'Inflated',   actionCls: 'bg-red-500/20 text-red-300 border-red-500/40' },
 }
 
-function BenchmarkAudit({ breakdown }) {
+function FairValueAnalysis({ breakdown }) {
   const assessed = breakdown.assessed_fair_value
-  const claimed  = breakdown.amount_claimed
-  // Nothing to compare against (no independent estimate) → skip the block
   if (!assessed) return null
 
-  const band = breakdown.overclaim_band
-  const style = BAND_STYLE[band] || BAND_STYLE.aligned
-  const pct = breakdown.overclaim_pct
-  const pctTxt = pct == null ? null : `${pct > 0 ? '+' : ''}${pct}%`
+  const band    = breakdown.overclaim_band
+  const cfg     = BAND_CONFIG[band] || BAND_CONFIG.consistent
+  const pct     = breakdown.overclaim_pct
+  const pctTxt  = pct == null ? null : `${pct > 0 ? '+' : ''}${pct}%`
+  const claimed = breakdown.amount_claimed
+  const action  = breakdown.recommended_action
 
   return (
-    <div className={`rounded-lg border ${style.ring} px-3 py-2.5 mb-3`}>
-      <div className="flex items-center justify-between mb-1.5">
+    <div className={`rounded-lg border ${cfg.ring} px-3 py-2.5 mb-3`}>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-2">
         <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-          Fair-value check
+          Fair Value Analysis
         </span>
         {band && (
-          <span className={`inline-flex items-center gap-1.5 text-[10px] font-semibold ${style.text}`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
-            {style.label}{pctTxt ? ` (${pctTxt})` : ''}
+          <span className={`inline-flex items-center gap-1.5 text-[10px] font-semibold ${cfg.text}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+            {cfg.label}{pctTxt ? ` (${pctTxt})` : ''}
           </span>
         )}
       </div>
 
+      {/* Assessed fair value */}
       <div className="flex items-baseline justify-between py-0.5">
         <div>
-          <span className="text-xs text-slate-300">Assessed fair value</span>
+          <span className="text-xs text-slate-300">Assessed Fair Value</span>
           {breakdown.benchmark_source && (
             <span className="block text-[10px] text-slate-500">
               {breakdown.benchmark_source}
@@ -66,25 +69,43 @@ function BenchmarkAudit({ breakdown }) {
         <span className="text-sm font-mono text-slate-200">{inr(assessed)}</span>
       </div>
 
+      {/* Claimed repair cost */}
       {claimed != null && (
         <div className="flex items-baseline justify-between py-0.5">
-          <span className="text-xs text-slate-400">Amount claimed (garage)</span>
-          <span className={`text-sm font-mono ${style.text}`}>{inr(claimed)}</span>
+          <span className="text-xs text-slate-400">Claimed Repair Cost</span>
+          <span className={`text-sm font-mono ${cfg.text}`}>{inr(claimed)}</span>
         </div>
       )}
 
-      {breakdown.disallowed_inflation > 0 && (
+      {/* Variance */}
+      {pctTxt && (
         <div className="flex items-baseline justify-between py-0.5">
-          <span className="text-xs text-slate-400">Disallowed (inflation)</span>
-          <span className="text-sm font-mono text-red-400">− {inr(breakdown.disallowed_inflation)}</span>
+          <span className="text-xs text-slate-400">Variance</span>
+          <span className={`text-sm font-mono font-semibold ${cfg.text}`}>{pctTxt}</span>
         </div>
       )}
 
+      {/* Recommended action badge */}
+      {action && (
+        <div className="mt-2">
+          <span className={`inline-flex items-center text-[10px] font-semibold border rounded-full px-2.5 py-1 ${cfg.actionCls}`}>
+            {action}
+          </span>
+        </div>
+      )}
+
+      {/* Adjudicator note */}
       {breakdown.overclaim_note && (
-        <p className={`text-[10px] leading-relaxed mt-1.5 ${band === 'aligned' ? 'text-slate-500' : style.text}`}>
+        <p className={`text-[10px] leading-relaxed mt-2 ${cfg.text} opacity-80`}>
           {breakdown.overclaim_note}
         </p>
       )}
+
+      {/* Disclaimer */}
+      <p className="text-[9px] text-slate-500 leading-relaxed mt-2 pt-2 border-t border-slate-600/50 italic">
+        Fair Value Analysis is used only for anomaly detection and workflow recommendations.
+        It does not directly affect claim settlement or payout calculation.
+      </p>
     </div>
   )
 }
@@ -122,31 +143,36 @@ export default function SettlementBreakdown({ breakdown }) {
             </div>
           )}
 
-          {/* Zero-dep badge */}
-          {breakdown.zero_dep && (
-            <div className="inline-flex items-center gap-1.5 text-[10px] font-semibold bg-green-500/15 text-green-300 border border-green-500/30 rounded-full px-2.5 py-1 mb-2">
-              ✓ Zero-Depreciation add-on active — no depreciation applied
-            </div>
-          )}
-
-          <BenchmarkAudit breakdown={breakdown} />
+          {/* Fair Value Analysis (fraud signal only) */}
+          <FairValueAnalysis breakdown={breakdown} />
 
           {/* Under-claim advisory */}
           {breakdown.underclaim_advisory && (
             <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg px-3 py-2.5 mb-3">
-              <p className="text-xs font-semibold text-blue-300 mb-1">Under-Claim Advisory</p>
+              <p className="text-xs font-semibold text-blue-300 mb-1">Below-Market Advisory</p>
               <p className="text-[10px] text-blue-200/80 leading-relaxed">{breakdown.underclaim_advisory}</p>
             </div>
           )}
 
+          {/* Settlement basis label */}
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+              Settlement Calculation
+            </span>
+            {breakdown.settlement_basis && (
+              <span className="text-[10px] text-indigo-400 font-medium">
+                Basis: {breakdown.settlement_basis}
+              </span>
+            )}
+          </div>
+
           <Row
-            label={breakdown.is_total_loss ? 'IDV (sum insured)' : 'Approved repair basis'}
-            sub={breakdown.overclaim_band === 'inflated' ? 'capped at assessed ceiling' : undefined}
+            label={breakdown.is_total_loss ? 'IDV (sum insured)' : 'Repair Estimate (Garage)'}
             value={breakdown.repair_estimate}
           />
 
-          {/* Depreciation — hide if zero-dep or total loss */}
-          {!breakdown.zero_dep && !breakdown.is_total_loss && (
+          {/* Depreciation */}
+          {!breakdown.is_total_loss && (
             <Row
               label="Depreciation (parts)"
               sub={breakdown.depreciation_note || `${breakdown.depreciation_pct}% · vehicle age ~${breakdown.vehicle_age_years} yr`}
@@ -156,7 +182,7 @@ export default function SettlementBreakdown({ breakdown }) {
           )}
 
           {/* Deductibles */}
-          <Row label={`Compulsory deductible`} value={breakdown.compulsory_deductible} sign="-" />
+          <Row label="Compulsory deductible" value={breakdown.compulsory_deductible} sign="-" />
           {breakdown.voluntary_deductible > 0 && (
             <Row label="Voluntary deductible" value={breakdown.voluntary_deductible} sign="-" />
           )}
@@ -166,12 +192,12 @@ export default function SettlementBreakdown({ breakdown }) {
             <Row label="Salvage value" value={breakdown.salvage_value} sign="-" />
           )}
 
-          {/* GST — parts + labour */}
-          {breakdown.gst_parts > 0 && (
-            <Row label="GST on parts (18%)" value={breakdown.gst_parts} sign="+" />
-          )}
-          {breakdown.gst_on_labour > 0 && (
-            <Row label={`GST on labour (${breakdown.gst_rate_pct}%)`} value={breakdown.gst_on_labour} sign="+" />
+          {/* GST (informational) */}
+          {breakdown.gst_included > 0 && (
+            <Row
+              label={`GST (${breakdown.gst_rate_pct}%, incl. in repair)`}
+              value={breakdown.gst_included}
+            />
           )}
 
           <Row label="Net payable" value={breakdown.net_payable} strong />

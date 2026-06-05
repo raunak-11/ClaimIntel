@@ -30,7 +30,7 @@ PROMPT = """You are a claims officer at an Indian motor insurer drafting a forma
 communicating the outcome of their motor insurance claim. Write a clear, polite, professional letter.
 
 TONE RULES:
-- Approve/Settle  -> warm, congratulatory but professional; state the payable amount and next steps.
+- Approve         -> warm, congratulatory but professional; state the payable amount and next steps.
 - Reject          -> empathetic but firm; clearly state the reason; mention the right to appeal with evidence.
 - Escalate/Request Info -> reassuring; explain that a senior surveyor will review and what the customer should expect.
 
@@ -48,11 +48,12 @@ KEY FINDINGS (use 1-3 of these as the human-readable justification, in plain lan
 do NOT mention fraud scores, model names, or internal codes):
 {reasons}
 
-SETTLEMENT BREAKDOWN (include a short itemised summary ONLY if the decision is Approve/Settle):
+SETTLEMENT BREAKDOWN (include a short itemised summary ONLY if the decision is Approve):
 {breakdown}
 
 INSTRUCTIONS:
-- Address the policyholder by name.
+- Address the policyholder as "Dear Mr./Ms. [Last Name]," — use title + last name only.
+  NEVER combine a title with the full name (do NOT write "Dear Mr. Rohit Verma" or "Dear Mr. Priya Sharma").
 - Reference the claim number and vehicle.
 - Keep it to 180-260 words.
 - Use Indian Rupee formatting (Rs.).
@@ -78,19 +79,18 @@ def draft_decision_letter(claim: dict, result: dict, policy: Optional[dict]) -> 
 
     # Breakdown block
     bd = summary.get("settlement_breakdown") or settlement_agent.get("settlement_breakdown")
-    if bd and decision in ("Approve", "Settle"):
+    if bd and decision == "Approve":
         breakdown_str = (
-            f"Repair estimate {_inr(bd['repair_estimate'])}; "
+            f"Repair estimate {_inr(bd['repair_estimate'])} (GST included); "
             f"less depreciation {_inr(bd['depreciation'])} ({bd['depreciation_pct']}%); "
             f"less compulsory deductible {_inr(bd['compulsory_deductible'])}; "
-            f"plus GST on labour {_inr(bd['gst_on_labour'])}; "
             f"net payable {_inr(bd['net_payable'])}."
         )
     else:
         breakdown_str = "Not applicable for this decision."
 
     settlement_amt = (
-        _inr(bd["net_payable"]) if (bd and decision in ("Approve", "Settle"))
+        _inr(bd["net_payable"]) if (bd and decision == "Approve")
         else _inr(summary.get("recommended_settlement", 0))
     )
 
