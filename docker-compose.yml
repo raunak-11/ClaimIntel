@@ -18,7 +18,7 @@ services:
     ports:
       - "8001:8001"          # also exposed directly for local curl / Postman
     env_file:
-      - .env                  # GROQ_API_KEY, GEMINI_API_KEY, OPENWEATHERMAP_API_KEY
+      - .env                  # GROQ_API_KEY (required), OPENWEATHERMAP_API_KEY (optional)
     environment:
       # Allow requests from both the nginx frontend and local dev browser
       ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:5173"

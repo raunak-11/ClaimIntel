@@ -4,7 +4,9 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN npm install --frozen-lockfile 2>/dev/null || npm install
+# Reproducible install from the lockfile; fall back to a fresh install if the
+# lockfile is missing or out of sync.
+RUN npm ci || npm install
 
 COPY . .
 RUN npm run build
