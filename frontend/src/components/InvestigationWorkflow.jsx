@@ -126,11 +126,69 @@ function DamageDetail({ data }) {
   )
 }
 
+// ── Fraud check-list (test cases: pass / flag / N/A) ──────────────────────────
+const CHECK_STATUS = {
+  flag: { icon: '✗', text: 'text-red-400',   row: 'border-red-500/25 bg-red-500/5',     order: 0 },
+  pass: { icon: '✓', text: 'text-green-400', row: 'border-green-500/20 bg-green-500/5',  order: 1 },
+  na:   { icon: '–', text: 'text-slate-500', row: 'border-slate-700/50 bg-slate-800/30', order: 2 },
+}
+
+function FraudCheckList({ checks, summary }) {
+  const passed  = summary?.passed  ?? checks.filter(c => c.status === 'pass').length
+  const flagged = summary?.flagged ?? checks.filter(c => c.status === 'flag').length
+  const na      = summary?.na      ?? checks.filter(c => c.status === 'na').length
+  const evaluated = passed + flagged
+  // Show flagged (failed) checks first, then passed, then not-applicable.
+  const sorted = [...checks].sort(
+    (a, b) => (CHECK_STATUS[a.status]?.order ?? 9) - (CHECK_STATUS[b.status]?.order ?? 9)
+  )
+
+  return (
+    <div className="mt-2">
+      {/* count chips */}
+      <div className="flex items-center gap-1.5 flex-wrap mb-2">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border bg-red-500/15 text-red-300 border-red-500/30">✗ {flagged} flagged</span>
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border bg-green-500/15 text-green-300 border-green-500/30">✓ {passed} passed</span>
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border bg-slate-600/20 text-slate-400 border-slate-600/40">– {na} N/A</span>
+        <span className="text-xs text-slate-500 ml-auto">{flagged} of {evaluated} applicable checks raised a flag</span>
+      </div>
+      {/* pass / flag ratio bar */}
+      {evaluated > 0 && (
+        <div className="h-1.5 w-full rounded-full bg-slate-800 overflow-hidden flex mb-2">
+          <div className="bg-red-500 h-full"   style={{ width: `${(flagged / evaluated) * 100}%` }} />
+          <div className="bg-green-500 h-full" style={{ width: `${(passed / evaluated) * 100}%` }} />
+        </div>
+      )}
+      {/* test-case rows */}
+      <ul className="space-y-1">
+        {sorted.map((c, i) => {
+          const s = CHECK_STATUS[c.status] || CHECK_STATUS.na
+          return (
+            <li key={c.id || i} className={`flex items-start gap-2 rounded-lg border px-2.5 py-1.5 ${s.row}`}>
+              <span className={`mt-0.5 w-4 text-center flex-shrink-0 font-bold ${s.text}`}>{s.icon}</span>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-slate-200">{c.name}</span>
+                  {c.id && <span className="text-[10px] font-mono text-slate-600">{c.id}</span>}
+                </div>
+                <p className="text-xs text-slate-400 leading-snug mt-0.5">{c.detail}</p>
+              </div>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+}
+
 // ── Fraud Intelligence detail ─────────────────────────────────────────────────
 function FraudDetail({ data }) {
+  const [showChecks, setShowChecks] = useState(false)
   const indicators = data.indicators || []
   const schemes = data.matched_schemes || []
   const refs = data.kb_references || []
+  const checks = data.fraud_checks || []
+  const flaggedChecks = checks.filter(c => c.status === 'flag').length
   const scoreColor = (data.fraud_score || 0) >= 70 ? 'text-red-400' : (data.fraud_score || 0) >= 40 ? 'text-amber-400' : 'text-green-400'
 
   return (
@@ -152,6 +210,27 @@ function FraudDetail({ data }) {
           <p className="text-sm font-semibold text-white">{indicators.length}</p>
         </div>
       </div>
+
+      {/* Fraud check-list toggle — the deterministic test cases that ran */}
+      <button
+        onClick={() => setShowChecks(v => !v)}
+        className="mt-2 w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-xs font-semibold border border-slate-600 bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors"
+      >
+        <span className="flex items-center gap-2">
+          🧪 Fraud Check List
+          {checks.length > 0 && (
+            <span className="font-normal text-slate-400">
+              · <span className="text-red-400 font-semibold">{flaggedChecks} flagged</span> / {checks.length} checks
+            </span>
+          )}
+        </span>
+        <span className="text-slate-500 transition-transform" style={{ display: 'inline-block', transform: showChecks ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
+      </button>
+      {showChecks && (
+        checks.length > 0
+          ? <FraudCheckList checks={checks} summary={data.fraud_checks_summary} />
+          : <p className="text-xs text-slate-500 italic mt-2">Detailed check list isn't available for this claim — re-run the investigation to generate it.</p>
+      )}
 
       {indicators.length > 0 && (
         <>

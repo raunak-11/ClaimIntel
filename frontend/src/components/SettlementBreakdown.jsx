@@ -103,8 +103,10 @@ function FairValueAnalysis({ breakdown }) {
 
       {/* Disclaimer */}
       <p className="text-[9px] text-slate-500 leading-relaxed mt-2 pt-2 border-t border-slate-600/50 italic">
-        Fair Value Analysis is used only for anomaly detection and workflow recommendations.
-        It does not directly affect claim settlement or payout calculation.
+        {band === 'investigate'
+          ? 'Investigation Required: the AI assessed fair value is used as the repair basis. The inflated garage amount is disallowed.'
+          : 'Fair Value Analysis is used only for anomaly detection and workflow recommendations. It does not directly affect claim settlement or payout calculation.'
+        }
       </p>
     </div>
   )
@@ -167,7 +169,11 @@ export default function SettlementBreakdown({ breakdown }) {
           </div>
 
           <Row
-            label={breakdown.is_total_loss ? 'IDV (sum insured)' : 'Repair Estimate (Garage)'}
+            label={
+              breakdown.is_total_loss ? 'IDV (sum insured)'
+              : breakdown.overclaim_band === 'investigate' ? 'AI Assessed Value (Inflation Cap Applied)'
+              : 'Repair Estimate (Garage)'
+            }
             value={breakdown.repair_estimate}
           />
 

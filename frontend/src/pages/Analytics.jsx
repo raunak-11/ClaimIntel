@@ -81,7 +81,7 @@ export default function Analytics() {
 
   const {
     decisions, claim_types, fraud_scores, top_indicators, settlement_by_vehicle, totals,
-    financial = {}, fraud = {}, governance = {},
+    financial = {}, fraud = {}, governance = {}, garage_risk = [],
   } = data
 
   return (
@@ -427,6 +427,90 @@ export default function Analytics() {
           )}
         </Section>
       </div>
+
+      {/* ── Garage Risk Intelligence ── */}
+      <Section title="Garage Risk Intelligence (Workshop Inflation Monitor)">
+        {garage_risk.length === 0 ? (
+          <p className="text-slate-500 text-sm">
+            No garage estimate data yet — risk scores appear once claims with garage estimates are investigated.
+          </p>
+        ) : (
+          <>
+            <p className="text-xs text-slate-500 mb-3">
+              Each row shows a garage's track record across all investigated claims. A garage is flagged
+              when its estimates consistently exceed the AI's damage assessment, indicating a possible
+              workshop inflation conspiracy (FS-004).
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-left text-slate-500 border-b border-slate-700">
+                    <th className="pb-2 pr-4 font-medium">Garage / Workshop</th>
+                    <th className="pb-2 pr-4 font-medium text-center">Claims</th>
+                    <th className="pb-2 pr-4 font-medium text-center">Avg Variance vs AI</th>
+                    <th className="pb-2 pr-4 font-medium text-center">Inflation Flags</th>
+                    <th className="pb-2 pr-4 font-medium text-center">Inflation Rate</th>
+                    <th className="pb-2 font-medium text-center">Risk</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {garage_risk.map((g, i) => {
+                    const riskStyle = {
+                      High:   { badge: 'bg-red-500/20 text-red-300 border-red-500/40',   bar: 'bg-red-500'   },
+                      Medium: { badge: 'bg-amber-500/20 text-amber-300 border-amber-500/40', bar: 'bg-amber-500' },
+                      Low:    { badge: 'bg-yellow-500/15 text-yellow-300 border-yellow-500/30', bar: 'bg-yellow-500' },
+                      Clear:  { badge: 'bg-green-500/15 text-green-300 border-green-500/30',  bar: 'bg-green-500'  },
+                    }[g.risk] || { badge: 'bg-slate-700 text-slate-400 border-slate-600', bar: 'bg-slate-500' }
+
+                    const varColor = g.avg_variance_pct >= 40 ? 'text-red-400'
+                      : g.avg_variance_pct >= 25 ? 'text-amber-400'
+                      : 'text-green-400'
+
+                    return (
+                      <tr key={i} className="hover:bg-slate-800/40 transition-colors">
+                        <td className="py-2.5 pr-4">
+                          <span className="font-medium text-slate-200">{g.garage}</span>
+                          {g.claim_ids?.length > 0 && (
+                            <span className="text-slate-600 ml-2">{g.claim_ids.slice(0, 2).join(', ')}{g.claim_ids.length > 2 ? '…' : ''}</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 pr-4 text-center text-slate-300">{g.claims}</td>
+                        <td className="py-2.5 pr-4 text-center">
+                          <span className={`font-semibold ${varColor}`}>
+                            {g.avg_variance_pct > 0 ? '+' : ''}{g.avg_variance_pct}%
+                          </span>
+                          {/* mini bar */}
+                          <div className="h-1 w-16 mx-auto mt-1 bg-slate-700 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${riskStyle.bar}`}
+                              style={{ width: `${Math.min(Math.abs(g.avg_variance_pct), 100)}%` }}
+                            />
+                          </div>
+                        </td>
+                        <td className="py-2.5 pr-4 text-center text-slate-300">
+                          {g.inflation_flags} / {g.claims}
+                        </td>
+                        <td className="py-2.5 pr-4 text-center text-slate-300">
+                          {g.inflation_rate_pct}%
+                        </td>
+                        <td className="py-2.5 text-center">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${riskStyle.badge}`}>
+                            {g.risk}
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-[11px] text-slate-600 mt-3">
+              Risk thresholds — High: inflation rate ≥67% or avg variance ≥60% · Medium: ≥50% or ≥40% · Low: avg variance ≥25% · Clear: below all thresholds
+            </p>
+          </>
+        )}
+      </Section>
+
     </div>
   )
 }

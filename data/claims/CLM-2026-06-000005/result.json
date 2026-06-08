@@ -1,0 +1,447 @@
+{
+  "claim_id": "CLM-2026-06-000005",
+  "agents": {
+    "damage_assessment": {
+      "damage_present": false,
+      "no_damage_reason": "Vehicle appears to be in pristine condition with no visible damage",
+      "damaged_parts": [],
+      "overall_severity": "None",
+      "total_repair_estimate": {
+        "min": 0,
+        "max": 0
+      },
+      "consistent_with_description": "Low",
+      "notes": "The vehicle seems undamaged. The claim description mentions an accident, but no damage is visible in the provided image.",
+      "vehicle_match_in_image": "Yes",
+      "vehicle_seen_description": "Tata Altroz XZ Plus, black in color",
+      "registration_plate_visible": true,
+      "plate_text_in_image": "DL12CU7624",
+      "pre_existing_damage_observed": false,
+      "pre_existing_damage_notes": null,
+      "multiple_vehicles_in_frame": true,
+      "image_quality_flags": [
+        "none"
+      ],
+      "status": "completed",
+      "summary": "Severity: None | Est. Repair: ₹0–₹0 | Parts: 0 damaged | Vehicle Match: Yes",
+      "vehicle_segment": "Hatchback",
+      "pricing_method": "segment_catalog",
+      "pricing_sources": [],
+      "garage_estimate_provided": true,
+      "garage_estimate_amount_inr": 11998.0,
+      "garage_vs_ai_variance_pct": null,
+      "garage_inflation_flag": false,
+      "garage_inflation_note": null,
+      "image_quality": {
+        "photo_count": 1,
+        "plate_visible": true,
+        "issues": [
+          "Only 1 photo provided — at least 2 angles recommended"
+        ],
+        "gate_passed": true,
+        "resubmit_recommended": false
+      }
+    },
+    "fraud_intelligence": {
+      "fraud_score": 31,
+      "fraud_label": "Low",
+      "indicators": [
+        "No visible damage detected",
+        "Multiple vehicles visible in claim images",
+        "Excessive Familiarity with Process (LOW RISK)"
+      ],
+      "matched_schemes": [
+        "New Policy Pre-Existing Damage Fraud (ID: FS-001)"
+      ],
+      "kb_references": [
+        "FS-001",
+        "FI-DMG-002",
+        "FS-002"
+      ],
+      "policy_age_days": 830,
+      "nps_risk_level": "None",
+      "status": "completed",
+      "summary": "Fraud Risk: 31% (Low) | Top flag: No visible damage detected",
+      "fraud_score_base": 16,
+      "fraud_checks": [
+        {
+          "id": "FC-01",
+          "name": "Claim amount within surveyor threshold",
+          "category": "Amount & Coverage",
+          "status": "na",
+          "severity": null,
+          "detail": "Claim amount not yet assessed (₹0) — set by the damage agent"
+        },
+        {
+          "id": "FC-02",
+          "name": "No serial-claimant pattern",
+          "category": "Claim History",
+          "status": "pass",
+          "severity": null,
+          "detail": "No prior claims on this policy — clean history"
+        },
+        {
+          "id": "FC-03",
+          "name": "Policy active on incident date",
+          "category": "Policy Validity",
+          "status": "pass",
+          "severity": null,
+          "detail": "Incident date (2026-06-07) falls within the policy period (expires 2027-02-28)"
+        },
+        {
+          "id": "FC-04",
+          "name": "Policy age beyond new-policy window",
+          "category": "Policy Validity",
+          "status": "pass",
+          "severity": null,
+          "detail": "Policy was 830 days old at the incident — beyond the 180-day new-policy window"
+        },
+        {
+          "id": "FC-05",
+          "name": "Reported within a reasonable window",
+          "category": "Timing & Reporting",
+          "status": "pass",
+          "severity": null,
+          "detail": "Claim filed 1 day(s) after the incident — timely reporting"
+        },
+        {
+          "id": "FC-06",
+          "name": "Incident during daytime hours",
+          "category": "Timing & Reporting",
+          "status": "pass",
+          "severity": null,
+          "detail": "Incident at 14:41 — within normal daytime hours"
+        },
+        {
+          "id": "FC-07",
+          "name": "No unverifiable-circumstance language",
+          "category": "Narrative & Circumstance",
+          "status": "pass",
+          "severity": null,
+          "detail": "No unverifiable-circumstance phrasing detected in the description"
+        },
+        {
+          "id": "FC-08",
+          "name": "Location differs from prior claims",
+          "category": "Claim History",
+          "status": "na",
+          "severity": null,
+          "detail": "No prior claims on this policy to compare location against"
+        },
+        {
+          "id": "FC-09",
+          "name": "No claim clustering (30-day window)",
+          "category": "Claim History",
+          "status": "na",
+          "severity": null,
+          "detail": "No prior claims on this policy"
+        },
+        {
+          "id": "FC-10",
+          "name": "Description not duplicated from a prior claim",
+          "category": "Claim History",
+          "status": "na",
+          "severity": null,
+          "detail": "No comparable prior-claim description to check against"
+        },
+        {
+          "id": "FC-11",
+          "name": "Claim modest relative to sum insured",
+          "category": "Amount & Coverage",
+          "status": "na",
+          "severity": null,
+          "detail": "Sum insured or claim amount unavailable"
+        },
+        {
+          "id": "FC-12",
+          "name": "Visible damage present in photos",
+          "category": "Visual Evidence",
+          "status": "flag",
+          "severity": "high",
+          "detail": "No visible damage detected in the submitted photos despite a claim being filed — vehicle appears undamaged; possible invalid claim, wrong/old photos, or pre-incident images (FI-DMG-002: Physics Mismatch)"
+        },
+        {
+          "id": "FC-13",
+          "name": "Vehicle in photos matches policy",
+          "category": "Visual Evidence",
+          "status": "pass",
+          "severity": null,
+          "detail": "Vehicle in the images matches the registered vehicle"
+        },
+        {
+          "id": "FC-14",
+          "name": "No pre-existing damage in photos",
+          "category": "Visual Evidence",
+          "status": "pass",
+          "severity": null,
+          "detail": "No pre-existing (old) damage observed in the images"
+        },
+        {
+          "id": "FC-15",
+          "name": "Registration plate verifiable",
+          "category": "Visual Evidence",
+          "status": "pass",
+          "severity": null,
+          "detail": "Registration plate is visible in the submitted images"
+        },
+        {
+          "id": "FC-16",
+          "name": "Plate text matches policy vehicle",
+          "category": "Visual Evidence",
+          "status": "pass",
+          "severity": null,
+          "detail": "Plate text in image (DL12CU7624) is consistent with the policy vehicle"
+        },
+        {
+          "id": "FC-17",
+          "name": "Single vehicle in frame",
+          "category": "Visual Evidence",
+          "status": "flag",
+          "severity": "medium",
+          "detail": "Multiple vehicles visible in claim images — possible staged collision scenario (FS-002)"
+        },
+        {
+          "id": "FC-18",
+          "name": "Garage estimate consistent with assessment",
+          "category": "Documents (FIR / Estimate)",
+          "status": "na",
+          "severity": null,
+          "detail": "No garage estimate provided for comparison"
+        },
+        {
+          "id": "FC-19",
+          "name": "FIR present for mandatory claim types",
+          "category": "Documents (FIR / Estimate)",
+          "status": "na",
+          "severity": null,
+          "detail": "FIR not mandatory for this claim type"
+        },
+        {
+          "id": "FC-20",
+          "name": "Damage photos accompany the estimate",
+          "category": "Documents (FIR / Estimate)",
+          "status": "na",
+          "severity": null,
+          "detail": "No garage estimate uploaded"
+        },
+        {
+          "id": "FC-21",
+          "name": "FIR date matches the claim",
+          "category": "Documents (FIR / Estimate)",
+          "status": "na",
+          "severity": null,
+          "detail": "No machine-readable FIR to cross-check"
+        },
+        {
+          "id": "FC-22",
+          "name": "FIR location matches the claim",
+          "category": "Documents (FIR / Estimate)",
+          "status": "na",
+          "severity": null,
+          "detail": "No machine-readable FIR to cross-check"
+        },
+        {
+          "id": "FC-23",
+          "name": "FIR vehicle matches the policy",
+          "category": "Documents (FIR / Estimate)",
+          "status": "na",
+          "severity": null,
+          "detail": "No machine-readable FIR to cross-check"
+        },
+        {
+          "id": "FC-24",
+          "name": "Garage not flagged for systematic inflation",
+          "category": "Amount & Coverage",
+          "status": "na",
+          "severity": null,
+          "detail": "Garage 'Anna Motors' appears for the first time — no prior history to analyse"
+        }
+      ],
+      "fraud_checks_summary": {
+        "total": 24,
+        "passed": 10,
+        "flagged": 2,
+        "na": 12,
+        "evaluated": 12
+      }
+    },
+    "incident_reconstruction": {
+      "collision_type": "Front impact",
+      "impact_direction": "Frontal impact, likely from a stationary or slow-moving vehicle",
+      "reconstruction": "The vehicle was likely stationary or moving slowly when it was struck from the front by another vehicle. The impact appears to be frontal, causing damage to the front bumper and possibly other front-end components.",
+      "reconstruction_bullets": [
+        "The front bumper appears to be damaged, which is consistent with a frontal impact.",
+        "There is no visible damage to the rear or sides of the vehicle, which suggests that the impact was from the front.",
+        "The lack of damage to other areas of the vehicle suggests that the impact was likely at a low speed or from a stationary vehicle."
+      ],
+      "storyboard_panels": [
+        {
+          "panel": 1,
+          "title": "Pre-Incident",
+          "emoji": "🚗",
+          "description": "The vehicle was driving on the road, possibly slowing down or stopping."
+        },
+        {
+          "panel": 2,
+          "title": "Point of Impact",
+          "emoji": "💥",
+          "description": "Another vehicle struck the Tata Altroz from the front, causing damage to the front bumper."
+        },
+        {
+          "panel": 3,
+          "title": "Immediate Aftermath",
+          "emoji": "🔧",
+          "description": "The vehicle was assessed for damage, and a claim was filed."
+        },
+        {
+          "panel": 4,
+          "title": "Evidence Summary",
+          "emoji": "🔍",
+          "description": "The physical evidence suggests a frontal impact, consistent with the claimant's story."
+        }
+      ],
+      "damage_matches_story": true,
+      "confidence": 80,
+      "similar_historical_cases": [
+        "HIST-001"
+      ],
+      "inconsistencies": [],
+      "status": "completed",
+      "summary": "Most Probable: Front impact | Confidence: 80% | Story Match: Yes"
+    },
+    "context_verification": {
+      "status": "completed",
+      "location_verified": true,
+      "geocoded_location": "Karapakkam, Zone 15 Sholinganallur, Chennai Corporation, Sholinganallur, Chennai, Tamil Nadu, 600096, India",
+      "coordinates": {
+        "lat": 12.9117073,
+        "lon": 80.2277203
+      },
+      "weather": "Overcast Clouds, 36.42°C, Humidity: 54%, Visibility: 10000m",
+      "policy_coverage_note": "No obvious coverage exclusions detected from policy document",
+      "policy_document_excerpt": "— POLICY DOCUMENT — POL-221144]\n145\nCOVERAGE DETAILS & CONDITIONS\n  OWN DAMAGE COVERAGE (Section I)\nAccidental Damage\nUp to IDV (Rs. 1,600,000) after deductibles\nFire and Exp\n  THIRD PARTY LIABILITY (Section II - Mandatory)\nThird Party Bodily Injury\nUnlimited as per Motor Vehicles Act, 1988\nThird Pa...",
+      "summary": "Weather: Overcast Clouds, 36.42°C, Humidity: 54%, Visibility: 10000m | Location: Verified ✓ | Policy: No obvious coverage exclusions detected from policy document"
+    },
+    "settlement_recommendation": {
+      "decision": "Reject",
+      "recommended_settlement": 0,
+      "confidence": 90,
+      "decision_reasons": [
+        "No visible damage detected on the vehicle in the provided image, contradicting the claim description",
+        "Fraud score of 31 is low, but the absence of damage and inconsistencies in the claim raise concerns",
+        "The vehicle seems undamaged, as reported by Agent 1, which severely contradicts the story of an accident",
+        "Multiple vehicles visible in claim images and excessive familiarity with the process are noted as low-risk indicators",
+        "The garage estimate amount of ₹11,998 seems unjustified given the lack of visible damage"
+      ],
+      "reasoning_trail": [
+        "Step 1: Damage Assessment revealed no visible damage on the vehicle",
+        "Step 2: Fraud Intelligence reported a low fraud score of 31 but noted inconsistencies",
+        "Step 3: Incident Reconstruction found the damage to match the story, but this is contradicted by the lack of visible damage",
+        "Step 4: Context & Policy verification found no obvious coverage exclusions but did not address the damage discrepancy",
+        "Step 5: Historical Precedents did not directly apply, but the pattern of claiming without visible damage is concerning",
+        "Step 6: Settlement Calculation is moot due to the rejection based on lack of damage and inconsistencies",
+        "Step 7: Final Decision to reject the claim due to severe inconsistencies and lack of visible damage"
+      ],
+      "kb_precedents_applied": [],
+      "deductibles_applied": 0,
+      "status": "completed",
+      "summary": "Recommendation: Reject | Settlement: ₹0 | Confidence: 90%",
+      "settlement_breakdown": {
+        "is_total_loss": false,
+        "total_loss_note": null,
+        "repair_estimate": 11998,
+        "assessed_fair_value": null,
+        "assessed_band_min": null,
+        "assessed_band_max": null,
+        "benchmark_source": "Segment parts catalog",
+        "amount_claimed": 11998,
+        "overclaim_pct": null,
+        "overclaim_band": null,
+        "overclaim_note": null,
+        "recommended_action": null,
+        "disallowed_inflation": 0,
+        "underclaim_advisory": null,
+        "settlement_basis": "Human Approved Amount",
+        "vehicle_age_years": 4.4,
+        "depreciation_pct": 50,
+        "depreciation": 4199,
+        "depreciation_note": "Material-specific depreciation (IRDAI): glass 0%, rubber/tyre 50%, metal 50% — vehicle age ~4.4 yr.",
+        "compulsory_deductible": 1000,
+        "voluntary_deductible": 0,
+        "total_deductible": 1000,
+        "gst_included": 1830,
+        "gst_rate_pct": 18,
+        "salvage_value": 0,
+        "net_payable": 6799,
+        "sum_insured_cap": 620000,
+        "applies": false,
+        "ncb_pct": 0,
+        "ncb_advisory": null,
+        "assumptions": "Depreciation: Material-specific depreciation (IRDAI): glass 0%, rubber/tyre 50%, metal 50% — vehicle age ~4.4 yr. | Deductibles: compulsory ₹1,000 + voluntary ₹0 | GST: 18% included in repair total | Payout capped at sum insured ₹620,000."
+      }
+    }
+  },
+  "summary": {
+    "fraud_risk_score": 31,
+    "fraud_risk_label": "Low",
+    "damage_consistency": "Low",
+    "incident_consistency": "High",
+    "external_verification": "High",
+    "behavioural_analysis": "Low Risk",
+    "overall_confidence": 90,
+    "decision": "Reject",
+    "recommended_settlement": 0,
+    "settlement_breakdown": {
+      "is_total_loss": false,
+      "total_loss_note": null,
+      "repair_estimate": 11998,
+      "assessed_fair_value": null,
+      "assessed_band_min": null,
+      "assessed_band_max": null,
+      "benchmark_source": "Segment parts catalog",
+      "amount_claimed": 11998,
+      "overclaim_pct": null,
+      "overclaim_band": null,
+      "overclaim_note": null,
+      "recommended_action": null,
+      "disallowed_inflation": 0,
+      "underclaim_advisory": null,
+      "settlement_basis": "Human Approved Amount",
+      "vehicle_age_years": 4.4,
+      "depreciation_pct": 50,
+      "depreciation": 4199,
+      "depreciation_note": "Material-specific depreciation (IRDAI): glass 0%, rubber/tyre 50%, metal 50% — vehicle age ~4.4 yr.",
+      "compulsory_deductible": 1000,
+      "voluntary_deductible": 0,
+      "total_deductible": 1000,
+      "gst_included": 1830,
+      "gst_rate_pct": 18,
+      "salvage_value": 0,
+      "net_payable": 6799,
+      "sum_insured_cap": 620000,
+      "applies": false,
+      "ncb_pct": 0,
+      "ncb_advisory": null,
+      "assumptions": "Depreciation: Material-specific depreciation (IRDAI): glass 0%, rubber/tyre 50%, metal 50% — vehicle age ~4.4 yr. | Deductibles: compulsory ₹1,000 + voluntary ₹0 | GST: 18% included in repair total | Payout capped at sum insured ₹620,000."
+    },
+    "needs_human_review": false,
+    "routing_reasons": [],
+    "image_quality": {
+      "photo_count": 1,
+      "plate_visible": true,
+      "issues": [
+        "Only 1 photo provided — at least 2 angles recommended"
+      ],
+      "gate_passed": true,
+      "resubmit_recommended": false
+    }
+  },
+  "adjuster_decision": {
+    "decision": "Reject",
+    "adjuster": "Raunak",
+    "reason": "No visible damage appeared in the vehicle.",
+    "ai_decision": "Reject",
+    "overridden": false,
+    "timestamp": "2026-06-08 06:40"
+  }
+}

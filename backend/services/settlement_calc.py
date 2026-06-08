@@ -220,13 +220,19 @@ def _assess_repair(damage: dict) -> dict:
             f"investigation required."
         )
 
-    # Repair basis is ALWAYS the garage quote — fair value is signal only
-    out["approved_basis"]    = round(claimed)
-    out["overclaim_pct"]     = round(variance_pct, 1)
-    out["overclaim_band"]    = band
-    out["overclaim_note"]    = note
+    out["overclaim_pct"]      = round(variance_pct, 1)
+    out["overclaim_band"]     = band
+    out["overclaim_note"]     = note
     out["recommended_action"] = action
-    out["disallowed_inflation"] = 0
+
+    if band == "investigate":
+        # Cap repair basis to the AI assessed fair value — the inflated portion
+        # is disallowed and surfaces as leakage prevented in analytics.
+        out["approved_basis"]       = round(assessed_mid)
+        out["disallowed_inflation"] = round(claimed - assessed_mid)
+    else:
+        out["approved_basis"]       = round(claimed)
+        out["disallowed_inflation"] = 0
 
     out["underclaim_advisory"] = None
     return out
@@ -359,7 +365,7 @@ def compute_settlement_breakdown(
         "overclaim_band":        assess.get("overclaim_band"),
         "overclaim_note":        assess.get("overclaim_note"),
         "recommended_action":    assess.get("recommended_action"),
-        "disallowed_inflation":  0,
+        "disallowed_inflation":  assess.get("disallowed_inflation", 0),
         "underclaim_advisory":   assess.get("underclaim_advisory"),
         "settlement_basis":      "Human Approved Amount",
         # Depreciation
