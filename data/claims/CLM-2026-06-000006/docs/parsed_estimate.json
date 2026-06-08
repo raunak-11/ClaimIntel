@@ -1,0 +1,42 @@
+{
+  "doc_type": "garage_estimate",
+  "workshop_name": "Hyundai Authorised Service - Nagpur",
+  "workshop_address": "Plot 12, MIDC Hingna Road, Nagpur - 440016",
+  "gstin": "27AABHN1234M1Z4",
+  "total_estimate_inr": 39530,
+  "line_items": [
+    {
+      "part": "Front Bumper Assembly (OEM)",
+      "type": "Replace",
+      "amount": 7500
+    },
+    {
+      "part": "Bonnet Panel",
+      "type": "Repair",
+      "amount": 9000
+    },
+    {
+      "part": "Front Grille (OEM)",
+      "type": "Replace",
+      "amount": 2500
+    },
+    {
+      "part": "Right Headlamp Assembly (OEM)",
+      "type": "Replace",
+      "amount": 8000
+    },
+    {
+      "part": "Labour - Panel Beating & Denting",
+      "type": "Labour",
+      "amount": 3500
+    },
+    {
+      "part": "Labour - Painting (2-coat)",
+      "type": "Labour",
+      "amount": 3000
+    }
+  ],
+  "date_issued": "2026-06-03",
+  "vehicle_reg_mentioned": "MH-28-BQ-2255",
+  "parsed_ok": true
+}

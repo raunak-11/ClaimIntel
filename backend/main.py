@@ -179,6 +179,27 @@ def get_claim(claim_id: str):
     except Exception:
         pass
 
+    # Lazy backfill: fraud check-list (test cases) for claims investigated before
+    # the checklist feature existed. Cheap — no LLM and no document re-parsing;
+    # FIR field cross-checks fall back to N/A for these older claims (only file
+    # presence is known here, not the parsed contents).
+    try:
+        agents = (result or {}).get("agents") or {}
+        fraud = agents.get("fraud_intelligence")
+        if isinstance(fraud, dict) and "fraud_checks" not in fraud:
+            from agents.fraud_intelligence import evaluate_fraud_checks, summarize_fraud_checks
+            damage = agents.get("damage_assessment", {})
+            raw_docs = storage.get_claim_docs(claim_id)
+            light_docs = {
+                "estimate": bool(raw_docs.get("estimate")),
+                "fir": {"parsed_ok": False} if raw_docs.get("fir") else None,
+            }
+            checks = evaluate_fraud_checks(claim, damage, light_docs)
+            fraud["fraud_checks"] = checks
+            fraud["fraud_checks_summary"] = summarize_fraud_checks(checks)
+    except Exception:
+        pass
+
     return {"claim": claim, "result": result, "policy": policy}
 
 
@@ -358,6 +379,42 @@ def decision_letter(claim_id: str):
 
 # ── Analytics ─────────────────────────────────────────────────────────────────
 
+def _build_garage_risk(garage_stats: dict) -> list[dict]:
+    """Shape per-garage inflation stats into a sorted risk list for the UI."""
+    rows = []
+    for name, entry in garage_stats.items():
+        variances = entry["variances"]
+        n = len(variances)
+        if n == 0:
+            continue
+        avg_var = sum(variances) / n
+        inflation_flags = entry["inflation_flags"]
+        inflation_rate = inflation_flags / n
+
+        if inflation_rate >= 0.67 or avg_var >= 60:
+            risk = "High"
+        elif inflation_rate >= 0.5 or avg_var >= 40:
+            risk = "Medium"
+        elif avg_var >= 25:
+            risk = "Low"
+        else:
+            risk = "Clear"
+
+        rows.append({
+            "garage": name,
+            "claims": n,
+            "avg_variance_pct": round(avg_var, 1),
+            "inflation_flags": inflation_flags,
+            "inflation_rate_pct": round(inflation_rate * 100),
+            "risk": risk,
+            "claim_ids": entry["claim_ids"],
+        })
+
+    # Sort: High → Medium → Low → Clear, then by avg_variance_pct desc within tier
+    _order = {"High": 0, "Medium": 1, "Low": 2, "Clear": 3}
+    return sorted(rows, key=lambda r: (_order.get(r["risk"], 9), -r["avg_variance_pct"]))
+
+
 @app.get("/api/analytics")
 def analytics():
     """
@@ -423,6 +480,10 @@ def analytics():
     fraud_levels = {"Low": 0, "Medium": 0, "High": 0}
     scheme_counts: dict[str, int] = {}
     fraud_exposure_stopped = 0  # ₹ of High-risk claims not paid out
+
+    # ── #5 Garage risk ────────────────────────────────────────────────────────
+    # garage_name → {variances: [float], inflation_flags: int, claim_ids: [str]}
+    garage_stats: dict[str, dict] = {}
 
     # ── #4 AI ↔ Human Governance ──────────────────────────────────────────────
     gov_agreed = 0
@@ -523,6 +584,24 @@ def analytics():
             scheme_counts[sk] = scheme_counts.get(sk, 0) + 1
         if flabel == "High" and effective in ("Reject", "Escalate"):
             fraud_exposure_stopped += claimed
+
+        # ── #5 Garage risk ────────────────────────────────────────────────────
+        garage_name = (c.get("garage_workshop_name") or "").strip()
+        if garage_name:
+            da = agents.get("damage_assessment") or {}
+            variance = da.get("garage_vs_ai_variance_pct")
+            if variance is not None:
+                try:
+                    variance = float(variance)
+                    entry = garage_stats.setdefault(garage_name, {
+                        "variances": [], "inflation_flags": 0, "claim_ids": []
+                    })
+                    entry["variances"].append(variance)
+                    entry["claim_ids"].append(c["claim_id"])
+                    if da.get("garage_inflation_flag"):
+                        entry["inflation_flags"] += 1
+                except (ValueError, TypeError):
+                    pass
 
         # ── #4 AI ↔ Human Governance ─────────────────────────────────────────
         conf = summary.get("overall_confidence")
@@ -630,6 +709,8 @@ def analytics():
             "needs_review": needs_review_count,
             "image_gate_failed": image_gate_failed,
         },
+        # ── #5 Garage risk ────────────────────────────────────────────────────
+        "garage_risk": _build_garage_risk(garage_stats),
     }
 
 

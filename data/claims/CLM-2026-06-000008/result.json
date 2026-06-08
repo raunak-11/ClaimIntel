@@ -1,5 +1,5 @@
 {
-  "claim_id": "CLM-2026-06-000002",
+  "claim_id": "CLM-2026-06-000008",
   "agents": {
     "damage_assessment": {
       "damage_present": true,
@@ -73,7 +73,7 @@
       "vehicle_match_in_image": "Yes",
       "vehicle_seen_description": "Toyota Innova Crysta GX, white",
       "registration_plate_visible": true,
-      "plate_text_in_image": "WB 14L 5678",
+      "plate_text_in_image": "WB14L0428",
       "pre_existing_damage_observed": false,
       "pre_existing_damage_notes": null,
       "multiple_vehicles_in_frame": false,
@@ -88,10 +88,10 @@
         "vehicle_catalog"
       ],
       "garage_estimate_provided": true,
-      "garage_estimate_amount_inr": 120000.0,
-      "garage_vs_ai_variance_pct": 140.7,
+      "garage_estimate_amount_inr": 100000.0,
+      "garage_vs_ai_variance_pct": 100.6,
       "garage_inflation_flag": true,
-      "garage_inflation_note": "Garage estimate ₹120,000 is 141% higher than AI mid-estimate ₹49,850",
+      "garage_inflation_note": "Garage estimate ₹100,000 is 101% higher than AI mid-estimate ₹49,850",
       "image_quality": {
         "photo_count": 1,
         "plate_visible": true,
@@ -103,26 +103,26 @@
       }
     },
     "fraud_intelligence": {
-      "fraud_score": 74,
-      "fraud_label": "High",
+      "fraud_score": 66,
+      "fraud_label": "Medium",
       "indicators": [
-        "Workshop Inflation",
-        "Vehicle mismatch",
-        "Serial Claimant"
+        "Excessive Familiarity with Process (LOW RISK)",
+        "Serial Claimant (HIGH RISK)",
+        "Workshop Inflation (CRITICAL)"
       ],
       "matched_schemes": [
         "New Policy Pre-Existing Damage Fraud (ID: FS-001)"
       ],
       "kb_references": [
-        "FRAUD INDICATOR — New Policy Syndrome",
-        "KNOWN FRAUD SCHEME — New Policy Pre-Existing Damage Fraud (ID: FS-001)",
-        "FRAUD INDICATOR — Serial Claimant"
+        "FS-001",
+        "FI-POL-003",
+        "FS-004"
       ],
       "policy_age_days": 430,
       "nps_risk_level": "None",
       "status": "completed",
-      "summary": "Fraud Risk: 74% (High) | Top flag: Workshop Inflation",
-      "fraud_score_base": 59,
+      "summary": "Fraud Risk: 66% (Medium) | Top flag: Excessive Familiarity with Process (LOW RISK)",
+      "fraud_score_base": 51,
       "fraud_checks": [
         {
           "id": "FC-01",
@@ -170,7 +170,7 @@
           "category": "Timing & Reporting",
           "status": "pass",
           "severity": null,
-          "detail": "Incident at 13:04 — within normal daytime hours"
+          "detail": "Incident at 14:00 — within normal daytime hours"
         },
         {
           "id": "FC-07",
@@ -250,7 +250,7 @@
           "category": "Visual Evidence",
           "status": "flag",
           "severity": "medium",
-          "detail": "Plate visible in image (WB 14L 5678) may not match policy vehicle (Toyota Innova Crysta GX (TN07CD5678)) — verify registration"
+          "detail": "Plate visible in image (WB14L0428) may not match policy vehicle (Toyota Innova Crysta GX (TN07CD5678)) — verify registration"
         },
         {
           "id": "FC-17",
@@ -266,7 +266,7 @@
           "category": "Documents (FIR / Estimate)",
           "status": "flag",
           "severity": "high",
-          "detail": "FI-INF-001: Workshop Inflation — Garage estimate ₹120,000 is 141% above AI estimate (FS-004: Workshop Inflation Conspiracy)"
+          "detail": "FI-INF-001: Workshop Inflation — Garage estimate ₹100,000 is 101% above AI estimate (FS-004: Workshop Inflation Conspiracy)"
         },
         {
           "id": "FC-19",
@@ -312,52 +312,52 @@
           "id": "FC-24",
           "name": "Garage not flagged for systematic inflation",
           "category": "Amount & Coverage",
-          "status": "flag",
-          "severity": "high",
-          "detail": "FS-004: Garage 'Anna Motors' has appeared in 1 prior claim(s) with an average estimate +69% vs AI assessment (1/1 flagged for inflation) — systematic workshop inflation pattern suspected (seen in: CLM-2026-06-000001)"
+          "status": "na",
+          "severity": null,
+          "detail": "Garage 'Anna Motors' appears for the first time — no prior history to analyse"
         }
       ],
       "fraud_checks_summary": {
         "total": 24,
         "passed": 12,
-        "flagged": 4,
-        "na": 8,
-        "evaluated": 16
+        "flagged": 3,
+        "na": 9,
+        "evaluated": 15
       }
     },
     "incident_reconstruction": {
       "collision_type": "Front impact",
       "impact_direction": "Frontal impact, likely at an angle given the damage to one side of the front bumper and headlight",
-      "reconstruction": "The vehicle likely swerved to avoid another vehicle and collided with a tree, causing front-end damage.",
+      "reconstruction": "The vehicle likely swerved to avoid another vehicle and collided with a tree, causing a frontal impact that resulted in severe damage to the front bumper, moderate damage to the bonnet, and moderate damage to the left headlight.",
       "reconstruction_bullets": [
-        "The damage to the front bumper, bonnet, and headlight on one side suggests an angled impact.",
-        "The severity of the damage indicates a significant force of impact, consistent with a rapid swerve into a tree.",
-        "The described scenario of avoiding a stopped vehicle and then hitting a tree is plausible given the damage pattern."
+        "The damage to the front bumper, bonnet, and left headlight is consistent with a frontal impact against a stationary object like a tree.",
+        "The severity of the damage suggests a significant force of impact, which aligns with the claimant's statement of taking a forceful turn to avoid another vehicle.",
+        "The damage pattern does not indicate a secondary impact or rollover, supporting the claimant's version of a single event."
       ],
       "storyboard_panels": [
         {
           "panel": 1,
           "title": "Pre-Incident",
           "emoji": "🚗",
-          "description": "The vehicle was driving and encountered a stopped vehicle ahead."
+          "description": "The vehicle was being driven on a road when the driver encountered a vehicle stopped ahead."
         },
         {
           "panel": 2,
           "title": "Point of Impact",
           "emoji": "💥",
-          "description": "The driver swerved to avoid the stopped vehicle and hit a tree."
+          "description": "The driver swerved to avoid the stopped vehicle and hit a tree with the front of the vehicle."
         },
         {
           "panel": 3,
           "title": "Immediate Aftermath",
           "emoji": "🔧",
-          "description": "The vehicle sustained front-end damage and was assessed for repairs."
+          "description": "The vehicle sustained significant front-end damage and was likely stopped by the impact."
         },
         {
           "panel": 4,
           "title": "Evidence Summary",
           "emoji": "🔍",
-          "description": "The damage pattern supports the claim of a swerve to avoid another vehicle, then hitting a tree."
+          "description": "The physical evidence supports the claimant's story, with damage consistent with a frontal impact against a tree."
         }
       ],
       "damage_matches_story": true,
@@ -377,53 +377,51 @@
         "lat": 13.0086685,
         "lon": 80.2126063
       },
-      "weather": "Overcast Clouds, 35.57°C, Humidity: 54%, Visibility: 10000m",
+      "weather": "Overcast Clouds, 36.25°C, Humidity: 52%, Visibility: 10000m",
       "policy_coverage_note": "POLICY EXPIRED: Incident (2026-06-05) is 65 day(s) after policy expiry (2026-04-01). Claim NOT eligible — policy must be renewed.",
       "policy_document_excerpt": "— POLICY DOCUMENT — POL-891234]\n145\nCOVERAGE DETAILS & CONDITIONS\n  OWN DAMAGE COVERAGE (Section I)\nAccidental Damage\nUp to IDV (Rs. 1,600,000) after deductibles\nFire and Exp\n  THIRD PARTY LIABILITY (Section II - Mandatory)\nThird Party Bodily Injury\nUnlimited as per Motor Vehicles Act, 1988\nThird Pa...",
-      "summary": "Weather: Overcast Clouds, 35.57°C, Humidity: 54%, Visibility: 10000m | Location: Verified ✓ | Policy: POLICY EXPIRED: Incident (2026-06-05) is 65 day(s) after pol..."
+      "summary": "Weather: Overcast Clouds, 36.25°C, Humidity: 52%, Visibility: 10000m | Location: Verified ✓ | Policy: POLICY EXPIRED: Incident (2026-06-05) is 65 day(s) after pol..."
     },
     "settlement_recommendation": {
       "decision": "Reject",
       "recommended_settlement": 0,
-      "confidence": 90,
+      "confidence": 95,
       "decision_reasons": [
-        "Policy expired 65 days prior to incident, making claim ineligible (Context Verification: POLICY EXPIRED)",
-        "Fraud score of 74 exceeds the IRDAI Escalate threshold, indicating potential fraud (Fraud Intelligence: fraud_score)",
-        "Garage estimate variance of 140.7% suggests workshop inflation (Agent 1 — Damage Assessment: garage_vs_ai_variance_pct)",
-        "Claimant has been flagged as a serial claimant, raising concerns about potential abuse (Fraud Intelligence: indicators)",
-        "Location verification confirms the incident occurred after policy expiry, further supporting rejection (Context Verification: location_verified)"
+        "Policy expired 65 days prior to incident, making claim ineligible (Policy Coverage Note)",
+        "Fraud score of 66 indicates potential workshop inflation and serial claimant behavior (Agent 2 findings)",
+        "Garage estimate exceeds AI-estimated repair cost by 100.6%, suggesting inflation (Agent 1 findings)",
+        "Claim amount exceeds total repair estimate, further indicating potential fraud (Claim Amount: ₹49,850, Total Repair Estimate: ₹36,100-₹63,600)"
       ],
       "reasoning_trail": [
-        "Step 1: Damage Assessment indicates severe damage with a high consistency with the description, but garage inflation is suspected",
-        "Step 2: Fraud Intelligence reveals a high fraud score and flags the claimant as a serial claimant, with workshop inflation indicators",
-        "Step 3: Incident Reconstruction confirms the collision type and damage consistency with the story, but this is outweighed by other concerns",
-        "Step 4: Context & Policy verification shows the policy had expired, making the claim ineligible",
-        "Step 5: Historical Precedents suggest similar cases have been escalated or rejected due to fraud concerns (HIST-019, HIST-014)",
-        "Step 6: Settlement Calculation is not applicable due to the rejection decision",
-        "Step 7: Final Decision is to reject the claim based on the cumulative evidence"
+        "Step 1: Damage Assessment indicates severe damage but potential garage inflation",
+        "Step 2: Fraud Intelligence reveals medium fraud score with critical workshop inflation indicator",
+        "Step 3: Incident Reconstruction confirms front impact collision consistent with story",
+        "Step 4: Context & Policy verification shows policy expired 65 days prior to incident",
+        "Step 5: Historical Precedents suggest similar cases of workshop inflation and serial claimants (HIST-019, FS-004)",
+        "Step 6: Settlement Calculation is not applicable due to policy expiry and potential fraud",
+        "Step 7: Final Decision to reject claim based on policy expiry, potential fraud, and inflated garage estimate"
       ],
       "kb_precedents_applied": [
         "HIST-019",
-        "HIST-014",
-        "KNOWN FRAUD SCHEME — Workshop Inflation Conspiracy (ID: FS-004)"
+        "FS-004"
       ],
       "deductibles_applied": 0,
       "status": "completed",
-      "summary": "Recommendation: Reject | Settlement: ₹0 | Confidence: 90%",
+      "summary": "Recommendation: Reject | Settlement: ₹0 | Confidence: 95%",
       "settlement_breakdown": {
         "is_total_loss": false,
         "total_loss_note": null,
-        "repair_estimate": 120000,
+        "repair_estimate": 49850,
         "assessed_fair_value": 49850,
         "assessed_band_min": 36100,
         "assessed_band_max": 63600,
         "benchmark_source": "OEM parts catalog (exact model)",
-        "amount_claimed": 120000,
-        "overclaim_pct": 140.7,
+        "amount_claimed": 100000,
+        "overclaim_pct": 100.6,
         "overclaim_band": "investigate",
-        "overclaim_note": "Claimed ₹120,000 is 140.7% above the assessed fair value of ₹49,850 — significant variance, investigation required.",
+        "overclaim_note": "Claimed ₹100,000 is 100.6% above the assessed fair value of ₹49,850 — significant variance, investigation required.",
         "recommended_action": "Investigation Required",
-        "disallowed_inflation": 0,
+        "disallowed_inflation": 50150,
         "underclaim_advisory": null,
         "settlement_basis": "Human Approved Amount",
         "vehicle_age_years": 3.4,
@@ -433,10 +431,10 @@
         "compulsory_deductible": 2000,
         "voluntary_deductible": 0,
         "total_deductible": 2000,
-        "gst_included": 18305,
+        "gst_included": 7604,
         "gst_rate_pct": 18,
         "salvage_value": 0,
-        "net_payable": 104042,
+        "net_payable": 33892,
         "sum_insured_cap": 1200000,
         "applies": false,
         "ncb_pct": 0,
@@ -446,29 +444,29 @@
     }
   },
   "summary": {
-    "fraud_risk_score": 74,
-    "fraud_risk_label": "High",
+    "fraud_risk_score": 66,
+    "fraud_risk_label": "Medium",
     "damage_consistency": "High",
     "incident_consistency": "High",
     "external_verification": "High",
-    "behavioural_analysis": "High Risk",
-    "overall_confidence": 90,
+    "behavioural_analysis": "Medium Risk",
+    "overall_confidence": 95,
     "decision": "Reject",
     "recommended_settlement": 0,
     "settlement_breakdown": {
       "is_total_loss": false,
       "total_loss_note": null,
-      "repair_estimate": 120000,
+      "repair_estimate": 49850,
       "assessed_fair_value": 49850,
       "assessed_band_min": 36100,
       "assessed_band_max": 63600,
       "benchmark_source": "OEM parts catalog (exact model)",
-      "amount_claimed": 120000,
-      "overclaim_pct": 140.7,
+      "amount_claimed": 100000,
+      "overclaim_pct": 100.6,
       "overclaim_band": "investigate",
-      "overclaim_note": "Claimed ₹120,000 is 140.7% above the assessed fair value of ₹49,850 — significant variance, investigation required.",
+      "overclaim_note": "Claimed ₹100,000 is 100.6% above the assessed fair value of ₹49,850 — significant variance, investigation required.",
       "recommended_action": "Investigation Required",
-      "disallowed_inflation": 0,
+      "disallowed_inflation": 50150,
       "underclaim_advisory": null,
       "settlement_basis": "Human Approved Amount",
       "vehicle_age_years": 3.4,
@@ -478,10 +476,10 @@
       "compulsory_deductible": 2000,
       "voluntary_deductible": 0,
       "total_deductible": 2000,
-      "gst_included": 18305,
+      "gst_included": 7604,
       "gst_rate_pct": 18,
       "salvage_value": 0,
-      "net_payable": 104042,
+      "net_payable": 33892,
       "sum_insured_cap": 1200000,
       "applies": false,
       "ncb_pct": 0,
@@ -499,5 +497,13 @@
       "gate_passed": true,
       "resubmit_recommended": false
     }
+  },
+  "adjuster_decision": {
+    "decision": "Reject",
+    "adjuster": "Raunak",
+    "reason": "Estimation is too much inflated and maybe a fraud garage. Further info required till then rejected",
+    "ai_decision": "Reject",
+    "overridden": false,
+    "timestamp": "2026-06-08 06:41"
   }
 }
