@@ -12,7 +12,7 @@
     },
     {
       "part": "Bonnet Panel",
-      "type": "Repair",
+      "type": "Repair + Paint",
       "amount": 9000
     },
     {
@@ -36,7 +36,7 @@
       "amount": 3000
     }
   ],
-  "date_issued": "2026-06-03",
+  "date_issued": "2026-06-09",
   "vehicle_reg_mentioned": "MH-28-BQ-2255",
   "parsed_ok": true
 }

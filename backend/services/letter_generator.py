@@ -81,16 +81,16 @@ def draft_decision_letter(claim: dict, result: dict, policy: Optional[dict]) -> 
     bd = summary.get("settlement_breakdown") or settlement_agent.get("settlement_breakdown")
     if bd and decision == "Approve":
         breakdown_str = (
-            f"Repair estimate {_inr(bd['repair_estimate'])} (GST included); "
-            f"less depreciation {_inr(bd['depreciation'])} ({bd['depreciation_pct']}%); "
-            f"less compulsory deductible {_inr(bd['compulsory_deductible'])}; "
-            f"net payable {_inr(bd['net_payable'])}."
+            f"Repair estimate {_inr(bd.get('repair_estimate', 0))} (GST included); "
+            f"less depreciation {_inr(bd.get('depreciation', 0))} ({bd.get('depreciation_pct', 0)}%); "
+            f"less compulsory deductible {_inr(bd.get('compulsory_deductible', 0))}; "
+            f"net payable {_inr(bd.get('net_payable', 0))}."
         )
     else:
         breakdown_str = "Not applicable for this decision."
 
     settlement_amt = (
-        _inr(bd["net_payable"]) if (bd and decision == "Approve")
+        _inr(bd.get("net_payable", 0)) if (bd and decision == "Approve")
         else _inr(summary.get("recommended_settlement", 0))
     )
 

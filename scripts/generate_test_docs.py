@@ -63,9 +63,9 @@ FIRS = [
         "fir_no": "0189 / 2026",
         "district": "Bengaluru Traffic",
         "police_station": "HSR Layout Traffic Police Station",
-        "date_filed": "03 June 2026",
+        "date_filed": "08 June 2026",
         "date_filed_time": "10:30 hrs",
-        "incident_date": "02 June 2026",
+        "incident_date": "07 June 2026",
         "incident_time": "19:05 hrs",
         "incident_location": "Outer Ring Road near Agara Junction, Bengaluru",
         "complainant": {
@@ -82,7 +82,7 @@ FIRS = [
         },
         "accused_vehicle": "Unknown two-wheeler rider - left scene before details could be recorded",
         "statement": (
-            "The complainant states that on 02 June 2026 at approximately 19:05 hours he was "
+            "The complainant states that on 07 June 2026 at approximately 19:05 hours he was "
             "driving his Maruti Suzuki Swift Dzire bearing registration KA-01-MN-2345 on Outer "
             "Ring Road near Agara Junction. A two-wheeler abruptly changed lanes and brushed the "
             "front left side of the car, causing damage to the front bumper, grille and left "
@@ -106,9 +106,9 @@ FIRS = [
         "fir_no": "0276 / 2026",
         "district": "Hyderabad",
         "police_station": "Madhapur Police Station",
-        "date_filed": "02 June 2026",
+        "date_filed": "08 June 2026",
         "date_filed_time": "14:15 hrs",
-        "incident_date": "01 June 2026",
+        "incident_date": "07 June 2026",
         "incident_time": "12:35 hrs",
         "incident_location": "Near Cyber Towers, Hitec City, Hyderabad",
         "complainant": {
@@ -126,7 +126,7 @@ FIRS = [
         "accused_vehicle": "Public transport bus - route and registration not identified at time of filing",
         "statement": (
             "The complainant states that while proceeding slowly in traffic near Cyber Towers on "
-            "01 June 2026, a public transport bus moved from the adjoining lane and scraped the "
+            "07 June 2026, a public transport bus moved from the adjoining lane and scraped the "
             "right side of her Tata Nexon EV Max bearing AP-09-EF-3456. The vehicle sustained "
             "damage to the right front door, right rear door and ORVM. The bus continued ahead "
             "due to traffic congestion and could not be stopped immediately."
@@ -149,9 +149,9 @@ FIRS = [
         "fir_no": "0611 / 2026",
         "district": "Indore",
         "police_station": "Vijay Nagar Police Station",
-        "date_filed": "01 June 2026",
+        "date_filed": "08 June 2026",
         "date_filed_time": "09:20 hrs",
-        "incident_date": "31 May 2026",
+        "incident_date": "07 June 2026",
         "incident_time": "22:40 hrs",
         "incident_location": "AB Road service lane near C21 Mall, Indore",
         "complainant": {
@@ -170,7 +170,7 @@ FIRS = [
         "statement": (
             "The complainant states that his Mahindra Scorpio N bearing MP-09-RS-7890 was parked "
             "on the AB Road service lane near C21 Mall. On returning at approximately 22:40 hours "
-            "on 31 May 2026 he found the rear bumper, tailgate lower trim and left tail lamp "
+            "on 07 June 2026 he found the rear bumper, tailgate lower trim and left tail lamp "
             "damaged. A nearby shopkeeper stated that a goods carrier reversed into the parked "
             "vehicle and left without stopping."
         ),
@@ -337,9 +337,9 @@ FIRS = [
         "fir_no": "0378 / 2026",
         "district": "Kancheepuram",
         "police_station": "Perungudi Traffic Police Station",
-        "date_filed": "04 June 2026",
+        "date_filed": "08 June 2026",
         "date_filed_time": "17:45 hrs",
-        "incident_date": "03 June 2026",
+        "incident_date": "07 June 2026",
         "incident_time": "16:30 hrs",
         "incident_location": "Near Ramanujan IT City Parking, Perungudi, Chennai",
         "complainant": {
@@ -356,7 +356,7 @@ FIRS = [
         },
         "accused_vehicle": "Unidentified white hatchback, partial Tamil Nadu registration",
         "statement": (
-            "The complainant states that on 3rd June 2026 at approximately 16:30 hours his "
+            "The complainant states that on 7th June 2026 at approximately 16:30 hours his "
             "vehicle Hyundai Creta (DL-05-XY-9876) was parked in the designated parking area "
             "near Ramanujan IT City, Perungudi, Chennai. Upon returning from his office he "
             "noticed fresh damage to the tailgate and rear bumper of his vehicle consistent with "
@@ -377,15 +377,61 @@ FIRS = [
         "is_fraud": False,
     },
 
-    # ── 8. Rohit Verma — MISMATCH DEMO (incident June 1, filed June 2) ─────────
+    # ── 8. Aditya Nair (within 2 days — June 8 incident, filed June 9) ──────────
+    {
+        "filename": "Aditya_Nair_FIR.pdf",
+        "fir_no": "0512 / 2026",
+        "district": "Kancheepuram",
+        "police_station": "Perungudi Traffic Police Station",
+        "date_filed": "09 June 2026",
+        "date_filed_time": "11:30 hrs",
+        "incident_date": "08 June 2026",
+        "incident_time": "13:01 hrs",
+        "incident_location": "OMR Service Road, near Perungudi Signal, Chennai",
+        "complainant": {
+            "name": "Aditya Nair",
+            "father": "Suresh Nair",
+            "address": "Perungudi, Chennai - 600096",
+            "phone": "9567890123",
+            "occupation": "IT Professional",
+        },
+        "vehicle": {
+            "reg": "TN-12-AJ-1603",
+            "make": "Kia Seltos HTX Plus",
+            "colour": "Orange",
+        },
+        "accused_vehicle": "Unknown vehicle that braked suddenly — struck from behind after road obstacle",
+        "statement": (
+            "The complainant states that on 08 June 2026 at approximately 13:01 hours he was "
+            "driving his Kia Seltos HTX Plus bearing registration TN-12-AJ-1603 on the OMR "
+            "Service Road near Perungudi Signal, Chennai. There was a sudden obstacle on the road "
+            "causing the vehicle ahead to brake abruptly without warning. Unable to stop in time, "
+            "the complainant's vehicle collided with the vehicle in front, sustaining severe "
+            "damage to the front bumper, bonnet, grille, and both headlamp assemblies. No bodily "
+            "injury was reported. The complainant requests registration of FIR for insurance "
+            "purposes."
+        ),
+        "action": (
+            "Case registered under Section 279 IPC. Vehicle inspected at scene. "
+            "Damage photographs collected. Complainant produced RC, DL and insurance documents."
+        ),
+        "station_note": (
+            "Documents verified at station. Photographs attached for insurance claim reference. "
+            "Witness statement noted from bystander (name on record)."
+        ),
+        "officer": "Sub-Inspector Karunakaran P., Badge No. T-5512",
+        "is_fraud": False,
+    },
+
+    # ── 9. Rohit Verma — MISMATCH DEMO (incident June 1, filed June 2) ─────────
     {
         "filename": "Rohit_Verma_FIR_Mismatch_Demo.pdf",
         "fir_no": "0087 / 2026",
         "district": "Nagpur",
         "police_station": "Sitabuldi Police Station",
-        "date_filed": "02 June 2026",
+        "date_filed": "08 June 2026",
         "date_filed_time": "11:05 hrs",
-        "incident_date": "01 June 2026",
+        "incident_date": "07 June 2026",
         "incident_time": "20:10 hrs",
         "incident_location": "Ajni Square, Nagpur",
         "complainant": {
@@ -402,7 +448,7 @@ FIRS = [
         },
         "accused_vehicle": "Unknown car - no witness available at filing time",
         "statement": (
-            "The complainant states that on 1st June 2026 at approximately 20:10 hours his "
+            "The complainant states that on 7th June 2026 at approximately 20:10 hours his "
             "Hyundai Venue bearing MH-28-BQ-2255 was hit by an unknown car near Ajni Square. "
             "He reports damage to the front bumper, bonnet edge and right headlamp. The "
             "complainant filed this report for insurance purposes and stated that no injury occurred."
@@ -441,7 +487,7 @@ GARAGES = [
     {
         "filename": "Rajesh_Kumar_Garage_Estimate.pdf",
         "job_card": "JC-BLR-2026-4821",
-        "job_date": "04 June 2026",
+        "job_date": "09 June 2026",
         "workshop": {
             "name": "Vijayanagar Auto Works Pvt. Ltd.",
             "address": "No. 14, 2nd Cross, HSR Layout Sector 2, Bengaluru - 560102",
@@ -540,7 +586,7 @@ GARAGES = [
     {
         "filename": "Arjun_Mehta_Garage_Estimate.pdf",
         "job_card": "JC-CHN-2026-3301",
-        "job_date": "05 June 2026",
+        "job_date": "09 June 2026",
         "workshop": {
             "name": "Hyundai Exclusive Service - Perungudi",
             "address": "12-A, OMR Old Mahabalipuram Rd, Perungudi, Chennai - 600096",
@@ -570,7 +616,7 @@ GARAGES = [
     {
         "filename": "Rohit_Verma_Garage_Estimate.pdf",
         "job_card": "JC-NGP-2026-5521",
-        "job_date": "03 June 2026",
+        "job_date": "09 June 2026",
         "workshop": {
             "name": "Hyundai Authorised Service - Nagpur",
             "address": "Plot 12, MIDC Hingna Road, Nagpur - 440016",
