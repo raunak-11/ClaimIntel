@@ -48,8 +48,9 @@ export function useInvestigationSSE(claimId, onDone) {
       }
     }
     es.onerror = () => {
-      setInvestigating(false)
       es.close()
+      esRef.current = null
+      setInvestigating(false)
     }
   }, [claimId, onDone])
 

@@ -50,9 +50,10 @@ def get_claim(claim_id: str) -> Optional[dict]:
 
 def save_claim(claim_data: dict):
     _ensure_csv()
-    with open(CLAIMS_CSV, "a", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
-        writer.writerow({k: claim_data.get(k, "") for k in CSV_FIELDS})
+    with _csv_lock:
+        with open(CLAIMS_CSV, "a", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
+            writer.writerow({k: claim_data.get(k, "") for k in CSV_FIELDS})
 
 
 def update_claim_field(claim_id: str, field: str, value: str):

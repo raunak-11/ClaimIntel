@@ -74,7 +74,8 @@ def ask_text(prompt: str) -> str:
 
 def ask_with_images(prompt: str, image_paths: list[str]) -> str:
     content: list[dict] = [{"type": "text", "text": prompt}]
-    for path in image_paths:
+    for i, path in enumerate(image_paths):
+        content.append({"type": "text", "text": f"[Image {i}]"})
         b64, mime = _b64_image(path)
         content.append({
             "type": "image_url",

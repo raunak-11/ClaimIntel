@@ -1,5 +1,5 @@
 {
-  "claim_id": "CLM-2026-06-000006",
+  "claim_id": "CLM-2026-06-000004",
   "agents": {
     "damage_assessment": {
       "damage_present": true,
@@ -9,13 +9,13 @@
           "part": "bonnet",
           "severity": "Severe",
           "confidence": "High",
-          "visible_evidence": "deep crease and deformation across entire bonnet",
+          "visible_evidence": "crushed and deformed, partially detached",
           "bounding_box": {
             "image_index": 0,
             "x": 20.0,
             "y": 10.0,
             "w": 60.0,
-            "h": 30.0
+            "h": 20.0
           },
           "repair_type": "Replace",
           "repair_estimate_INR": {
@@ -28,7 +28,7 @@
           "part": "front_bumper",
           "severity": "Severe",
           "confidence": "High",
-          "visible_evidence": "broken and detached, hanging down",
+          "visible_evidence": "crushed, broken, and detached",
           "bounding_box": {
             "image_index": 0,
             "x": 15.0,
@@ -47,13 +47,13 @@
           "part": "headlight_left",
           "severity": "Severe",
           "confidence": "High",
-          "visible_evidence": "cracked and broken, lens missing",
+          "visible_evidence": "broken and detached",
           "bounding_box": {
             "image_index": 0,
             "x": 25.0,
-            "y": 35.0,
+            "y": 30.0,
             "w": 20.0,
-            "h": 25.0
+            "h": 20.0
           },
           "repair_type": "Replace",
           "repair_estimate_INR": {
@@ -66,12 +66,12 @@
           "part": "fender_left",
           "severity": "Moderate",
           "confidence": "High",
-          "visible_evidence": "dent and crease",
+          "visible_evidence": "dented and scratched",
           "bounding_box": {
-            "image_index": 0,
+            "image_index": 1,
             "x": 40.0,
             "y": 40.0,
-            "w": 15.0,
+            "w": 20.0,
             "h": 20.0
           },
           "repair_type": "Repair",
@@ -88,7 +88,7 @@
         "max": 44500
       },
       "consistent_with_description": "High",
-      "notes": "Images show extensive front-end damage consistent with a high-speed impact",
+      "notes": "The vehicle has significant front-end damage consistent with a high-speed collision.",
       "vehicle_match_in_image": "Yes",
       "vehicle_seen_description": "Hyundai Venue SX, white",
       "registration_plate_visible": true,
@@ -121,24 +121,23 @@
       }
     },
     "fraud_intelligence": {
-      "fraud_score": 42,
+      "fraud_score": 40,
       "fraud_label": "Medium",
       "indicators": [
         "NEW POLICY SYNDROME — MEDIUM RISK",
-        "Claim filed 7 days after incident",
-        "Multiple vehicles visible in claim images",
-        "Physics Mismatch [Damage Inconsistency]"
+        "Multiple vehicles visible in claim images — possible staged collision scenario",
+        "Physics Mismatch"
       ],
       "matched_schemes": [],
       "kb_references": [
-        "FI-POL-001",
-        "FS-002"
+        "FS-002",
+        "FI-POL-001"
       ],
-      "policy_age_days": 61,
+      "policy_age_days": 67,
       "nps_risk_level": "Medium",
       "status": "completed",
-      "summary": "Fraud Risk: 42% (Medium) | Top flag: NEW POLICY SYNDROME — MEDIUM RISK",
-      "fraud_score_base": 33,
+      "summary": "Fraud Risk: 40% (Medium) | Top flag: NEW POLICY SYNDROME — MEDIUM RISK",
+      "fraud_score_base": 25,
       "fraud_checks": [
         {
           "id": "FC-01",
@@ -162,7 +161,7 @@
           "category": "Policy Validity",
           "status": "pass",
           "severity": null,
-          "detail": "Incident date (2026-06-01) falls within the policy period (expires 2027-04-01)"
+          "detail": "Incident date (2026-06-07) falls within the policy period (expires 2027-04-01)"
         },
         {
           "id": "FC-04",
@@ -170,15 +169,15 @@
           "category": "Policy Validity",
           "status": "flag",
           "severity": "medium",
-          "detail": "NEW POLICY SYNDROME — MEDIUM RISK: Policy is 61 days old at incident (threshold: 31–90 days). Elevated scrutiny required (FI-POL-001)."
+          "detail": "NEW POLICY SYNDROME — MEDIUM RISK: Policy is 67 days old at incident (threshold: 31–90 days). Elevated scrutiny required (FI-POL-001)."
         },
         {
           "id": "FC-05",
           "name": "Reported within a reasonable window",
           "category": "Timing & Reporting",
-          "status": "flag",
-          "severity": "low",
-          "detail": "Claim filed 7 days after incident — borderline late reporting"
+          "status": "pass",
+          "severity": null,
+          "detail": "Claim filed 3 day(s) after the incident — timely reporting"
         },
         {
           "id": "FC-06",
@@ -186,7 +185,7 @@
           "category": "Timing & Reporting",
           "status": "pass",
           "severity": null,
-          "detail": "Incident at 20:12 — within normal daytime hours"
+          "detail": "Incident at 20:10 — within normal daytime hours"
         },
         {
           "id": "FC-07",
@@ -306,7 +305,7 @@
           "category": "Documents (FIR / Estimate)",
           "status": "pass",
           "severity": null,
-          "detail": "FIR incident date (2026-06-01) matches the claim date"
+          "detail": "FIR incident date (2026-06-07) matches the claim date"
         },
         {
           "id": "FC-22",
@@ -335,8 +334,8 @@
       ],
       "fraud_checks_summary": {
         "total": 24,
-        "passed": 17,
-        "flagged": 3,
+        "passed": 18,
+        "flagged": 2,
         "na": 4,
         "evaluated": 20
       }
@@ -344,36 +343,36 @@
     "incident_reconstruction": {
       "collision_type": "Front impact",
       "impact_direction": "Direct frontal impact",
-      "reconstruction": "The vehicle was involved in a head-on collision with another vehicle, likely traveling in the opposite direction. The front-end damage is consistent with a high-speed impact. The airbag likely deployed given the severity of the damage.",
+      "reconstruction": "The vehicle was involved in a head-on collision with another vehicle or object. The damage pattern indicates a severe frontal impact, likely at a significant speed.",
       "reconstruction_bullets": [
-        "Severe damage to the front bumper, bonnet, and headlights indicates a high-energy impact.",
-        "The damage pattern suggests a direct frontal collision with another vehicle or object.",
-        "The described incident of a vehicle coming from the wrong side and hitting the claimant's vehicle matches the observed damage."
+        "The front bumper, bonnet, and headlights of the vehicle are severely damaged, indicating a high-energy impact.",
+        "The airbag appears to have deployed, suggesting a significant collision force.",
+        "The damage pattern is consistent with a head-on collision scenario as described in the claim."
       ],
       "storyboard_panels": [
         {
           "panel": 1,
           "title": "Pre-Incident",
           "emoji": "🚗",
-          "description": "The Hyundai Venue SX was traveling on a road when it was struck by an oncoming vehicle."
+          "description": "The vehicle was being driven on the road when a wrong-side vehicle entered its lane."
         },
         {
           "panel": 2,
           "title": "Point of Impact",
           "emoji": "💥",
-          "description": "The oncoming vehicle hit the Hyundai Venue SX directly on the front end, causing severe damage."
+          "description": "The wrong-side vehicle collided with the claimant's vehicle, causing severe front-end damage."
         },
         {
           "panel": 3,
           "title": "Immediate Aftermath",
           "emoji": "🔧",
-          "description": "The vehicle was severely damaged, with the front bumper, bonnet, and headlights destroyed. The airbag likely deployed."
+          "description": "The vehicles came to a stop, and the driver assessed the damage."
         },
         {
           "panel": 4,
           "title": "Evidence Summary",
           "emoji": "🔍",
-          "description": "The physical evidence supports the claimant's story of a head-on collision with a vehicle from the wrong side."
+          "description": "The physical evidence, including severe front-end damage and airbag deployment, supports the claim of a head-on collision."
         }
       ],
       "damage_matches_story": true,
@@ -393,29 +392,29 @@
         "lat": 21.1498134,
         "lon": 79.0820556
       },
-      "weather": "Scattered Clouds, 41.75°C, Humidity: 19%, Visibility: 10000m",
+      "weather": "Overcast Clouds, 36.12°C, Humidity: 32%, Visibility: 10000m",
       "policy_coverage_note": "No obvious coverage exclusions detected from policy document",
       "policy_document_excerpt": "— POLICY DOCUMENT — POL-889900]\n145\nCOVERAGE DETAILS & CONDITIONS\n  OWN DAMAGE COVERAGE (Section I)\nAccidental Damage\nUp to IDV (Rs. 1,600,000) after deductibles\nFire and Exp\n  THIRD PARTY LIABILITY (Section II - Mandatory)\nThird Party Bodily Injury\nUnlimited as per Motor Vehicles Act, 1988\nThird Pa...",
-      "summary": "Weather: Scattered Clouds, 41.75°C, Humidity: 19%, Visibility: 10000m | Location: Verified ✓ | Policy: No obvious coverage exclusions detected from policy document"
+      "summary": "Weather: Overcast Clouds, 36.12°C, Humidity: 32%, Visibility: 10000m | Location: Verified ✓ | Policy: No obvious coverage exclusions detected from policy document"
     },
     "settlement_recommendation": {
       "decision": "Escalate",
       "recommended_settlement": 0,
       "confidence": 80,
       "decision_reasons": [
-        "Fraud score of 42 exceeds the Approve threshold of 40, indicating a Medium risk",
-        "Claim filed 7 days after incident, which is an indicator of potential fraud (NEW POLICY SYNDROME — MEDIUM RISK)",
-        "Physics Mismatch [Damage Inconsistency] detected, which raises concerns about the claim's validity",
-        "Multiple vehicles visible in claim images, which may indicate a staged accident"
+        "Fraud score of 40 exceeds the Approve threshold of less than 40, indicating a Medium risk",
+        "NEW POLICY SYNDROME — MEDIUM RISK indicator is present, suggesting potential for abuse",
+        "Multiple vehicles visible in claim images, raising the possibility of a staged collision scenario",
+        "Physics Mismatch indicator is present, which may indicate inconsistency in the incident description"
       ],
       "reasoning_trail": [
-        "Step 1: Damage Assessment indicates severe front-end damage consistent with a high-speed impact",
-        "Step 2: Fraud Intelligence reveals a Medium risk fraud score of 42 with indicators of new policy syndrome and physics mismatch",
-        "Step 3: Incident Reconstruction confirms the collision type as front impact with a confidence level of 85%",
-        "Step 4: Context & Policy verification confirms the location and policy coverage with no obvious exclusions",
-        "Step 5: Historical Precedents do not provide a direct match, but the fraud score and indicators warrant escalation",
-        "Step 6: Settlement Calculation is not applicable due to the escalation decision",
-        "Step 7: Final Decision is to escalate the claim for further investigation due to the Medium risk fraud score and inconsistent indicators"
+        "Step 1: Damage Assessment indicates severe front-end damage consistent with a high-speed collision",
+        "Step 2: Fraud Intelligence reveals a Medium risk fraud score of 40 with indicators of NEW POLICY SYNDROME and possible staged collision",
+        "Step 3: Incident Reconstruction confirms the collision type as front impact with a confidence of 85%",
+        "Step 4: Context & Policy verification confirms the location and no obvious coverage exclusions",
+        "Step 5: Historical Precedents do not provide a direct match, but the fraud score and indicators suggest escalation",
+        "Step 6: Settlement Calculation is not applicable due to escalation decision",
+        "Step 7: Final Decision is to Escalate the claim for further investigation"
       ],
       "kb_precedents_applied": [],
       "deductibles_applied": 1000,
@@ -457,7 +456,7 @@
     }
   },
   "summary": {
-    "fraud_risk_score": 42,
+    "fraud_risk_score": 40,
     "fraud_risk_label": "Medium",
     "damage_consistency": "High",
     "incident_consistency": "High",
@@ -508,13 +507,5 @@
       "gate_passed": true,
       "resubmit_recommended": false
     }
-  },
-  "adjuster_decision": {
-    "decision": "Approve",
-    "adjuster": "Raunak",
-    "reason": "fir is attached which is genuine, so can be approved and settled",
-    "ai_decision": "Escalate",
-    "overridden": true,
-    "timestamp": "2026-06-08 06:40"
   }
 }

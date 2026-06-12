@@ -92,7 +92,9 @@ export default function ClaimsQueue() {
                       <td className="px-4 py-3 text-slate-300 whitespace-nowrap">
                         {amount > 0
                           ? `₹${amount.toLocaleString('en-IN')}`
-                          : <span className="text-slate-600 italic text-xs">Pending AI</span>}
+                          : c.decision
+                            ? <span className="text-slate-400 text-xs">₹0</span>
+                            : <span className="text-slate-600 italic text-xs">Pending AI</span>}
                       </td>
                       <td className="px-4 py-3">
                         {c.decision
