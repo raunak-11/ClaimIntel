@@ -5,7 +5,7 @@ from PIL import Image, ExifTags
 
 import storage
 from agents.base_agent import BaseAgent
-from services import forensics_detector
+from services import assessment_cache, forensics_detector
 from services.llm_client import ask_json
 from services.prompt_guards import IMAGE_INJECTION_DEFENSE
 from services.settlement_calc import (
@@ -293,9 +293,33 @@ class DamageAssessmentAgent(BaseAgent):
                 estimate_items=estimate_items_text,
             )
         )
-        result = ask_json(prompt, image_paths if image_paths else None,
-                          agent_name="damage_assessment", claim_id=claim["claim_id"])
+        # ── Reproducibility ───────────────────────────────────────────────────
+        # Identical evidence must produce an identical assessment. A hosted MoE
+        # vision model cannot be made bit-deterministic client-side (no seed on
+        # Bedrock Converse, and expert routing varies under batching even at
+        # temperature 0), so the assessment is keyed on its own inputs and
+        # replayed. Change a photo or an estimate line and the key changes, so a
+        # fresh read happens automatically — there is no stale-cache trap.
+        cache_key = assessment_cache.compute_key(claim, image_paths, claimed_lines)
+        force_fresh = bool(context.get("force_fresh_assessment"))
+        cached = None if force_fresh else assessment_cache.load(claim["claim_id"], cache_key)
+
+        if cached is not None:
+            result = cached
+            result["assessment_source"] = "cached"
+        else:
+            result = ask_json(prompt, image_paths if image_paths else None,
+                              agent_name="damage_assessment", claim_id=claim["claim_id"])
+            result.setdefault("status", "completed")
+            # Store the RAW model output, before the merge/guard/pricing passes
+            # below — those are deterministic given this input, so replaying the
+            # raw read reproduces everything downstream while still letting a
+            # refreshed part price flow through.
+            assessment_cache.save(claim["claim_id"], cache_key, result)
+            result["assessment_source"] = "fresh"
+
         result.setdefault("status", "completed")
+        result["assessment_key"] = cache_key
 
         verifications = result.get("claimed_part_verifications")
         if not isinstance(verifications, list):

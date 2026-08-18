@@ -107,6 +107,43 @@ _ALIASES = {
     "wheel": "alloy_wheel",
     "front_grille": "grille",
     "radiator_grille": "grille",
+    # ── Naming-drift collapses (determinism) ─────────────────────────────────
+    # The vision model names the same component differently between runs. One
+    # real claim's price cache accumulated 22 distinct part names for 6 claimed
+    # parts — three for the bonnet latch alone. Every distinct name is a separate
+    # cache key, a separate lookup and a different price, so the drift shows up
+    # directly as a moving assessed value. Collapsing the synonyms is the
+    # cheapest real determinism win available.
+    "front_fender_left": "fender_left",
+    "front_fender_right": "fender_right",
+    "rear_fender_left": "quarter_panel_left",
+    "rear_fender_right": "quarter_panel_right",
+    "hood_latch_area": "hood_latch",
+    "hood_latch_mechanism": "hood_latch",
+    "bonnet_latch": "hood_latch",
+    "front_bumper_reinforcer": "bumper_reinforcer",
+    "rear_bumper_reinforcer": "bumper_reinforcer",
+    "bumper_bracket_left": "bumper_reinforcer",
+    "bumper_bracket_right": "bumper_reinforcer",
+    "right_foglamp": "foglight_right",
+    "left_foglamp": "foglight_left",
+    "front_foglamp_right": "foglight_right",
+    "front_foglamp_left": "foglight_left",
+    "right_foglamp_housing": "foglight_right",
+    "left_foglamp_housing": "foglight_left",
+    "foglamp_right": "foglight_right",
+    "foglamp_left": "foglight_left",
+    "right_side_mirror_housing": "side_mirror_right",
+    "left_side_mirror_housing": "side_mirror_left",
+    "right_side_mirror": "side_mirror_right",
+    "left_side_mirror": "side_mirror_left",
+    "headlight_bracket_left": "headlight_left",
+    "headlight_bracket_right": "headlight_right",
+    "front_windscreen": "windshield_front",
+    "front_suspension_left": "front_suspension",
+    "front_suspension_right": "front_suspension",
+    "rear_suspension_left": "rear_suspension",
+    "rear_suspension_right": "rear_suspension",
     "rocker_panel": "sill_panel",
     "radiator_assembly": "radiator",
     "radiator_core": "radiator",
