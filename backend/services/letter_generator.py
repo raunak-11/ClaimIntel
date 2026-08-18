@@ -148,16 +148,49 @@ def draft_decision_letter(claim: dict, result: dict, policy: Optional[dict]) -> 
     # Breakdown block
     bd = summary.get("settlement_breakdown") or settlement_agent.get("settlement_breakdown") or {}
     if bd and decision == "Approve":
-        # depreciation_pct is the effective rate on parts and may carry a decimal
-        # (a mix of glass at 0% and metal at the age slab rarely lands on a whole
-        # number) — trim a bare ".0" so a customer letter never reads "35.0%".
-        dep_pct = f"{float(bd.get('depreciation_pct') or 0):g}"
-        breakdown_str = (
-            f"Repair estimate {_inr(bd.get('repair_estimate'))} (GST included); "
-            f"less depreciation {_inr(bd.get('depreciation'))} ({dep_pct}% on parts); "
-            f"less compulsory deductible {_inr(bd.get('compulsory_deductible'))}; "
-            f"net payable {_inr(bd.get('net_payable'))}."
-        )
+        # Assembled from the lines that actually apply, rather than a fixed
+        # four-part sentence that silently omitted the voluntary deductible,
+        # salvage, consumables and the total-loss basis.
+        parts: list[str] = []
+        if bd.get("is_total_loss"):
+            parts.append(
+                f"Your vehicle is a constructive total loss, so the claim is settled on the "
+                f"Insured Declared Value of {_inr(bd.get('repair_estimate'))}")
+        else:
+            parts.append(f"Repair estimate {_inr(bd.get('repair_estimate'))} (GST included)")
+
+        if bd.get("zero_dep_applied"):
+            # Say what the add-on saved them — it is why they paid for it.
+            parts.append(
+                f"your Zero Depreciation add-on waived "
+                f"{_inr(bd.get('depreciation_waived_inr'))} of parts depreciation"
+                + (f"; remaining depreciation {_inr(bd.get('depreciation'))} applies to tyres, "
+                   f"tubes and batteries, which the add-on excludes"
+                   if bd.get("depreciation") else ""))
+        elif bd.get("depreciation"):
+            dep_pct = f"{float(bd.get('depreciation_pct') or 0):g}"
+            parts.append(f"less depreciation {_inr(bd.get('depreciation'))} ({dep_pct}% on parts)")
+
+        parts.append(f"less compulsory deductible {_inr(bd.get('compulsory_deductible'))}")
+        if bd.get("voluntary_deductible"):
+            parts.append(f"less the voluntary deductible you chose "
+                         f"{_inr(bd.get('voluntary_deductible'))}")
+        if bd.get("consumables_excluded"):
+            parts.append(f"less consumables {_inr(bd.get('consumables_excluded'))}, which a "
+                         f"standard policy does not cover")
+        elif bd.get("consumables_covered"):
+            parts.append("consumables are covered by your add-on and have been included")
+
+        # A material consequence the customer would otherwise not learn until
+        # they asked where their car went.
+        if bd.get("is_total_loss") and bd.get("salvage_retained_by") == "insurer":
+            parts.append("the vehicle is retained by the insurer, and no salvage amount has "
+                         "been deducted from your settlement")
+        elif bd.get("salvage_value"):
+            parts.append(f"less salvage {_inr(bd.get('salvage_value'))}, as you retain the vehicle")
+
+        parts.append(f"net payable {_inr(bd.get('net_payable'))}")
+        breakdown_str = "; ".join(parts) + "."
     else:
         breakdown_str = "Not applicable for this decision."
 

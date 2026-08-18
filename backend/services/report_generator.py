@@ -534,18 +534,23 @@ def generate_claim_report(claim: dict, result: dict) -> bytes:
     for label, val in checks:
         pdf.set_x(right_x)
         rgb  = RISK_COLOR.get(val, C_MUTED)
-        icon = CHECK_ICON.get(val, "—")
+        # The default was an em-dash used RAW in pdf.cell() — fpdf2's core fonts
+        # are Latin-1 only, so any verdict outside CHECK_ICON raised
+        # FPDFUnicodeEncodingException and the download 500'd. A gate-rejected
+        # claim reports "Not assessed" for all four rows, so downloading its
+        # report crashed every time. ASCII default AND _s() on every raw cell.
+        icon = CHECK_ICON.get(val, "N/A")
         pdf.set_font("Helvetica", "", 7.5)
         pdf.set_text_color(*C_MUTED)
-        pdf.cell(col_w * 0.58, 5.5, label)
+        pdf.cell(col_w * 0.58, 5.5, _s(label))
         pdf.set_fill_color(*rgb)
         pdf.set_text_color(*C_WHITE)
         pdf.set_font("Helvetica", "B", 7)
-        pdf.cell(14, 5.5, icon, fill=True, align="C")
+        pdf.cell(14, 5.5, _s(icon), fill=True, align="C")
         pdf.set_fill_color(*C_WHITE)
         pdf.set_font("Helvetica", "", 7.5)
         pdf.set_text_color(*rgb)
-        pdf.cell(0, 5.5, f"  {val or 'Unknown'}", new_x="LEFT", new_y="NEXT")
+        pdf.cell(0, 5.5, _s(f"  {val or 'Unknown'}"), new_x="LEFT", new_y="NEXT")
         pdf.set_text_color(*C_DARK)
 
     # ── Claim description ─────────────────────────────────────────────────────
@@ -556,6 +561,43 @@ def generate_claim_report(claim: dict, result: dict) -> bytes:
     desc = _s(claim.get("description", "No description provided."))
     pdf.multi_cell(0, 5.5, f'"{desc}"', new_x="LMARGIN", new_y="NEXT")
     pdf.ln(2)
+
+    # ── Eligibility & Coverage Screen ─────────────────────────────────────────
+    # Without this, a claim stopped at the gate downloaded a report with three
+    # pages of empty agent sections and no statement of WHY it was refused —
+    # the one thing such a report exists to record.
+    gate = agents.get("eligibility_screen") or summary.get("eligibility_screen") or {}
+    if gate:
+        _section_header(pdf, "Eligibility & Coverage Screen")
+        _eligible = gate.get("eligible")
+        _rows = [
+            ("Policy", _s(gate.get("policy_no") or claim.get("policy_no") or "-")),
+            ("Scope of cover", _s(gate.get("coverage_label")
+                                  or gate.get("coverage_type") or "Not stated")),
+            ("Claim type", _s(gate.get("claim_kind_label") or claim.get("claim_type") or "-")),
+            ("Policy period", _s(f"{gate.get('policy_start') or '?'} to "
+                                 f"{gate.get('policy_end') or '?'}")),
+            ("Verdict", "ELIGIBLE - investigation proceeded" if _eligible
+                        else "NOT ELIGIBLE - pipeline not run"),
+        ]
+        if gate.get("add_ons_applied"):
+            _rows.insert(2, ("Add-ons", ", ".join(gate["add_ons_applied"])))
+        for _i, (_l, _v) in enumerate(_rows):
+            _kv_row(pdf, _l, _v, alt=(_i % 2 == 0))
+
+        if not _eligible and gate.get("coverage_note"):
+            pdf.ln(1)
+            pdf.set_font("Helvetica", "I", 8)
+            pdf.set_text_color(*C_REJECT)
+            pdf.multi_cell(0, 4.6, _s(gate["coverage_note"]), new_x="LMARGIN", new_y="NEXT")
+            pdf.set_text_color(*C_DARK)
+        for _adv in (gate.get("coverage_advisories") or []):
+            pdf.ln(0.5)
+            pdf.set_font("Helvetica", "I", 7.5)
+            pdf.set_text_color(*C_ESCALATE)
+            pdf.multi_cell(0, 4.4, _s(_adv), new_x="LMARGIN", new_y="NEXT")
+            pdf.set_text_color(*C_DARK)
+        pdf.ln(2)
 
     # ══════════════════════════════════════════════════════════════════════════
     # PAGE 2 — Agent Findings
@@ -861,31 +903,54 @@ def generate_claim_report(claim: dict, result: dict) -> bytes:
         cap = bd.get("inflation_cap_applied")
         is_tl = bd.get("is_total_loss")
 
-        # Repair basis row — label reflects total-loss / inflation-cap state
+        # Rows are ASSEMBLED first, then emitted with index-driven striping.
+        # The zebra `alt=` flag used to be hand-alternated, so inserting a
+        # conditional row meant re-checking the parity of every row below it —
+        # a standing trap for anyone adding a line. This is less code and the
+        # trap is gone permanently.
         if is_tl:
             basis_label = "IDV (sum insured)"
         elif cap:
             basis_label = "AI Assessed Value (inflation cap applied)"
         else:
             basis_label = "Repair Estimate (garage)"
-        _kv_row(pdf, basis_label, _inr(bd.get("repair_estimate")), alt=True)
+
+        rows: list[tuple[str, str]] = [(basis_label, _inr(bd.get("repair_estimate")))]
 
         if cap:
-            _kv_row(pdf,
-                    "Garage quote (capped)",
-                    f"{_inr(bd.get('amount_claimed'))}  -  {_inr(bd.get('disallowed_inflation'))} disallowed (leakage prevented)")
-
+            rows.append(("Garage quote (capped)",
+                         f"{_inr(bd.get('amount_claimed'))}  -  "
+                         f"{_inr(bd.get('disallowed_inflation'))} disallowed (leakage prevented)"))
+        if bd.get("add_ons_applied"):
+            rows.append(("Add-ons applied", ", ".join(bd["add_ons_applied"])))
         if not is_tl:
-            _kv_row(pdf, f"Less: Depreciation ({_pct(bd.get('depreciation_pct'))})",
-                    f"- {_inr(bd.get('depreciation'))}", alt=True)
-        _kv_row(pdf, "Less: Compulsory deductible", f"- {_inr(bd.get('compulsory_deductible'))}")
+            dep_label = f"Less: Depreciation ({_pct(bd.get('depreciation_pct'))} on parts)"
+            dep_value = f"- {_inr(bd.get('depreciation'))}"
+            if bd.get("zero_dep_applied"):
+                dep_value += f"   [Zero-Dep waived {_inr(bd.get('depreciation_waived_inr'))}]"
+            rows.append((dep_label, dep_value))
+        rows.append(("Less: Compulsory deductible", f"- {_inr(bd.get('compulsory_deductible'))}"))
         if bd.get("voluntary_deductible"):
-            _kv_row(pdf, "Less: Voluntary deductible", f"- {_inr(bd.get('voluntary_deductible'))}", alt=True)
-        if bd.get("salvage_value"):
-            _kv_row(pdf, "Less: Salvage value", f"- {_inr(bd.get('salvage_value'))}")
+            rows.append(("Less: Voluntary deductible", f"- {_inr(bd.get('voluntary_deductible'))}"))
+        if bd.get("consumables_excluded"):
+            rows.append(("Less: Consumables (not covered)",
+                         f"- {_inr(bd.get('consumables_excluded'))}"))
+        elif bd.get("consumables_covered"):
+            rows.append(("Consumables", "Payable under the Consumables Cover add-on"))
+        # Salvage prints on EVERY total loss, including at zero — otherwise the
+        # retention DECISION is invisible in the audit document.
+        if is_tl:
+            retention = bd.get("salvage_retained_by")
+            rows.append((
+                "Salvage",
+                f"- {_inr(bd.get('salvage_value'))}" if bd.get("salvage_value")
+                else f"{_inr(0)} (wreck retained by the {retention or 'insurer'})"))
         if bd.get("gst_included"):
-            _kv_row(pdf, f"GST ({_pct(bd.get('gst_rate_pct'))}, incl. in repair total)",
-                    _inr(bd.get("gst_included")), alt=True)
+            rows.append((f"GST ({_pct(bd.get('gst_rate_pct'))}, incl. in repair total)",
+                         _inr(bd.get("gst_included"))))
+
+        for _i, (_label, _value) in enumerate(rows):
+            _kv_row(pdf, _label, _value, alt=(_i % 2 == 0))
 
         # Net payable — emphasised in the decision colour
         pdf.set_fill_color(*C_ROW_ALT)
