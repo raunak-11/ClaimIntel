@@ -1,5 +1,5 @@
 import { Card, KeyValue, Divider } from '../ui'
-import { inr } from '../ui/tokens'
+import { addOnLabels, inr } from '../ui/tokens'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -91,6 +91,16 @@ export default function ClaimOverview({ claim, policy }) {
           <Divider className="my-4" />
           <p className="text-[11px] text-faint uppercase tracking-wider font-semibold mb-2">Policy Coverage</p>
           <div className="grid grid-cols-2 gap-2">
+            {/* Scope of cover. Shown on the New Claim screen since day one, but
+                nothing enforced it — a Third Party policy could be paid an
+                own-damage settlement. The gate enforces it now; this is where
+                the adjudicator sees WHY a claim was refused. */}
+            <KeyValue
+              label="Coverage"
+              value={policy.coverage_type || '—'}
+              tone={/third|tp|act|liability/i.test(policy.coverage_type || '') ? 'warning' : 'success'}
+            />
+            <KeyValue label="Add-ons" value={addOnLabels(policy.add_ons) || 'None'} />
             <KeyValue label="Policy Start" value={fmtDate(policy.policy_start)} />
             <KeyValue label="Policy End" value={fmtDate(policy.policy_end)} />
             <KeyValue label="Annual Premium" value={inr(policy.annual_premium)} />

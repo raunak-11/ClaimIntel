@@ -1,6 +1,7 @@
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
 import SettlementBreakdown from './SettlementBreakdown'
-import { Panel } from '../ui'
+import ClaimTimeline from './ClaimTimeline'
+import { Badge, Panel } from '../ui'
 import { fraudHex } from '../ui/tokens'
 
 // Replaces the old InvestigationSummary panel. That panel repeated four
@@ -43,12 +44,18 @@ function FraudDonut({ score, label, confidence }) {
   )
 }
 
-export default function RiskAndSettlement({ summary, settlement }) {
+export default function RiskAndSettlement({ summary, settlement, timeline }) {
   const score = summary?.fraud_risk_score ?? null
   const breakdown = summary?.settlement_breakdown || settlement?.settlement_breakdown
+  const breaches = timeline?.breach_count || 0
 
   return (
-    <Panel title="Risk & Settlement">
+    <Panel
+      title="Risk & Settlement"
+      action={breaches > 0
+        ? <Badge tone="danger" size="sm" dot>{breaches} SLA breach{breaches > 1 ? 'es' : ''}</Badge>
+        : null}
+    >
       <FraudDonut
         score={score}
         label={summary?.fraud_risk_label}
@@ -66,6 +73,10 @@ export default function RiskAndSettlement({ summary, settlement }) {
           </p>
         )}
       </div>
+
+      {/* The claim's service clock. Sits here rather than in its own panel
+          because it belongs beside the money the adjudicator is signing off. */}
+      <ClaimTimeline timeline={timeline} />
     </Panel>
   )
 }

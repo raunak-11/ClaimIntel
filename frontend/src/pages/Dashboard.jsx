@@ -91,6 +91,7 @@ export default function Dashboard() {
   const { claimId } = useParams()
   const [claim, setClaim] = useState(null)
   const [policy, setPolicy] = useState(null)
+  const [timeline, setTimeline] = useState(null)
   const [result, setResult] = useState(null)
   const [imageUrls, setImageUrls] = useState([])
   const [claimDocs, setClaimDocs] = useState(undefined)
@@ -102,6 +103,9 @@ export default function Dashboard() {
       .then((r) => {
         setClaim(r.data.claim)
         setResult(r.data.result)
+        // The SLA clock moves during an investigation (the report timestamp is
+        // written at the end), so it must refresh with the rest of the result.
+        setTimeline(r.data.timeline)
         if (r.data.policy) setPolicy(r.data.policy)
       })
       .catch(() => {})
@@ -124,6 +128,7 @@ export default function Dashboard() {
     ])
       .then(([claimRes, imgRes, docsRes]) => {
         setClaim(claimRes.data.claim)
+        setTimeline(claimRes.data.timeline)
         setResult(claimRes.data.result)
         if (claimRes.data.policy) setPolicy(claimRes.data.policy)
         setImageUrls(imgRes.data.images || [])
@@ -197,7 +202,7 @@ export default function Dashboard() {
           streamLost={streamLost}
           hasResult={hasResult}
         />
-        <RiskAndSettlement summary={summary} settlement={settlement} />
+        <RiskAndSettlement summary={summary} settlement={settlement} timeline={timeline} />
       </div>
 
       {/* Storyboard */}

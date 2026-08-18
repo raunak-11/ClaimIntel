@@ -257,7 +257,8 @@ function DocumentsTab({ claimDocs, agents }) {
 }
 
 // ── Assessed fair value breakdown ─────────────────────────────────────────────
-function FairValueBreakdown({ fv, undeclaredParts, unverifiedParts, scopeMismatches }) {
+function FairValueBreakdown({ fv, undeclaredParts, unverifiedParts, scopeMismatches,
+                             claimedButUndamaged, lowConfidence }) {
   if (!fv) return null
   const m = fv.matched || {}
   const u = fv.undeclared || {}
@@ -301,6 +302,25 @@ function FairValueBreakdown({ fv, undeclaredParts, unverifiedParts, scopeMismatc
       {(scopeMismatches || []).length > 0 && (
         <p className="text-[11px] text-danger-600 mt-2">
           Scope mismatch: {scopeMismatches.map((sm) => `${(sm.part || '').replace(/_/g, ' ')} (claimed ${sm.claimed_action}, assessed ${sm.assessed_action})`).join('; ')}.
+        </p>
+      )}
+
+      {/* A STRONGER over-claim signal than "unverified": the photo exists and
+          shows the part is undamaged. It was counted in FC-31's denominator and
+          then named nowhere — not here, not in the PDF. Hence `danger`. */}
+      {(claimedButUndamaged || []).length > 0 && (
+        <p className="text-[11px] text-danger-600 mt-2">
+          Claimed but undamaged: {claimedButUndamaged.map((p) => (p.part || '').replace(/_/g, ' ')).join(', ')} — the estimate bills these, but the submitted photos show the parts and they are not damaged. Not priced, not paid.
+        </p>
+      )}
+
+      {/* Advisory, not an accusation — hence `faint`. These were quarantined
+          below the model's confidence floor, so they are neither drawn on the
+          photos nor priced; the docstring promised they were "kept for the
+          adjuster" and until now no adjuster could see them. */}
+      {(lowConfidence || []).length > 0 && (
+        <p className="text-[11px] text-faint mt-2">
+          Low-confidence observations: {lowConfidence.map((p) => (p.part || '').replace(/_/g, ' ')).join(', ')} — flagged by the vision model below its confidence floor, so they are neither annotated on the photos nor priced. Listed for the adjuster only.
         </p>
       )}
 
@@ -473,6 +493,8 @@ export default function EvidencePanel({ imageUrls, agents, settlement, onDeleteI
             undeclaredParts={damageAgent?.undeclared_parts}
             unverifiedParts={damageAgent?.unverified_parts}
             scopeMismatches={damageAgent?.scope_mismatches}
+            claimedButUndamaged={damageAgent?.claimed_but_undamaged}
+            lowConfidence={damageAgent?.low_confidence_observations}
           />
           <LabourAssessment labour={damageAgent?.labour_assessment} />
           <KBSources settlement={settlement} fraudAgent={fraudAgent} />

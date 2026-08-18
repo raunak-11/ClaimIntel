@@ -105,3 +105,24 @@ export const CHART = {
 export const PIE_COLORS = [CHART.brand, CHART.success, CHART.warning, CHART.danger, CHART.violet, CHART.cyan]
 export const DECISION_HEX = { Approve: '#16a34a', Escalate: '#f59e0b', Reject: '#dc2626' }
 export const FRAUD_LEVEL_HEX = { Low: '#16a34a', Medium: '#f59e0b', High: '#dc2626' }
+
+// Add-on display labels. Mirrors services/coverage.ADD_ON_LABELS — one place,
+// so the UI, the PDF report and the customer letter cannot drift apart.
+// Vocabulary is deliberately small: only tokens with real settlement maths.
+export const ADD_ON_LABELS = {
+  zero_dep: 'Zero Depreciation',
+  consumables: 'Consumables Cover',
+  ncb_protect: 'NCB Protect',
+}
+
+/** Semicolon-delimited token list (or an array) -> "Zero Depreciation · NCB Protect". */
+export function addOnLabels(addOns) {
+  const raw = Array.isArray(addOns)
+    ? addOns
+    : String(addOns || '').split(/[;,|]/)
+  const seen = raw.map((t) => String(t).trim().toLowerCase()).filter(Boolean)
+  return Object.keys(ADD_ON_LABELS)
+    .filter((k) => seen.includes(k))
+    .map((k) => ADD_ON_LABELS[k])
+    .join(' · ')
+}

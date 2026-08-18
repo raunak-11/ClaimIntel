@@ -149,6 +149,12 @@ export default function SettlementBreakdown({ breakdown }) {
 
       {open && (
         <div className="px-3.5 pb-3.5">
+          {/* A liability claim has no own-damage ledger to show. Rendering rows
+              of zero would imply we costed something we deliberately did not. */}
+          {breakdown.third_party_liability ? (
+            <Notice tone="info" title="Third-Party Liability Claim">{breakdown.assumptions}</Notice>
+          ) : (
+          <>
           {breakdown.is_total_loss && (
             <Notice tone="danger" title="Constructive Total Loss">{breakdown.total_loss_note}</Notice>
           )}
@@ -159,11 +165,22 @@ export default function SettlementBreakdown({ breakdown }) {
             <Notice tone="info" title="Below-Market Advisory">{breakdown.underclaim_advisory}</Notice>
           )}
 
-          <div className="flex items-center justify-between mb-1.5">
+          {breakdown.consumables_covered && (
+            <Notice tone="info" title="Consumables Cover">{breakdown.consumables_note}</Notice>
+          )}
+
+          <div className="flex items-center justify-between mb-1.5 gap-2 flex-wrap">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-faint">Settlement Calculation</span>
-            {breakdown.settlement_basis && (
-              <span className="text-[10px] text-brand-600 font-medium">Basis: {breakdown.settlement_basis}</span>
-            )}
+            <span className="flex items-center gap-2">
+              {breakdown.add_ons_applied?.length > 0 && (
+                <span className="text-[10px] text-success-600 font-medium">
+                  Add-ons: {breakdown.add_ons_applied.join(' · ')}
+                </span>
+              )}
+              {breakdown.settlement_basis && (
+                <span className="text-[10px] text-brand-600 font-medium">Basis: {breakdown.settlement_basis}</span>
+              )}
+            </span>
           </div>
 
           <Row
@@ -184,7 +201,16 @@ export default function SettlementBreakdown({ breakdown }) {
 
           {!breakdown.is_total_loss && (
             <Row
-              label="Depreciation (parts)"
+              label={
+                <>
+                  Depreciation (parts)
+                  {breakdown.zero_dep_applied && (
+                    <span className="ml-1.5 inline-flex items-center rounded-full border border-success-100 bg-success-50 px-1.5 py-0.5 text-[9px] font-semibold text-success-700 align-middle">
+                      Zero-Dep waived
+                    </span>
+                  )}
+                </>
+              }
               sub={breakdown.depreciation_note || `${breakdown.depreciation_pct}% · vehicle age ~${breakdown.vehicle_age_years} yr`}
               value={breakdown.depreciation}
               sign="-"
@@ -193,17 +219,47 @@ export default function SettlementBreakdown({ breakdown }) {
 
           <Row label="Compulsory deductible" value={breakdown.compulsory_deductible} sign="-" />
           {breakdown.voluntary_deductible > 0 && <Row label="Voluntary deductible" value={breakdown.voluntary_deductible} sign="-" />}
-          {breakdown.salvage_value > 0 && <Row label="Salvage value" value={breakdown.salvage_value} sign="-" />}
+
+          {/* Consumables: excluded under a standard policy, payable under the add-on. */}
+          {breakdown.consumables_excluded > 0 && (
+            <Row label="Consumables (not covered)" sub={breakdown.consumables_note}
+                 value={breakdown.consumables_excluded} sign="-" />
+          )}
+
+          {/* Salvage renders on EVERY total loss, including at zero. Hiding the
+              row when the insurer retains the wreck made the decision itself
+              invisible — a zero line with its note beats an absent line. */}
+          {breakdown.is_total_loss && (
+            <Row label="Salvage" sub={breakdown.salvage_note}
+                 value={breakdown.salvage_value}
+                 sign={breakdown.salvage_value > 0 ? '-' : undefined} />
+          )}
           {breakdown.gst_included > 0 && (
             <Row label={`GST (${breakdown.gst_rate_pct}%, incl. in repair)`} value={breakdown.gst_included} />
           )}
 
           <Row label="Net payable" value={breakdown.net_payable} strong />
 
-          {breakdown.ncb_advisory && <div className="mt-3"><Notice tone="warning" title="NCB Impact Advisory">{breakdown.ncb_advisory}</Notice></div>}
+          {breakdown.ncb_advisory && (
+            <div className="mt-3">
+              <Notice tone={breakdown.ncb_protected ? 'info' : 'warning'}
+                      title={breakdown.ncb_protected ? 'NCB Protected' : 'NCB Impact Advisory'}>
+                {breakdown.ncb_advisory}
+                {!breakdown.ncb_protected && breakdown.ncb_pct > 0 && (
+                  <span className="block mt-1 font-medium">
+                    {breakdown.ncb_pct}% now → {breakdown.ncb_after_claim_pct}% after this claim
+                    {breakdown.ncb_next_renewal_pct > breakdown.ncb_pct &&
+                      ` (would have reached ${breakdown.ncb_next_renewal_pct}% if claim-free)`}
+                  </span>
+                )}
+              </Notice>
+            </div>
+          )}
           {breakdown.hypothecation_note && <div className="mt-3"><Notice tone="info" title="Hypothecation Note">{breakdown.hypothecation_note}</Notice></div>}
 
           {breakdown.assumptions && <p className="text-[10px] text-faint leading-relaxed mt-2 italic">{breakdown.assumptions}</p>}
+          </>
+          )}
         </div>
       )}
     </div>
