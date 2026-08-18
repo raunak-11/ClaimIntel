@@ -1,8 +1,22 @@
 import asyncio
+from datetime import datetime
 from typing import Any
 
 import storage
 from config import SURVEYOR_THRESHOLD
+
+
+def _mark_survey_report(claim_id: str) -> None:
+    """Stamp assessment completion — the 'survey report' end of the SLA clock.
+
+    Overwritten on every run, unlike the appointment timestamp: a
+    re-investigation genuinely produces a new report.
+    """
+    try:
+        storage.update_claim_field(
+            claim_id, "survey_report_at", datetime.now().isoformat(timespec="seconds"))
+    except Exception:
+        pass          # a clock stamp must never fail an investigation
 
 
 async def run_pipeline(claim_id: str, claim: dict, queue: asyncio.Queue):
@@ -40,18 +54,18 @@ async def run_pipeline(claim_id: str, claim: dict, queue: asyncio.Queue):
         except Exception:
             pass
 
-    claim_type_lower = (claim.get("claim_type") or "").lower()
-    is_theft = "theft" in claim_type_lower
-    is_tp    = "third party" in claim_type_lower or "third-party" in claim_type_lower
+    # One classifier, shared with the eligibility gate and settlement_calc.
+    # `is_third_party` and `is_own_damage` used to be computed here and consumed
+    # by nothing — only `is_theft` ever branched. `claim_kind` replaces all three
+    # and IS consumed: the gate rejects on it and settlement_calc routes on it.
+    from services.coverage import CLAIM_THEFT, classify_claim_type
+    claim_kind = classify_claim_type(claim)
+    is_theft = claim_kind == CLAIM_THEFT
 
     context: dict[str, Any] = {
         "claim": claim,
         "agents": {},
-        "claim_type_flags": {
-            "is_theft": is_theft,
-            "is_third_party": is_tp,
-            "is_own_damage": not is_theft and not is_tp,
-        },
+        "claim_type_flags": {"is_theft": is_theft, "claim_kind": claim_kind},
     }
 
     # ── Pre-flight eligibility screen ─────────────────────────────────────────
@@ -59,6 +73,16 @@ async def run_pipeline(claim_id: str, claim: dict, queue: asyncio.Queue):
     # Textract/Bedrock document pass, no vision agent, no LLM agent. Coverage is
     # read straight from the policy record — nothing downstream could overturn
     # it, which is exactly why paying for the rest first was waste.
+    # ── IRDAI service-standard clock ─────────────────────────────────────────
+    # "Surveyor appointed" in this deployment means "the investigation started".
+    # Written on the FIRST run only: a re-investigation is not a second
+    # appointment, and overwriting it would reset the SLA clock and hide a
+    # breach. See services/claim_timeline.py for the honest-labelling note.
+    _now = datetime.now().isoformat(timespec="seconds")
+    if not (claim.get("surveyor_appointed_at") or "").strip():
+        storage.update_claim_field(claim_id, "surveyor_appointed_at", _now)
+        claim["surveyor_appointed_at"] = _now
+
     from services import eligibility_gate
     await queue.put({"type": "agent_start", "agent": "eligibility_screen"})
     gate = await asyncio.to_thread(eligibility_gate.run, claim)
@@ -85,6 +109,10 @@ async def run_pipeline(claim_id: str, claim: dict, queue: asyncio.Queue):
         result_doc.pop("adjuster_decision", None)
         storage.save_result(claim_id, result_doc)
         storage.update_claim_field(claim_id, "status", "Rejected")
+        # A gate rejection IS a completed assessment for SLA purposes — the
+        # claim was answered. Omitting it here would leave the clock running
+        # forever on the fastest possible outcome.
+        _mark_survey_report(claim_id)
 
         await queue.put({"type": "done", "summary": summary})
         return
@@ -500,5 +528,6 @@ async def run_pipeline(claim_id: str, claim: dict, queue: asyncio.Queue):
         }.get(decision, "Completed")
 
     storage.update_claim_field(claim_id, "status", final_status)
+    _mark_survey_report(claim_id)
 
     await queue.put({"type": "done", "summary": summary})

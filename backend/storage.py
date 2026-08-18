@@ -220,6 +220,12 @@ def set_adjuster_decision(claim_id: str, decision: str, adjuster: str, reason: s
     }
     result["adjuster_decision"] = record
     save_result(claim_id, result)
+    # Closes the IRDAI service clock (settlement within 7 days of the report).
+    try:
+        update_claim_field(claim_id, "decision_at",
+                           datetime.now().isoformat(timespec="seconds"))
+    except Exception:
+        pass          # a clock stamp must never fail the decision itself
     return record
 
 

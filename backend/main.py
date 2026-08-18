@@ -224,6 +224,12 @@ def create_claim(
         "garage_estimate_amount": garage_estimate_amount or "",
         "garage_workshop_name": garage_workshop_name or "",
         "fir_number": fir_number or "",
+        # Hour-precision intimation, the anchor of the IRDAI service clock.
+        # `created_at` stays date-only — FC-05 parses it as such.
+        "intimation_at": datetime.now().isoformat(timespec="seconds"),
+        "surveyor_appointed_at": "",
+        "survey_report_at": "",
+        "decision_at": "",
     }
     storage.save_claim(claim_data)
     os.makedirs(os.path.join(CLAIMS_DIR, claim_id, "images"), exist_ok=True)
@@ -233,10 +239,18 @@ def create_claim(
 
 @app.get("/api/claims/")
 def list_claims():
+    from services.claim_timeline import build_timeline
     claims = storage.get_all_claims()
     for c in claims:
         result = storage.get_result(c["claim_id"])
         c["decision"] = result["summary"].get("decision", "") if result and result.get("summary") else ""
+        # Free: the loop already reads every result.json. Surfacing the count in
+        # the queue is what makes the SLA data operational rather than a
+        # detail-page curiosity.
+        try:
+            c["sla_breaches"] = build_timeline(c, result)["breach_count"]
+        except Exception:
+            c["sla_breaches"] = 0
     return claims
 
 
@@ -255,19 +269,34 @@ def get_claim(claim_id: str):
     # without a full re-investigation.
     try:
         summary = (result or {}).get("summary") or {}
+        agents = (result or {}).get("agents") or {}
+        # A gate-rejected claim has no damage assessment at all. Backfilling one
+        # from an empty damage dict manufactures a settlement breakdown for a
+        # claim that was never investigated — and would now also manufacture
+        # consumables/NCB/salvage lines on it.
+        gate_rejected = (agents.get("eligibility_screen") or {}).get("eligible") is False
         existing_bd = summary.get("settlement_breakdown") or {}
         needs_bd = not existing_bd
         needs_upgrade = bool(existing_bd) and "assessed_fair_value" not in existing_bd
-        if summary.get("decision") and (needs_bd or needs_upgrade):
+        if summary.get("decision") and not gate_rejected and (needs_bd or needs_upgrade):
             from services.settlement_calc import compute_settlement_breakdown
-            damage = (result.get("agents") or {}).get("damage_assessment", {})
+            damage = agents.get("damage_assessment", {})
             bd = compute_settlement_breakdown(claim, policy, damage, summary["decision"])
             if bd:
                 summary["settlement_breakdown"] = bd
     except Exception:
         pass
 
-    return {"claim": claim, "result": result, "policy": policy}
+    # Derived on read, never stored: "elapsed so far" is only true at render
+    # time, and a stored snapshot would contradict itself between the dashboard
+    # and a PDF downloaded an hour later.
+    try:
+        from services.claim_timeline import build_timeline
+        timeline = build_timeline(claim, result)
+    except Exception:
+        timeline = None
+
+    return {"claim": claim, "result": result, "policy": policy, "timeline": timeline}
 
 
 # ── Image List ────────────────────────────────────────────────────────────────
