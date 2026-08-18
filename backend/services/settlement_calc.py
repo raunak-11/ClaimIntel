@@ -46,6 +46,20 @@ COMP_DED_LARGE = 2000   # > 1500 cc  (Innova, Scorpio, BMW etc.)
 # Total-loss threshold — if repair ≥ this % of sum insured, it's a total loss
 TOTAL_LOSS_PCT = 75
 
+# ── Salvage retention on a total loss ─────────────────────────────────────────
+# "insurer" (the market default, and the only mode this deployment offers): the
+# insured surrenders the wreck and is paid the full IDV less deductibles. The
+# wreck's realisation is the insurer's recovery — NOT a deduction from the
+# insured's entitlement.
+#
+# This was previously hardcoded the other way: `round(si * 0.05)` was ALWAYS
+# deducted, silently assuming the customer kept the vehicle. On an ₹11L IDV that
+# under-paid every total loss by ₹55,000 while also letting the customer keep
+# nothing. The "insured" branch below is real and tested — that is what keeps it
+# a live option rather than a decorative constant.
+SALVAGE_RETAINED_BY = "insurer"
+SALVAGE_PCT_OF_IDV = 0.05        # only consulted when retention is "insured"
+
 PARTS_FRACTION   = 0.70   # ~70% of a repair invoice is parts
 LABOUR_FRACTION  = 0.30   # ~30% labour
 GST_RATE         = 0.18   # 18% GST — already baked into the repair invoice total
@@ -65,13 +79,61 @@ MATERIAL_DEP_OVERRIDES: dict[str, int] = {
 }
 
 
-def _part_dep_pct(part_name: str, age_dep_pct: int) -> int:
-    """Return the correct depreciation % for a part — material overrides beat age slab."""
+# Materials a Zero-Depreciation add-on does NOT cover. The standard Indian
+# wording waives depreciation on metal, plastic, rubber, fibre and glass parts
+# but expressly carves out tyres, tubes and batteries, which keep their 50%.
+# Zero-dep is therefore NOT "depreciation = 0" — that would overpay every claim
+# involving a tyre or a battery.
+ZERO_DEP_EXCLUDED = ("tyre", "tire", "tube", "battery")
+
+
+def _part_dep_pct(part_name: str, age_dep_pct: int, zero_dep: bool = False) -> int:
+    """Depreciation % for a part — material overrides beat the age slab."""
     key = (part_name or "").lower()
     for fragment, fixed_pct in MATERIAL_DEP_OVERRIDES.items():
         if fragment in key:
+            if zero_dep and fragment not in ZERO_DEP_EXCLUDED:
+                return 0
             return fixed_pct
-    return age_dep_pct
+    return 0 if zero_dep else age_dep_pct
+
+
+# ── No-Claim Bonus ────────────────────────────────────────────────────────────
+# IRDAI standard grid: consecutive claim-free years -> discount on the OWN-DAMAGE
+# premium at renewal. Identical across insurers by regulation.
+NCB_GRID = (20, 25, 35, 45, 50)
+
+
+def _ncb_next_slab(current_pct: int) -> int:
+    """What the NCB becomes at renewal if NO claim is made this policy year."""
+    if current_pct <= 0:
+        return NCB_GRID[0]
+    for i, slab in enumerate(NCB_GRID):
+        if current_pct < slab:
+            return slab                      # off-grid value snaps UP to the next
+        if current_pct == slab:
+            return NCB_GRID[min(i + 1, len(NCB_GRID) - 1)]
+    return NCB_GRID[-1]                      # already at or above the 50% ceiling
+
+
+def _ncb_after_claim(current_pct: int, add_ons: frozenset) -> int:
+    """A claim resets NCB to nil — unless NCB Protect is held."""
+    from services.coverage import ADD_ON_NCB_PROTECT
+    return current_pct if ADD_ON_NCB_PROTECT in (add_ons or frozenset()) else 0
+
+
+def _ncb_premium_impact(annual_premium: float, ncb_pct: int) -> int:
+    """Rupee value of the NCB discount currently being enjoyed.
+
+    `annual_premium` is the premium AFTER the discount, so backing the discount
+    out of a net figure is `net * pct/(100-pct)`, not `net * pct/100`. The old
+    formula understated the impact by half at a 50% NCB — it told a customer
+    their 50% bonus was worth 50% of what they already pay, when it is worth
+    100% of it.
+    """
+    if ncb_pct <= 0 or ncb_pct >= 100 or annual_premium <= 0:
+        return 0
+    return round(annual_premium * ncb_pct / (100 - ncb_pct))
 
 
 def _band_mid(band: object) -> float:
@@ -110,7 +172,7 @@ def _part_parts_value(part: dict) -> float:
 
 
 def _depreciation(damage: dict, repair: int, age_dep: int,
-                  age: Optional[float]) -> dict:
+                  age: Optional[float], zero_dep: bool = False) -> dict:
     """Depreciation on the parts portion of the APPROVED REPAIR BASIS.
 
     Three things this deliberately no longer does, all of which it used to
@@ -158,7 +220,7 @@ def _depreciation(damage: dict, repair: int, age_dep: int,
     # the vision model saw damage the estimate omits.
     per_part_labour = (damage.get("labour_assessment") or {}).get("per_part") or {}
 
-    assessed_parts = weighted = labour = 0.0
+    assessed_parts = weighted = labour = full_rate_weighted = 0.0
     for p in parts:
         if not isinstance(p, dict):
             continue
@@ -166,7 +228,8 @@ def _depreciation(damage: dict, repair: int, age_dep: int,
         if value <= 0:
             continue
         assessed_parts += value
-        weighted += value * _part_dep_pct(p.get("part", ""), age_dep)
+        weighted += value * _part_dep_pct(p.get("part", ""), age_dep, zero_dep)
+        full_rate_weighted += value * _part_dep_pct(p.get("part", ""), age_dep)
         try:
             labour += float(per_part_labour.get(
                 str(p.get("part", "")).strip().lower(), 0) or 0)
@@ -179,11 +242,23 @@ def _depreciation(damage: dict, repair: int, age_dep: int,
         # No usable per-part prices — blanket parts fraction at the age slab.
         # Same arithmetic as the old fallback path, and on one GST-inclusive
         # basis: `repair` is GST-inclusive, so the deduction is too.
+        #
+        # Under zero-dep this must be ZERO, not the age slab: the add-on waives
+        # exactly the slab this branch would otherwise apply, and we have no
+        # per-part data here to identify the tyre/battery carve-out. Deducting
+        # the blanket rate anyway would charge a customer for cover they bought.
+        blanket = 0 if zero_dep else max(round(repair * PARTS_FRACTION * age_dep / 100), 0)
         return {
-            "amount": max(round(repair * PARTS_FRACTION * age_dep / 100), 0),
-            "effective_pct": age_dep,
+            "amount": blanket,
+            "effective_pct": 0 if zero_dep else age_dep,
             "parts_share_pct": round(PARTS_FRACTION * 100),
+            "waived_inr": max(round(repair * PARTS_FRACTION * age_dep / 100), 0) if zero_dep else 0,
+            "zero_dep_applied": bool(zero_dep),
             "note": (
+                f"Zero Depreciation add-on applied — parts depreciation waived in full. "
+                f"(Without it, the IRDAI age slab of {age_dep}% on an assumed "
+                f"{round(PARTS_FRACTION * 100)}% parts share would have been deducted.)"
+                if zero_dep else
                 f"Depreciation at the IRDAI age slab of {age_dep}% (vehicle age "
                 f"~{age_txt} yr) on an assumed {round(PARTS_FRACTION * 100)}% parts share "
                 f"of the approved basis — no independently priced parts were available "
@@ -193,6 +268,7 @@ def _depreciation(damage: dict, repair: int, age_dep: int,
 
     # Material-weighted rate across this claim's actual part mix.
     effective_pct = weighted / assessed_parts
+    full_rate_pct = full_rate_weighted / assessed_parts   # what it would be without the add-on
 
     # Parts share of the basis, from the assessment's own GST-inclusive split.
     # (Whole-vehicle labour such as the one-off diagnostic scan is not in
@@ -200,15 +276,28 @@ def _depreciation(damage: dict, repair: int, age_dep: int,
     assessed_total = assessed_parts + labour * (1 + GST_RATE)
     parts_share = assessed_parts / assessed_total if assessed_total > 0 else PARTS_FRACTION
 
+    amount = max(round(repair * parts_share * effective_pct / 100), 0)
+    full_amount = max(round(repair * parts_share * full_rate_pct / 100), 0)
+
     return {
-        "amount": max(round(repair * parts_share * effective_pct / 100), 0),
+        "amount": amount,
         "effective_pct": round(effective_pct, 1),
         "parts_share_pct": round(parts_share * 100),
+        # What the add-on actually saved this customer — the whole reason they
+        # paid for it, and invisible unless it is stated.
+        "waived_inr": max(full_amount - amount, 0) if zero_dep else 0,
+        "zero_dep_applied": bool(zero_dep),
         "note": (
-            f"Material-wise depreciation (IRDAI): glass 0%, rubber/tyre/battery 50%, "
-            f"fibre 30%, metal {age_dep}% at ~{age_txt} yr vehicle age — a "
-            f"{effective_pct:.1f}% effective rate across this claim's part mix, applied "
-            f"to the parts portion ({round(parts_share * 100)}%) of the approved repair basis."
+            (f"Zero Depreciation add-on applied — parts depreciation waived. Tyres, tubes "
+             f"and batteries remain at 50% per the add-on's standard exclusion, giving a "
+             f"{effective_pct:.1f}% effective rate across this claim's part mix (it would "
+             f"have been {full_rate_pct:.1f}% without the add-on), applied to the parts "
+             f"portion ({round(parts_share * 100)}%) of the approved repair basis.")
+            if zero_dep else
+            (f"Material-wise depreciation (IRDAI): glass 0%, rubber/tyre/battery 50%, "
+             f"fibre 30%, metal {age_dep}% at ~{age_txt} yr vehicle age — a "
+             f"{effective_pct:.1f}% effective rate across this claim's part mix, applied "
+             f"to the parts portion ({round(parts_share * 100)}%) of the approved repair basis.")
         ),
     }
 
@@ -522,21 +611,38 @@ def compute_settlement_breakdown(
     policy: Optional[dict],
     damage: dict,
     decision: str,
+    salvage_retained_by: str = SALVAGE_RETAINED_BY,
 ) -> Optional[dict]:
     """Return an itemised, IRDAI-aligned settlement breakdown.
 
-    Handles: total-loss/IDV path, material-wise depreciation, zero-dep add-on,
-    engine-cc compulsory deductible, voluntary deductible, parts + labour GST,
-    IDV/sum-insured payout cap, and NCB impact advisory.
+    Handles: third-party liability short-circuit, total-loss/IDV path,
+    material-wise depreciation with the Zero-Depreciation add-on, the
+    consumables exclusion, engine-cc compulsory deductible, voluntary
+    deductible, salvage retention, GST, IDV/sum-insured cap, and the NCB impact.
+
+    `salvage_retained_by` is "insurer" (pay full IDV, no salvage deduction) or
+    "insured" (the policyholder keeps the wreck, so its assessed value is
+    deducted). See SALVAGE_RETAINED_BY.
     """
+    from services import coverage as _cov
+
     policy = policy or {}
+
+    # ── Third-party liability short-circuit ───────────────────────────────────
+    # A TP-liability claim legitimately passes the eligibility gate (a TP policy
+    # covers exactly this). It must NOT then be handed an own-damage breakdown:
+    # own-damage depreciation, the engine-cc compulsory deductible and the IDV
+    # cap are all meaningless against a liability award.
+    if _cov.classify_claim_type(claim) == _cov.CLAIM_THIRD_PARTY:
+        return _third_party_breakdown(policy, decision)
+
     assess = _assess_repair(damage or {})
     repair = round(assess.get("approved_basis") or 0)
     si     = _sum_insured(policy)
+    add_ons = _cov.parse_add_ons(policy)
 
     # ── Total-loss check ────────────────────────────────────────────────────────
     # If repair ≥ 75% of sum insured, the vehicle is a constructive total loss.
-    # Settlement = IDV (sum insured) − salvage, not repair cost.
     is_total_loss = False
     total_loss_note = None
     is_theft = "theft" in (claim.get("claim_type") or "").lower()
@@ -556,11 +662,10 @@ def compute_settlement_breakdown(
         )
     elif si > 0 and repair > 0 and repair >= (TOTAL_LOSS_PCT / 100) * si:
         is_total_loss = True
-        salvage       = round(si * 0.05)   # typical 5% salvage assumption
         total_loss_note = (
             f"Repair estimate ₹{repair:,} is ≥ {TOTAL_LOSS_PCT}% of sum insured "
             f"₹{si:,} — treated as constructive total loss. "
-            f"Settlement = IDV − salvage (₹{si:,} − ₹{salvage:,})."
+            f"Settled on the IDV of ₹{si:,} less policy deductibles."
         )
         repair = si   # settle on IDV
 
@@ -573,18 +678,61 @@ def compute_settlement_breakdown(
     age     = _vehicle_age_years(policy, claim or {})
     age_dep = _depreciation_pct(age) if age is not None else 0
 
+    zero_dep = _cov.ADD_ON_ZERO_DEP in add_ons
     depreciation        = 0
     dep_note            = ""
     dep_effective_pct   = 0
     dep_parts_share_pct = None
+    dep_waived          = 0
     if is_total_loss:
         dep_note = "Total loss — depreciation not applicable (IDV already accounts for age)."
     else:
-        _dep = _depreciation(damage or {}, repair, age_dep, age)
+        _dep = _depreciation(damage or {}, repair, age_dep, age, zero_dep=zero_dep)
         depreciation        = _dep["amount"]
         dep_note            = _dep["note"]
         dep_effective_pct   = _dep["effective_pct"]
         dep_parts_share_pct = _dep["parts_share_pct"]
+        dep_waived          = _dep["waived_inr"]
+
+    # ── Consumables ───────────────────────────────────────────────────────────
+    # A standard Indian motor policy excludes consumables (oil, coolant, primer,
+    # masking, nuts and bolts) unless the Consumables Cover add-on is held.
+    consumables_excluded = 0
+    consumables_covered = False
+    consumables_note = None
+    consumables_lines = (damage or {}).get("consumables") or {}
+    try:
+        consumables_raw = float(consumables_lines.get("total_inr") or 0)
+    except (TypeError, ValueError):
+        consumables_raw = 0.0
+
+    # Only deduct when the basis IS the garage quote. Two ways it is not:
+    #   * total loss / theft — the basis is IDV, which never contained them;
+    #   * the inflation cap fired — the basis is the AI assessed fair value,
+    #     built from parts + labour only, which also never contained them.
+    # Deducting in either case would remove consumables that were never added.
+    basis_is_quote = not is_total_loss and not assess.get("inflation_cap_applied")
+    if consumables_raw > 0 and basis_is_quote:
+        # The estimate's consumables line sits ABOVE the CGST/SGST rows, so it is
+        # GST-exclusive, while `repair` is the GST-inclusive grand total. Deducting
+        # the raw figure would leave 18% of it still in the payout.
+        gross = round(consumables_raw * (1 + GST_RATE))
+        names = ", ".join(str(l.get("part", "")).strip()
+                          for l in (consumables_lines.get("lines") or [])[:4] if l.get("part"))
+        if _cov.ADD_ON_CONSUMABLES in add_ons:
+            consumables_covered = True
+            consumables_note = (
+                f"Consumables of ₹{gross:,} (incl. GST) are PAYABLE under the "
+                f"Consumables Cover add-on and have been left in the approved basis."
+                + (f" Lines: {names}." if names else "")
+            )
+        else:
+            consumables_excluded = gross
+            consumables_note = (
+                f"Consumables of ₹{gross:,} (incl. GST) are excluded under the standard "
+                f"policy and have been removed from the approved basis."
+                + (f" Lines: {names}." if names else "")
+            )
 
     # ── GST (already embedded — informational only) ─────────────────────────────
     # Indian repair invoices quote a GST-INCLUSIVE grand total: the garage's
@@ -597,38 +745,87 @@ def compute_settlement_breakdown(
     else:
         gst_included = round(repair - repair / (1 + GST_RATE))
 
-    salvage = 0 if is_theft else (round(si * 0.05) if is_total_loss else 0)
+    # ── Salvage ───────────────────────────────────────────────────────────────
+    # Computed ONCE (it used to be derived twice, once for the note and once for
+    # the deduction) and only where it can arise.
+    salvage = 0
+    salvage_note = None
+    if is_theft:
+        salvage_note = "Theft — no vehicle remains, so no salvage arises."
+    elif is_total_loss:
+        if salvage_retained_by == "insured":
+            salvage = round(si * SALVAGE_PCT_OF_IDV)
+            salvage_note = (
+                f"Salvage retained by the insured — the policyholder keeps the wreck, so "
+                f"its assessed value of ₹{salvage:,} ({SALVAGE_PCT_OF_IDV:.0%} of IDV) is "
+                f"deducted from the settlement."
+            )
+        else:
+            salvage_note = (
+                f"Salvage retained by the insurer — the vehicle is surrendered, so the full "
+                f"IDV of ₹{si:,} is settled less policy deductibles and NO salvage deduction "
+                f"is made. The wreck's realisation is the insurer's recovery, not a reduction "
+                f"of the insured's entitlement."
+            )
 
     # ── Net payable ─────────────────────────────────────────────────────────────
     # Repair total is GST-inclusive, so deductions simply reduce it.
-    net = round(repair - depreciation - total_ded - salvage)
+    net = round(repair - depreciation - total_ded - salvage - consumables_excluded)
     net = max(net, 0)
 
     # Cap at sum insured / IDV — you can never receive more than the IDV
     if si > 0:
         net = min(net, si)
 
-    # ── NCB advisory ────────────────────────────────────────────────────────────
+    # ── NCB ───────────────────────────────────────────────────────────────────
+    # Reported, never written back. The reset happens at RENEWAL and is
+    # conditional on the claim actually being paid (an adjuster can reverse an
+    # AI Approve), so a claims engine that mutated policies.csv would be wrong
+    # for the rest of the policy year and non-idempotent against re-investigation.
     ncb = _ncb_pct(policy)
-    ncb_advisory = None
-    if ncb > 0 and decision == "Approve":
+    ncb_protected = _cov.ADD_ON_NCB_PROTECT in add_ons
+    ncb_next = _ncb_next_slab(ncb)
+    ncb_after = _ncb_after_claim(ncb, add_ons)
+    try:
         annual_premium = float(policy.get("annual_premium") or 0)
-        ncb_saving     = round(annual_premium * ncb / 100)
-        ncb_advisory   = (
-            f"Approving this claim will reset your {ncb}% No-Claim Bonus. "
-            f"That NCB was saving you approximately ₹{ncb_saving:,} per year on your premium. "
-            f"Consider whether the claim amount justifies losing this discount."
-        )
+    except (TypeError, ValueError):
+        annual_premium = 0.0
+    ncb_impact = _ncb_premium_impact(annual_premium, ncb)
 
-    assumptions = (
-        f"Depreciation: {dep_note} | "
-        f"Deductibles: compulsory ₹{comp_ded:,} + voluntary ₹{vol_ded:,} | "
-        f"GST: 18% included in repair total | "
-        f"Payout capped at sum insured ₹{si:,}."
-    ) if not is_total_loss else (
-        f"Total loss settlement: IDV ₹{si:,} − salvage ₹{salvage:,} | "
-        f"Deductibles: ₹{total_ded:,} | Payout capped at IDV."
-    )
+    ncb_advisory = None
+    # Fires on any decision with a live NCB, not only Approve: an adjuster
+    # handling an Escalate needs it too, because the customer may elect to
+    # withdraw the claim once they know what the bonus is worth.
+    if ncb > 0:
+        if ncb_protected:
+            ncb_advisory = (
+                f"NCB Protect add-on is held: this claim does NOT reset the {ncb}% "
+                f"No-Claim Bonus, which is worth approximately ₹{ncb_impact:,} a year "
+                f"against the recorded premium of ₹{annual_premium:,.0f}."
+            )
+        else:
+            ncb_advisory = (
+                f"Settling this claim resets the {ncb}% No-Claim Bonus to nil at renewal; "
+                f"staying claim-free would have taken it to {ncb_next}%. The {ncb}% discount "
+                f"is worth approximately ₹{ncb_impact:,} a year against the recorded premium "
+                f"of ₹{annual_premium:,.0f} — an approximation, since the recorded figure is "
+                f"the total premium and NCB applies only to the own-damage component."
+            )
+
+    _assumption_bits = [f"Depreciation: {dep_note}"]
+    if consumables_note:
+        _assumption_bits.append(f"Consumables: {consumables_note}")
+    if is_total_loss:
+        _assumption_bits.append(f"Total loss: settled on IDV ₹{si:,}, capped at IDV.")
+        if salvage_note:
+            _assumption_bits.append(f"Salvage: {salvage_note}")
+        _assumption_bits.append(f"Deductibles: ₹{total_ded:,}.")
+    else:
+        _assumption_bits.append(
+            f"Deductibles: compulsory ₹{comp_ded:,} + voluntary ₹{vol_ded:,}")
+        _assumption_bits.append("GST: 18% included in repair total")
+        _assumption_bits.append(f"Payout capped at sum insured ₹{si:,}.")
+    assumptions = " | ".join(_assumption_bits)
 
     # Inflation cap only carries meaning on the repair (non-total-loss) path —
     # a total loss already settles on IDV, not the garage quote.
@@ -667,6 +864,17 @@ def compute_settlement_breakdown(
         "depreciation_parts_share_pct": None if is_total_loss else dep_parts_share_pct,
         "depreciation":          depreciation,
         "depreciation_note":     dep_note,
+        # ── Add-ons ───────────────────────────────────────────────────────────
+        "add_ons":               sorted(add_ons),
+        "add_ons_applied":       _cov.add_on_labels(add_ons),
+        "zero_dep_applied":      bool(zero_dep) and not is_total_loss,
+        "depreciation_waived_inr": dep_waived,
+        "consumables_excluded":  consumables_excluded,
+        "consumables_covered":   consumables_covered,
+        "consumables_note":      consumables_note,
+        "consumables_lines":     (consumables_lines.get("lines") or []),
+        # ── Third-party liability (own-damage path always reports False) ──────
+        "third_party_liability": False,
         # Deductibles
         "compulsory_deductible": comp_ded,
         "voluntary_deductible":  vol_ded,
@@ -676,11 +884,71 @@ def compute_settlement_breakdown(
         "gst_rate_pct":          int(GST_RATE * 100),
         # Final
         "salvage_value":         salvage,
+        "salvage_retained_by":   salvage_retained_by if is_total_loss else None,
+        "salvage_note":          salvage_note,
         "net_payable":           net,
         "sum_insured_cap":       si,
         "applies":               decision == "Approve",
-        # NCB
+        # NCB — reported, never written back to the policy record.
         "ncb_pct":               ncb,
+        "ncb_next_renewal_pct":  ncb_next,
+        "ncb_after_claim_pct":   ncb_after,
+        "ncb_premium_impact_inr": ncb_impact,
+        "ncb_protected":         ncb_protected,
         "ncb_advisory":          ncb_advisory,
         "assumptions":           assumptions,
     }
+
+
+def _third_party_breakdown(policy: dict, decision: str) -> dict:
+    """Breakdown for a third-party LIABILITY claim.
+
+    A TP claim legitimately passes the eligibility gate — a Third Party policy
+    covers exactly this — but none of the own-damage machinery applies to it:
+    there is no insured-vehicle repair to depreciate, the engine-cc compulsory
+    excess is an own-damage deductible, and the IDV caps the insured's own
+    vehicle, not a third party's award.
+
+    Returns the SAME key set as the own-damage path so no consumer — the UI, the
+    PDF, the letter, the analytics aggregation — hits a missing key.
+    """
+    from services import coverage as _cov
+
+    zeroed = {
+        "is_total_loss": False, "total_loss_note": None, "repair_estimate": 0,
+        "assessed_fair_value": None, "assessed_band_min": None, "assessed_band_max": None,
+        "benchmark_source": None, "amount_claimed": None, "overclaim_pct": None,
+        "overclaim_band": None, "overclaim_note": None, "recommended_action": None,
+        "disallowed_inflation": 0, "inflation_cap_applied": False,
+        "underclaim_advisory": None, "pricing_coverage_pct": None,
+        "coverage_abstained": False,
+        "settlement_basis": "Third-party liability — not computed by this engine",
+        "vehicle_age_years": None, "depreciation_pct": 0,
+        "depreciation_age_slab_pct": 0, "depreciation_parts_share_pct": None,
+        "depreciation": 0, "depreciation_note": None,
+        "add_ons": sorted(_cov.parse_add_ons(policy)),
+        "add_ons_applied": _cov.add_on_labels(policy),
+        "zero_dep_applied": False, "depreciation_waived_inr": 0,
+        "consumables_excluded": 0, "consumables_covered": False,
+        "consumables_note": None, "consumables_lines": [],
+        "third_party_liability": True,
+        "compulsory_deductible": 0, "voluntary_deductible": 0, "total_deductible": 0,
+        "gst_included": 0, "gst_rate_pct": int(GST_RATE * 100),
+        "salvage_value": 0, "salvage_retained_by": None, "salvage_note": None,
+        "net_payable": 0, "sum_insured_cap": _sum_insured(policy),
+        "applies": False,
+        "ncb_pct": _ncb_pct(policy), "ncb_next_renewal_pct": _ncb_next_slab(_ncb_pct(policy)),
+        "ncb_after_claim_pct": _ncb_pct(policy), "ncb_premium_impact_inr": 0,
+        "ncb_protected": _cov.ADD_ON_NCB_PROTECT in _cov.parse_add_ons(policy),
+        "ncb_advisory": (
+            "A third-party liability claim does not affect the own-damage No-Claim Bonus."
+        ),
+        "assumptions": (
+            "Third-party liability is assessed outside this engine. Property damage is "
+            "statutorily limited to ₹7,50,000; death and bodily-injury awards are "
+            "determined by the Motor Accident Claims Tribunal, not by the insurer. "
+            "Own-damage depreciation, the engine-cc compulsory deductible and the IDV cap "
+            "do not apply to a liability claim and have NOT been used."
+        ),
+    }
+    return zeroed
