@@ -6,6 +6,7 @@ from PIL import Image, ExifTags
 import storage
 from agents.base_agent import BaseAgent
 from services import assessment_cache, forensics_detector
+from services import coverage as _cov
 from services.llm_client import ask_json
 from services.prompt_guards import IMAGE_INJECTION_DEFENSE
 from services.settlement_calc import (
@@ -269,6 +270,25 @@ class DamageAssessmentAgent(BaseAgent):
             it for it in line_items
             if str(it.get("type", "")).strip().lower() not in ("labour", "material")
         ]
+
+        # ── Consumables ───────────────────────────────────────────────────────
+        # Extracted here because this is the only place the parsed estimate's
+        # line items are in scope; settlement_calc receives `damage`, not the
+        # document. A standard Indian motor policy excludes consumables (oil,
+        # coolant, primer, masking, nuts and bolts) unless the Consumables Cover
+        # add-on is held — see services/coverage.is_consumable_line, which is the
+        # single classifier shared with data_sanity so the fixtures are asserted
+        # against the same rule.
+        #
+        # GST-EXCLUSIVE: these rows sit above the CGST/SGST lines on the
+        # estimate. settlement_calc grosses the figure up before deducting it.
+        consumable_lines = [it for it in line_items if _cov.is_consumable_line(it)]
+        consumables_total = 0.0
+        for it in consumable_lines:
+            try:
+                consumables_total += float(it.get("amount") or 0)
+            except (TypeError, ValueError):
+                continue
         if claimed_lines:
             estimate_items_text = "\n".join(
                 f"  {i+1}. {it.get('part', '?')} — {it.get('type', '?')} — ₹{it.get('amount', 0):,.0f}"
@@ -434,6 +454,15 @@ class DamageAssessmentAgent(BaseAgent):
             result["pricing_sources"] = pricing["pricing_sources"]
             result["fair_value_breakdown"] = pricing["fair_value_breakdown"]
             result["labour_assessment"] = pricing["labour_assessment"]
+            # Consumed by settlement_calc's exclusion. Always present (₹0 with an
+            # empty list when the estimate has none) so no downstream `.get()`
+            # has to distinguish "no consumables" from "never looked".
+            result["consumables"] = {
+                "total_inr": round(consumables_total),
+                "lines": [{"part": it.get("part", ""), "amount": it.get("amount")}
+                          for it in consumable_lines],
+                "source": "estimate_line_items",
+            }
             # Regenerate the summary string now that we have real prices.
             # The LLM's summary said ₹0–₹0 because it was told not to price.
             est   = pricing["total_repair_estimate"]

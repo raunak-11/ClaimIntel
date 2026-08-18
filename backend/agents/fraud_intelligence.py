@@ -607,7 +607,22 @@ def _run_fraud_checks(claim: dict, damage: dict, docs: dict | None = None) -> tu
              f"No FIR uploaded for '{claim.get('claim_type')}' claim — "
              f"FIR is mandatory for theft and third-party incidents")
     else:
-        emit("FC-18", "pass", "FIR uploaded for theft / third-party claim.")
+        # The statutory section the FIR is registered under. Both parsers now
+        # extract it (it was previously extracted by neither, despite being on
+        # every real FIR). A genuine motor FIR cites something — commonly s.279
+        # IPC or s.184 MV Act — so its absence is a soft authenticity signal
+        # worth putting in front of the adjuster. It does NOT flag on its own:
+        # OCR loses the section row often enough that flagging would be noise.
+        _sections = (docs.get("fir") or {}).get("statutory_sections")
+        if isinstance(_sections, list) and any(str(s).strip() for s in _sections):
+            emit("FC-18", "pass",
+                 f"FIR uploaded for theft / third-party claim, registered under "
+                 f"{', '.join(str(s).strip() for s in _sections if str(s).strip())}.")
+        else:
+            emit("FC-18", "pass",
+                 "FIR uploaded for theft / third-party claim. Note: no statutory section "
+                 "(e.g. s.279 IPC / s.184 MV Act) could be read from it — worth confirming "
+                 "against the original, as a genuine FIR always cites one.")
 
     # ── FC-19: Garage estimate uploaded but no damage photos ───────────────────
     if not docs.get("estimate"):
@@ -801,6 +816,12 @@ def _run_fraud_checks(claim: dict, damage: dict, docs: dict | None = None) -> tu
     else:
         emit("FC-28", "na", "No images, documents, or dashcam frames available for visual forensics.")
 
+    # Licence classes that authorise a private car. LMV covers it outright;
+    # transport/heavy classes (LMV-TR, HMV, HGMV, HPMV) subsume it. MCWG /
+    # MCWOG / M-CYL are two-wheeler-only and do NOT.
+    _CAR_LICENCE_CLASSES = {"LMV", "LMVNT", "LMVTR", "MGV", "HMV", "HGMV", "HPMV",
+                            "TRANS", "FWNT", "WNT"}
+
     # ── FC-29: Ownership documents (DL / RC) verification ─────────────────────
     # Both documents are mandatory. RC registration number must match the policy
     # vehicle; DL holder name should match the claimant. A wrong-vehicle RC is a
@@ -843,6 +864,23 @@ def _run_fraud_checks(claim: dict, damage: dict, docs: dict | None = None) -> tu
                     problems.append(f"Driving licence expired on {valid_till} — before the incident")
             except ValueError:
                 pass
+
+        # Licence CLASS vs the vehicle being claimed. Both parsers have always
+        # extracted `vehicle_classes`; nothing ever read it. Driving a private
+        # car on a two-wheeler-only licence is an authorisation failure that can
+        # void the claim, so it belongs in the ownership check.
+        #
+        # Contributes NOTHING when the list is empty or unreadable: the class
+        # row is genuinely often illegible on a photographed licence, and a
+        # false FC-29 flag sits next to a 30-point-adjacent signal.
+        dl_classes = parsed_dl.get("vehicle_classes")
+        if isinstance(dl_classes, list) and any(str(c).strip() for c in dl_classes):
+            normalised = {re.sub(r"[^A-Z]", "", str(c).upper()) for c in dl_classes}
+            if not (normalised & _CAR_LICENCE_CLASSES):
+                problems.append(
+                    f"Driving licence authorises {', '.join(sorted(str(c) for c in dl_classes))} "
+                    f"only — no light-motor-vehicle class covering the "
+                    f"{claim.get('vehicle', 'claimed vehicle')}")
         missing = [n for n, d in (("driving licence", parsed_dl), ("RC", parsed_rc)) if not d]
         if missing:
             problems.append(f"{' and '.join(missing)} not submitted/unreadable")
@@ -882,20 +920,38 @@ def _run_fraud_checks(claim: dict, damage: dict, docs: dict | None = None) -> tu
         emit("FC-31", "na", "No photos submitted — claimed-part verification not possible.")
     elif total_claimed == 0:
         emit("FC-31", "na", "No garage estimate line items to verify.")
-    elif not unverified:
-        emit("FC-31", "pass", f"All {total_claimed} claimed part(s) have photographic evidence.")
     else:
-        pct = len(unverified) / total_claimed * 100
-        names = ", ".join(u.get("part", "?") for u in unverified[:3])
-        detail = (
-            f"{len(unverified)} of {total_claimed} claimed part(s) ({pct:.0f}%) have no "
-            f"photographic evidence to confirm them — {names}"
-            + ("..." if len(unverified) > 3 else "")
-        )
-        if pct > 30:
-            emit("FC-31", "flag", detail)
+        # `claimed_but_undamaged` was counted in the denominator and then never
+        # named anywhere — not in this detail, not in the UI, not in the PDF.
+        # It is a STRONGER over-claim signal than `unverified`: the photo exists
+        # and shows the part is fine, so it belongs in the adjuster's hands.
+        undamaged_suffix = ""
+        if claimed_but_undamaged:
+            u_names = ", ".join(c.get("part", "?") for c in claimed_but_undamaged[:3])
+            undamaged_suffix = (
+                f" Separately, {len(claimed_but_undamaged)} claimed part(s) were "
+                f"photographed and found UNDAMAGED: {u_names}"
+                + ("..." if len(claimed_but_undamaged) > 3 else "") + "."
+            )
+
+        if not unverified:
+            emit("FC-31", "pass",
+                 f"All {total_claimed} claimed part(s) have photographic evidence."
+                 + undamaged_suffix)
         else:
-            emit("FC-31", "pass", detail + " — within normal range for limited photo angles.")
+            pct = len(unverified) / total_claimed * 100
+            names = ", ".join(u.get("part", "?") for u in unverified[:3])
+            detail = (
+                f"{len(unverified)} of {total_claimed} claimed part(s) ({pct:.0f}%) have no "
+                f"photographic evidence to confirm them — {names}"
+                + ("..." if len(unverified) > 3 else "")
+            )
+            if pct > 30:
+                emit("FC-31", "flag", detail + undamaged_suffix)
+            else:
+                emit("FC-31", "pass",
+                     detail + " — within normal range for limited photo angles."
+                     + undamaged_suffix)
 
     # ── FC-32: Repair-scope inflation (claimed action vs. assessed action) ────
     # Different from FC-17 (aggregate rupee variance): a claim can pass FC-17 on

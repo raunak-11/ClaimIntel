@@ -85,6 +85,7 @@ Return a JSON object with exactly these fields:
   "incident_location_in_fir": "Incident location as stated in FIR or null",
   "vehicle_reg_in_fir": "Vehicle registration number mentioned in FIR or null",
   "complainant_name_in_fir": "Complainant name or null",
+  "statutory_sections": ["statute and section numbers the FIR is registered under, exactly as printed, e.g. 'Section 279 IPC' or 'Section 184 MV Act'. Empty list if none stated."],
 """ + _DOC_AUTHENTICITY_FIELDS + """
   "parsed_ok": <true if document was readable and data extracted, false if unreadable>
 }}"""

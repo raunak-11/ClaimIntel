@@ -85,6 +85,17 @@ Example good reasons:
 """
 
 
+# Claim columns Agent 5 is allowed to see. Deliberately excludes `description`
+# (already carried by the damage/fraud context), the four service timestamps
+# (clock noise in a money prompt), and `status` (the pipeline's own bookkeeping,
+# which would tell the model what it is supposed to conclude).
+_LLM_CLAIM_FIELDS = frozenset({
+    "claim_id", "policy_no", "claimant", "phone", "vehicle", "claim_type",
+    "incident_date", "incident_location", "claim_amount",
+    "garage_estimate_amount", "garage_workshop_name", "fir_number",
+})
+
+
 class SettlementRecommendationAgent(BaseAgent):
     def run(self, context: dict[str, Any]) -> dict[str, Any]:
         claim = context["claim"]
@@ -123,9 +134,15 @@ class SettlementRecommendationAgent(BaseAgent):
             "weather_verification_note", "policy_coverage_note",
         ])
 
+        # ALLOW-list, not a deny-list. This used to exclude only `description`
+        # and forward every other claim column, so each new field added to
+        # claims.csv silently became another line in every settlement prompt —
+        # the four IRDAI service timestamps would have added four lines of clock
+        # noise to a prompt that reasons about money. Fail closed: a new column
+        # reaches the model only when someone adds it here deliberately.
         claim_summary = "\n".join(
             f"{k}: {v}" for k, v in build_llm_safe_claim(claim).items()
-            if k not in ("description",)  # description already in damage/fraud context
+            if k in _LLM_CLAIM_FIELDS
         )
 
         prompt = BASE_PROMPT.format(

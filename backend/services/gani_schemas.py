@@ -73,6 +73,9 @@ SCHEMAS: dict[str, dict[str, str]] = {
             "  incident OCCURRED. Keep them in their own fields; do not conflate them.\n"
             "- Vehicle registration numbers must be copied exactly as printed, including\n"
             "  spacing and hyphens as they appear.\n"
+            "- `statutory_sections` lists the statute and section numbers the FIR is\n"
+            "  registered under, exactly as printed (e.g. 'Section 279 IPC',\n"
+            "  'Section 184 MV Act'). Return an empty list if none are stated.\n"
         ),
         "fields": """{
   "doc_type": "fir",
@@ -82,7 +85,8 @@ SCHEMAS: dict[str, dict[str, str]] = {
   "incident_date_in_fir": null,
   "incident_location_in_fir": null,
   "vehicle_reg_in_fir": null,
-  "complainant_name_in_fir": null
+  "complainant_name_in_fir": null,
+  "statutory_sections": []
 }""",
     },
     "license": {
