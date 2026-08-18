@@ -233,6 +233,169 @@ def _kb_glossary_list(pdf: ClaimPDF, entries: list[dict], color: tuple = C_INDIG
         pdf.ln(1)
 
 
+_PRICE_SOURCE_LABELS = {
+    "live_web": "Live web",
+    "unpriced": "Not priced",
+    "garage_estimate": "Garage (legacy)",
+}
+
+_VARIANCE_COLORS = {
+    "NORMAL": C_APPROVE,
+    "SLIGHTLY_ELEVATED": C_ESCALATE,
+    "REVIEW": C_ESCALATE,
+    "HIGH_VARIANCE": C_REJECT,
+}
+
+
+def _labour_section(pdf: ClaimPDF, labour: dict | None):
+    """Assessed labour, its per-operation derivation, and the variance against
+    the garage's own labour lines.
+
+    Carries its own disclaimer on every render: these are rule-based estimates,
+    not OEM standard times, and the variance is a review threshold rather than
+    a fraud finding. This report is read by people making payout decisions —
+    the distinction has to travel with the number, not sit in a footnote."""
+    if not labour or labour.get("status") != "ASSESSED":
+        return
+
+    pdf.ln(2)
+    pdf.set_font("Helvetica", "B", 8.5)
+    pdf.set_text_color(*C_INDIGO)
+    pdf.cell(0, 6, _s("Labour Assessment (independent of the garage estimate)"),
+             new_x="LMARGIN", new_y="NEXT")
+    pdf.set_text_color(*C_DARK)
+
+    _kv_row(pdf, "Assessed Labour", _inr(labour.get("total_labour", 0)), alt=True)
+    _kv_row(pdf, "Garage Labour",
+            _inr(labour["garage_labour"]) if labour.get("garage_labour") else "Not itemised",
+            alt=False)
+    pct = labour.get("variance_percent")
+    status = labour.get("variance_status", "—")
+    _kv_row(pdf, "Labour Variance",
+            f"{pct:+.1f}% ({status.replace('_', ' ')})" if pct is not None else status.replace("_", " "),
+            alt=True)
+    _kv_row(pdf, "Rate Card",
+            f"{labour.get('region', '-')} / {labour.get('garage_category', '-')} workshop  |  "
+            f"confidence {int(round(float(labour.get('confidence') or 0) * 100))}%", alt=False)
+
+    ops = labour.get("operations") or []
+    if ops:
+        pdf.ln(1)
+        pdf.set_fill_color(*C_SLATE_HDR)
+        pdf.set_text_color(*C_WHITE)
+        pdf.set_font("Helvetica", "B", 7.5)
+        widths  = [46, 40, 18, 18, 18, 20, 26]
+        headers = ["Component", "Operation", "Base h", "Adj h", "Hours", "Rs./h", "Cost (Rs.)"]
+        for w, h in zip(widths, headers):
+            pdf.cell(w, 6, h, fill=True)
+        pdf.ln()
+        for i, op in enumerate(ops):
+            pdf.set_fill_color(*(C_ROW_ALT if i % 2 == 0 else C_WHITE))
+            pdf.set_text_color(*C_DARK)
+            pdf.set_font("Helvetica", "", 7.5)
+            cells = [
+                _s(str(op.get("component", "")).replace("_", " ")),
+                _s(str(op.get("operation", "")).replace("_", " ")),
+                f"{op.get('baseline_hours', 0)}",
+                f"{op.get('complexity_adjustment_hours', 0):+g}",
+                f"{op.get('final_hours', 0)}",
+                f"{op.get('rate_per_hour', 0)}",
+                _inr(op.get("labour_cost", 0)),
+            ]
+            for w, c in zip(widths, cells):
+                pdf.cell(w, 6, c, fill=True)
+            pdf.ln()
+
+    for reason in labour.get("review_reasons") or []:
+        pdf.set_font("Helvetica", "", 7.5)
+        pdf.set_text_color(*_VARIANCE_COLORS.get(status, C_MUTED))
+        pdf.multi_cell(0, 4.5, _s(reason), new_x="LMARGIN", new_y="NEXT")
+        pdf.set_text_color(*C_DARK)
+
+    pdf.set_font("Helvetica", "I", 7)
+    pdf.set_text_color(*C_MUTED)
+    pdf.multi_cell(0, 4.5, _s(labour.get("disclaimer", "")), new_x="LMARGIN", new_y="NEXT")
+    pdf.set_text_color(*C_DARK)
+    pdf.ln(1)
+
+
+def _visual_forensics_section(pdf: ClaimPDF, fraud: dict, damage: dict):
+    """Evidence-authenticity findings: vision-model flags, file provenance, the
+    local AI-image classifier, dash-cam frames and document images.
+
+    All of it was already computed into `visual_forensics_layer` and never
+    printed — the report's only trace was one FC-28 row in the check list."""
+    layer = fraud.get("visual_forensics_layer") or {}
+    if not layer:
+        return
+
+    img      = layer.get("image") or {}
+    flags    = [f for f in (img.get("flags") or []) if f and f != "none"]
+    signals  = img.get("forensics_signals") or []
+    suspects = [s for s in signals if s.get("is_ai_generated_suspected")]
+    video    = layer.get("video") or {}
+    frames   = video.get("signals") or []
+    n_frames = int(video.get("suspect_count") or 0)
+    docs     = layer.get("documents") or {}
+    total    = len(flags) + len(suspects) + n_frames + len(docs)
+
+    if not (signals or frames or docs or flags):
+        return
+
+    pdf.ln(2)
+    pdf.set_font("Helvetica", "B", 8.5)
+    pdf.set_text_color(*(C_REJECT if total else C_APPROVE))
+    pdf.cell(0, 6, _s(f"Visual Forensics — {total} signal(s)" if total
+                      else "Visual Forensics — no signals detected"),
+             new_x="LMARGIN", new_y="NEXT")
+    pdf.set_text_color(*C_DARK)
+
+    lines: list[str] = []
+    for f in flags:
+        lines.append(f"Photo: vision model flagged '{str(f).replace('_', ' ')}'"
+                     + (f" - {img['notes']}" if img.get("notes") else ""))
+    for s in suspects:
+        if s.get("provenance"):
+            lines.append(
+                f"Photo {s.get('file', '?')}: AI-generator provenance - marker "
+                f"'{s['provenance'].get('marker')}' in the file's "
+                f"{s['provenance'].get('source')} (a property of the file, not a model opinion)")
+        else:
+            lines.append(
+                f"Photo {s.get('file', '?')}: flagged by the local AI-image detector "
+                f"('{s.get('label')}', {round(float(s.get('confidence') or 0) * 100)}% confidence)")
+    if n_frames:
+        lines.append(f"Dash cam: {n_frames} of {len(frames)} extracted frames flagged by the "
+                     f"local AI-image detector")
+    for dt, info in docs.items():
+        lines.append(f"{dt.upper()} document: {', '.join(info.get('flags') or [])}"
+                     + (f" - {info['notes']}" if info.get("notes") else ""))
+
+    if lines:
+        _bullet_list(pdf, lines, color=C_REJECT)
+    else:
+        classifier_ran = any(s.get("classifier_available", s.get("label") is not None)
+                             for s in signals)
+        note = ("All submitted photos, dash-cam frames and document images scanned clean."
+                if classifier_ran or not signals else
+                "No vision-model, provenance or document flags - but the local AI-image "
+                "classifier did not run (model unavailable), so photo forensics coverage is "
+                "incomplete. This is weaker than a clean scan.")
+        _bullet_list(pdf, [note], color=C_APPROVE if classifier_ran else C_ESCALATE)
+
+    exif = ((damage.get("image_quality") or {}).get("authenticity") or {}).get("exif_signals") or []
+    missing = [e for e in exif if not e.get("has_exif")]
+    if missing:
+        pdf.set_font("Helvetica", "I", 7)
+        pdf.set_text_color(*C_MUTED)
+        pdf.multi_cell(0, 4.5, _s(
+            f"{len(missing)} of {len(exif)} photo(s) carry no EXIF metadata. Advisory only - "
+            f"messaging apps strip EXIF from most genuine claim photos, so this never blocks a "
+            f"claim on its own."), new_x="LMARGIN", new_y="NEXT")
+        pdf.set_text_color(*C_DARK)
+    pdf.ln(1)
+
+
 def _numbered_list(pdf: ClaimPDF, items: list[str]):
     for i, item in enumerate(items, 1):
         if not item:
@@ -460,13 +623,53 @@ def generate_claim_report(claim: dict, result: dict) -> bytes:
             pdf.set_font("Helvetica", "", 7.5)
             pdf.cell(col_widths[2], 6, _s(est_str), fill=True)
             pdf.cell(col_widths[3], 6, _s(p.get("repair_type", "—")), fill=True)
-            pdf.cell(col_widths[4], 6, _s(p.get("pricing_source", "—")), fill=True)
+            pdf.cell(col_widths[4], 6, _s(_PRICE_SOURCE_LABELS.get(
+                p.get("pricing_source"), p.get("pricing_source", "—"))), fill=True)
             pdf.cell(col_widths[5], 6, "", fill=True)
             pdf.ln()
         pdf.ln(2)
     else:
         pdf.set_font("Helvetica", "I", 8)
         pdf.cell(0, 5, "No damaged parts identified.", new_x="LMARGIN", new_y="NEXT")
+
+    # ── Unverified claimed parts (estimate-driven verification — newupdates.md #34) ──
+    # Parts the garage estimate claims but no photo angle confirms. Never priced
+    # (see pricing_engine.py's `unverified` bucket) — surfaced here so the
+    # adjudicator sees exactly what's being paid for without photographic
+    # support, instead of it silently disappearing from the report.
+    unverified = damage.get("unverified_parts") or []
+    if unverified:
+        pdf.ln(1)
+        pdf.set_font("Helvetica", "B", 8.5)
+        pdf.set_text_color(*C_ESCALATE)
+        pdf.cell(0, 6, f"Unverified Claimed Parts ({len(unverified)}) — no photographic evidence",
+                 new_x="LMARGIN", new_y="NEXT")
+        pdf.set_text_color(*C_DARK)
+        _bullet_list(pdf, [
+            f"{(u.get('part') or '?').replace('_', ' ')} — "
+            f"{u.get('estimate_line_item') or 'claimed line'} "
+            f"(reason: {u.get('reason', 'not_visible')})"
+            for u in unverified
+        ], color=C_ESCALATE)
+        pdf.ln(1)
+
+    # ── Repair-scope mismatches ──────────────────────────────────────────────
+    # Estimate claims a costlier repair action (e.g. Replace) than what this
+    # agent's own visual assessment supports (e.g. Paint) for the same part —
+    # a different signal from the aggregate rupee variance shown below.
+    scope_mismatches = damage.get("scope_mismatches") or []
+    if scope_mismatches:
+        pdf.set_font("Helvetica", "B", 8.5)
+        pdf.set_text_color(*C_REJECT)
+        pdf.cell(0, 6, f"Repair-Scope Mismatches ({len(scope_mismatches)})",
+                 new_x="LMARGIN", new_y="NEXT")
+        pdf.set_text_color(*C_DARK)
+        _bullet_list(pdf, [
+            f"{(m.get('part') or '?').replace('_', ' ')} — claimed "
+            f"{m.get('claimed_action', '?')}, visually assessed {m.get('assessed_action', '?')} only"
+            for m in scope_mismatches
+        ], color=C_REJECT)
+        pdf.ln(1)
 
     # Vehicle verification
     pdf.set_font("Helvetica", "", 8)
@@ -485,6 +688,31 @@ def generate_claim_report(claim: dict, result: dict) -> bytes:
     else:
         est_line = "—"
     _kv_row(pdf, "Total Estimate",   est_line, alt=False)
+
+    # ── Independent pricing coverage ─────────────────────────────────────────
+    # Part prices come from live web market data only; the garage-line fallback
+    # was removed because an "independent" value built from the audited document
+    # is not independent. How much of the claim priced therefore decides whether
+    # the fair-value verdict below is trustworthy — record it in the report.
+    cov = (damage.get("fair_value_breakdown") or {}).get("pricing_coverage") or {}
+    if cov.get("total_count"):
+        _kv_row(pdf, "Pricing Coverage",
+                f"{cov.get('priced_count', 0)}/{cov['total_count']} parts "
+                f"({cov.get('coverage_pct', 0)}%) priced from live web market data", alt=True)
+        unpriced = cov.get("unpriced_parts") or []
+        if unpriced:
+            pdf.set_font("Helvetica", "I", 7.5)
+            pdf.set_text_color(*C_ESCALATE)
+            pdf.multi_cell(0, 4.5, _s(
+                "No corroborated market price found for: "
+                + ", ".join(str(p).replace("_", " ") for p in unpriced)
+                + ". These are left unpriced rather than filled in from the garage's own figures."
+            ), new_x="LMARGIN", new_y="NEXT")
+            pdf.set_text_color(*C_DARK)
+
+    # ── Labour assessment (rule-based engine) ────────────────────────────────
+    _labour_section(pdf, damage.get("labour_assessment"))
+
     if damage.get("notes"):
         pdf.set_font("Helvetica", "I", 7.5)
         pdf.set_text_color(*C_MUTED)
@@ -504,6 +732,8 @@ def generate_claim_report(claim: dict, result: dict) -> bytes:
     pdf.cell(0, 7, f"Fraud Score: {fraud_score}%  ({fraud_label} Risk)", new_x="LMARGIN", new_y="NEXT")
     pdf.set_text_color(*C_DARK)
     _score_bar(pdf, fraud_score, fraud_rgb, w=160)
+
+    _visual_forensics_section(pdf, fraud, damage)
 
     indicators = fraud.get("indicators", [])
     if indicators:
@@ -583,8 +813,13 @@ def generate_claim_report(claim: dict, result: dict) -> bytes:
         coverage_note = coverage_note[:87] + "..."
     _kv_row(pdf, "Location Verified", "Yes" if loc_ok else "No",  alt=True)
     _kv_row(pdf, "Geocoded Location", loc_str[:70],               alt=False)
-    _kv_row(pdf, "Weather",           context.get("weather", "—")[:70], alt=True)
-    _kv_row(pdf, "Policy Coverage",   coverage_note,              alt=False)
+    _kv_row(pdf, "Weather (current, not historical)",
+            context.get("weather_at_investigation_time", "—")[:70], alt=True)
+    weather_note = context.get("weather_verification_note", "")
+    weather_unverified = "NOT VERIFIED" in weather_note.upper()
+    if weather_unverified:
+        _kv_row(pdf, "Weather Verification", "Not available for this claim's date", alt=False)
+    _kv_row(pdf, "Policy Coverage",   coverage_note,              alt=weather_unverified)
     pdf.ln(4)
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -685,6 +920,12 @@ def generate_claim_report(claim: dict, result: dict) -> bytes:
             pdf.set_font("Helvetica", "I", 7.5)
             pdf.set_text_color(*C_ESCALATE)
             pdf.multi_cell(0, 4.5, _s(f"NCB advisory: {bd.get('ncb_advisory')}"), new_x="LMARGIN", new_y="NEXT")
+            pdf.set_text_color(*C_DARK)
+        if bd.get("hypothecation_note"):
+            pdf.ln(1)
+            pdf.set_font("Helvetica", "I", 7.5)
+            pdf.set_text_color(*C_ESCALATE)
+            pdf.multi_cell(0, 4.5, _s(f"Hypothecation note: {bd.get('hypothecation_note')}"), new_x="LMARGIN", new_y="NEXT")
             pdf.set_text_color(*C_DARK)
         pdf.ln(4)
 

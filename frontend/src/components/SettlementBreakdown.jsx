@@ -1,64 +1,85 @@
 import { useState } from 'react'
+import { ChevronDown } from 'lucide-react'
+import { cx } from '../ui'
 
 const inr = (v) => `₹${Number(v ?? 0).toLocaleString('en-IN')}`
 
 function Row({ label, value, sign, sub, strong }) {
-  const color =
-    sign === '-' ? 'text-red-400' :
-    sign === '+' ? 'text-green-400' :
-    strong ? 'text-white' : 'text-slate-300'
+  const color = sign === '-' ? 'text-danger-600' : sign === '+' ? 'text-success-600' : strong ? 'text-ink' : 'text-muted'
   return (
-    <div className={`flex items-baseline justify-between py-1.5 ${strong ? 'border-t border-slate-600 mt-1 pt-2' : ''}`}>
+    <div className={cx('flex items-baseline justify-between py-1.5', strong && 'border-t border-line mt-1 pt-2.5')}>
       <div>
-        <span className={`text-xs ${strong ? 'font-semibold text-slate-200' : 'text-slate-400'}`}>{label}</span>
-        {sub && <span className="block text-[10px] text-slate-500">{sub}</span>}
+        <span className={cx('text-xs', strong ? 'font-semibold text-ink' : 'text-muted')}>{label}</span>
+        {sub && <span className="block text-[10px] text-faint">{sub}</span>}
       </div>
-      <span className={`text-sm font-mono ${color} ${strong ? 'font-bold text-base' : ''}`}>
+      <span className={cx('font-mono tabular-nums', color, strong ? 'text-base font-bold' : 'text-sm')}>
         {sign === '-' ? '− ' : sign === '+' ? '+ ' : ''}{inr(value)}
       </span>
     </div>
   )
 }
 
-// ── Band configuration: style + action badge ───────────────────────────────────
 const BAND_CONFIG = {
-  consistent:  { dot: 'bg-green-400',  text: 'text-green-300',  ring: 'border-green-500/40 bg-green-500/5',  label: 'Consistent', actionCls: 'bg-green-500/20 text-green-300 border-green-500/40' },
-  review:      { dot: 'bg-amber-400',  text: 'text-amber-300',  ring: 'border-amber-500/40 bg-amber-500/5',  label: 'Elevated',   actionCls: 'bg-amber-500/20 text-amber-300 border-amber-500/40' },
-  investigate: { dot: 'bg-red-400',    text: 'text-red-300',    ring: 'border-red-500/40 bg-red-500/5',      label: 'Inflated',   actionCls: 'bg-red-500/20 text-red-300 border-red-500/40' },
+  consistent: { dot: 'bg-success-500', text: 'text-success-700', ring: 'border-success-100 bg-success-50', label: 'Consistent' },
+  review: { dot: 'bg-warning-500', text: 'text-warning-700', ring: 'border-warning-100 bg-warning-50', label: 'Elevated' },
+  investigate: { dot: 'bg-danger-500', text: 'text-danger-700', ring: 'border-danger-100 bg-danger-50', label: 'Inflated' },
+  // A quote materially BELOW the independent assessment. Advisory, not a fraud
+  // signal — it never changes the payout, so it reads informational, not alarming.
+  below_market: { dot: 'bg-brand-500', text: 'text-brand-700', ring: 'border-brand-100 bg-brand-50', label: 'Below market' },
+}
+
+function Notice({ tone, title, children }) {
+  const cls = {
+    danger: 'bg-danger-50 border-danger-100 text-danger-700',
+    warning: 'bg-warning-50 border-warning-100 text-warning-700',
+    info: 'bg-brand-50 border-brand-100 text-brand-700',
+  }[tone]
+  return (
+    <div className={cx('rounded-lg border px-3 py-2.5 mb-3', cls)}>
+      <p className="text-xs font-semibold mb-0.5">{title}</p>
+      <p className="text-[11px] leading-relaxed opacity-90">{children}</p>
+    </div>
+  )
 }
 
 function FairValueAnalysis({ breakdown }) {
   const assessed = breakdown.assessed_fair_value
   if (!assessed) return null
 
-  const band    = breakdown.overclaim_band
-  const cfg     = BAND_CONFIG[band] || BAND_CONFIG.consistent
-  const pct     = breakdown.overclaim_pct
-  const pctTxt  = pct == null ? null : `${pct > 0 ? '+' : ''}${pct}%`
+  const band = breakdown.overclaim_band
+  const cfg = BAND_CONFIG[band] || BAND_CONFIG.consistent
+  const pct = breakdown.overclaim_pct
+  const pctTxt = pct == null ? null : `${pct > 0 ? '+' : ''}${pct}%`
   const claimed = breakdown.amount_claimed
-  const action  = breakdown.recommended_action
+  const action = breakdown.recommended_action
 
   return (
-    <div className={`rounded-lg border ${cfg.ring} px-3 py-2.5 mb-3`}>
-      {/* Header */}
+    <div className={cx('rounded-lg border px-3 py-2.5 mb-3', cfg.ring)}>
       <div className="flex items-center justify-between mb-2">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-          Fair Value Analysis
-        </span>
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted">Fair Value Analysis</span>
         {band && (
-          <span className={`inline-flex items-center gap-1.5 text-[10px] font-semibold ${cfg.text}`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+          <span className={cx('inline-flex items-center gap-1.5 text-[10px] font-semibold', cfg.text)}>
+            <span className={cx('w-1.5 h-1.5 rounded-full', cfg.dot)} />
             {cfg.label}{pctTxt ? ` (${pctTxt})` : ''}
           </span>
         )}
       </div>
 
-      {/* Assessed fair value */}
-      <div className="flex items-baseline justify-between py-0.5">
-        <div>
-          <span className="text-xs text-slate-300">Assessed Fair Value</span>
+      <div className="flex items-baseline justify-between py-0.5 gap-2">
+        <div className="min-w-0">
+          <span className="text-xs text-ink">Assessed Fair Value</span>
+          {/* Never present a figure the engine itself refuses to judge on as if
+              it were a benchmark. Below the pricing-coverage floor the value is
+              built from only some of the parts, so it reads LOW and would make an
+              honest claim look under-declared. */}
+          {breakdown.coverage_abstained && (
+            <span className="ml-1.5 inline-flex items-center rounded-full border border-warning-100 bg-warning-50 px-1.5 py-0.5 text-[9px] font-semibold text-warning-700 align-middle">
+              incomplete
+              {breakdown.pricing_coverage_pct != null && ` · ${breakdown.pricing_coverage_pct}% priced`}
+            </span>
+          )}
           {breakdown.benchmark_source && (
-            <span className="block text-[10px] text-slate-500">
+            <span className="block text-[10px] text-faint">
               {breakdown.benchmark_source}
               {breakdown.assessed_band_min && breakdown.assessed_band_max
                 ? ` · band ${inr(breakdown.assessed_band_min)}–${inr(breakdown.assessed_band_max)}`
@@ -66,45 +87,44 @@ function FairValueAnalysis({ breakdown }) {
             </span>
           )}
         </div>
-        <span className="text-sm font-mono text-slate-200">{inr(assessed)}</span>
+        <span
+          className={cx('text-sm font-mono tabular-nums shrink-0',
+            breakdown.coverage_abstained ? 'text-muted line-through decoration-warning-400/60' : 'text-ink')}
+        >
+          {inr(assessed)}
+        </span>
       </div>
 
-      {/* Claimed repair cost */}
       {claimed != null && (
         <div className="flex items-baseline justify-between py-0.5">
-          <span className="text-xs text-slate-400">Claimed Repair Cost</span>
-          <span className={`text-sm font-mono ${cfg.text}`}>{inr(claimed)}</span>
+          <span className="text-xs text-muted">Claimed Repair Cost</span>
+          <span className={cx('text-sm font-mono tabular-nums', cfg.text)}>{inr(claimed)}</span>
         </div>
       )}
 
-      {/* Variance */}
       {pctTxt && (
         <div className="flex items-baseline justify-between py-0.5">
-          <span className="text-xs text-slate-400">Variance</span>
-          <span className={`text-sm font-mono font-semibold ${cfg.text}`}>{pctTxt}</span>
+          <span className="text-xs text-muted">Variance</span>
+          <span className={cx('text-sm font-mono font-semibold tabular-nums', cfg.text)}>{pctTxt}</span>
         </div>
       )}
 
-      {/* Recommended action badge */}
       {action && (
         <div className="mt-2">
-          <span className={`inline-flex items-center text-[10px] font-semibold border rounded-full px-2.5 py-1 ${cfg.actionCls}`}>
+          <span className={cx('inline-flex items-center text-[10px] font-semibold border rounded-full px-2.5 py-1', cfg.ring, cfg.text)}>
             {action}
           </span>
         </div>
       )}
 
-      {/* Adjudicator note */}
       {breakdown.overclaim_note && (
-        <p className={`text-[10px] leading-relaxed mt-2 ${cfg.text} opacity-80`}>
-          {breakdown.overclaim_note}
-        </p>
+        <p className={cx('text-[10px] leading-relaxed mt-2', cfg.text, 'opacity-90')}>{breakdown.overclaim_note}</p>
       )}
 
-      {/* Disclaimer */}
-      <p className="text-[9px] text-slate-500 leading-relaxed mt-2 pt-2 border-t border-slate-600/50 italic">
-        Fair Value Analysis is used only for anomaly detection and workflow recommendations.
-        It does not directly affect claim settlement or payout calculation.
+      <p className="text-[9px] text-faint leading-relaxed mt-2 pt-2 border-t border-line italic">
+        {band === 'investigate' || breakdown.inflation_cap_applied
+          ? 'This claim exceeds the 40% investigation threshold: the payout is capped at the AI assessed fair value, and the excess above it is disallowed as inflation (leakage prevented).'
+          : 'Fair Value Analysis is used only for anomaly detection and workflow recommendations. It does not directly affect claim settlement or payout calculation.'}
       </p>
     </div>
   )
@@ -115,63 +135,53 @@ export default function SettlementBreakdown({ breakdown }) {
   if (!breakdown) return null
 
   return (
-    <div className="bg-slate-800/60 rounded-xl border border-slate-700 mt-3 overflow-hidden">
+    <div className="rounded-xl border border-line overflow-hidden">
       <button
-        onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-3 py-2.5 text-left"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between px-3.5 py-3 text-left hover:bg-surface-muted transition-colors"
       >
-        <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted">
           Settlement Breakdown
-          {!breakdown.applies && (
-            <span className="ml-2 normal-case text-[10px] text-slate-500 font-normal">(if approved)</span>
-          )}
+          {!breakdown.applies && <span className="ml-2 normal-case text-[10px] text-faint font-normal">(if approved)</span>}
         </span>
-        <span
-          className="text-slate-500 text-xs"
-          style={{ display: 'inline-block', transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }}
-        >▼</span>
+        <ChevronDown className={cx('w-4 h-4 text-faint transition-transform', open && 'rotate-180')} />
       </button>
 
       {open && (
-        <div className="px-3 pb-3">
-
-          {/* Total-loss banner */}
+        <div className="px-3.5 pb-3.5">
           {breakdown.is_total_loss && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 mb-3">
-              <p className="text-xs font-semibold text-red-300 mb-0.5">Constructive Total Loss</p>
-              <p className="text-[10px] text-red-200/80 leading-relaxed">{breakdown.total_loss_note}</p>
-            </div>
+            <Notice tone="danger" title="Constructive Total Loss">{breakdown.total_loss_note}</Notice>
           )}
 
-          {/* Fair Value Analysis (fraud signal only) */}
           <FairValueAnalysis breakdown={breakdown} />
 
-          {/* Under-claim advisory */}
           {breakdown.underclaim_advisory && (
-            <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg px-3 py-2.5 mb-3">
-              <p className="text-xs font-semibold text-blue-300 mb-1">Below-Market Advisory</p>
-              <p className="text-[10px] text-blue-200/80 leading-relaxed">{breakdown.underclaim_advisory}</p>
-            </div>
+            <Notice tone="info" title="Below-Market Advisory">{breakdown.underclaim_advisory}</Notice>
           )}
 
-          {/* Settlement basis label */}
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-              Settlement Calculation
-            </span>
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-faint">Settlement Calculation</span>
             {breakdown.settlement_basis && (
-              <span className="text-[10px] text-indigo-400 font-medium">
-                Basis: {breakdown.settlement_basis}
-              </span>
+              <span className="text-[10px] text-brand-600 font-medium">Basis: {breakdown.settlement_basis}</span>
             )}
           </div>
 
           <Row
-            label={breakdown.is_total_loss ? 'IDV (sum insured)' : 'Repair Estimate (Garage)'}
+            label={
+              breakdown.is_total_loss
+                ? 'IDV (sum insured)'
+                : breakdown.inflation_cap_applied
+                  ? 'AI Assessed Value (Inflation Cap Applied)'
+                  : 'Repair Estimate (Garage)'
+            }
+            sub={
+              breakdown.inflation_cap_applied && breakdown.disallowed_inflation > 0
+                ? `${inr(breakdown.disallowed_inflation)} disallowed inflation (leakage prevented)`
+                : undefined
+            }
             value={breakdown.repair_estimate}
           />
 
-          {/* Depreciation */}
           {!breakdown.is_total_loss && (
             <Row
               label="Depreciation (parts)"
@@ -181,40 +191,19 @@ export default function SettlementBreakdown({ breakdown }) {
             />
           )}
 
-          {/* Deductibles */}
           <Row label="Compulsory deductible" value={breakdown.compulsory_deductible} sign="-" />
-          {breakdown.voluntary_deductible > 0 && (
-            <Row label="Voluntary deductible" value={breakdown.voluntary_deductible} sign="-" />
-          )}
-
-          {/* Salvage on total loss */}
-          {breakdown.salvage_value > 0 && (
-            <Row label="Salvage value" value={breakdown.salvage_value} sign="-" />
-          )}
-
-          {/* GST (informational) */}
+          {breakdown.voluntary_deductible > 0 && <Row label="Voluntary deductible" value={breakdown.voluntary_deductible} sign="-" />}
+          {breakdown.salvage_value > 0 && <Row label="Salvage value" value={breakdown.salvage_value} sign="-" />}
           {breakdown.gst_included > 0 && (
-            <Row
-              label={`GST (${breakdown.gst_rate_pct}%, incl. in repair)`}
-              value={breakdown.gst_included}
-            />
+            <Row label={`GST (${breakdown.gst_rate_pct}%, incl. in repair)`} value={breakdown.gst_included} />
           )}
 
           <Row label="Net payable" value={breakdown.net_payable} strong />
 
-          {/* NCB advisory */}
-          {breakdown.ncb_advisory && (
-            <div className="mt-3 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
-              <p className="text-[10px] font-semibold text-amber-300 mb-0.5">NCB Impact Advisory</p>
-              <p className="text-[10px] text-amber-200/80 leading-relaxed">{breakdown.ncb_advisory}</p>
-            </div>
-          )}
+          {breakdown.ncb_advisory && <div className="mt-3"><Notice tone="warning" title="NCB Impact Advisory">{breakdown.ncb_advisory}</Notice></div>}
+          {breakdown.hypothecation_note && <div className="mt-3"><Notice tone="info" title="Hypothecation Note">{breakdown.hypothecation_note}</Notice></div>}
 
-          {breakdown.assumptions && (
-            <p className="text-[10px] text-slate-500 leading-relaxed mt-2 italic">
-              {breakdown.assumptions}
-            </p>
-          )}
+          {breakdown.assumptions && <p className="text-[10px] text-faint leading-relaxed mt-2 italic">{breakdown.assumptions}</p>}
         </div>
       )}
     </div>

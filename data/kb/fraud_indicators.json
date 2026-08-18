@@ -195,19 +195,27 @@
     }
   ],
   "scoring_thresholds": {
-    "low_risk":    {"min": 0,  "max": 30, "label": "Low",    "action": "Auto-approve with standard verification"},
-    "medium_risk": {"min": 31, "max": 59, "label": "Medium", "action": "Enhanced manual review required before settlement"},
-    "high_risk":   {"min": 60, "max": 79, "label": "High",   "action": "Escalate to Special Investigations Unit (SIU)"},
-    "critical":    {"min": 80, "max": 100,"label": "Critical","action": "Reject pending SIU investigation and legal review"}
+    "_note":       "Internal claims-triage policy of the insurer (SIU referral bands). These score thresholds are NOT prescribed by IRDAI.",
+    "low_risk":    {"min": 0,  "max": 39, "label": "Low",    "action": "Auto-approve with standard verification"},
+    "medium_risk": {"min": 40, "max": 69, "label": "Medium", "action": "Enhanced manual review / escalate to Special Investigations Unit (SIU)"},
+    "high_risk":   {"min": 70, "max": 100,"label": "High",   "action": "Reject pending SIU investigation and legal review"}
   },
   "irdai_guidelines": {
+    "_note": "Per India Motor Tariff GR.9 (metal parts schedule) and IRDAI surveyor regulations.",
     "depreciation_schedule": {
-      "0_to_6_months": "5%",
-      "6_to_12_months": "15%",
-      "1_to_2_years": "20%",
-      "2_to_3_years": "30%",
-      "3_to_4_years": "40%",
-      "4_to_5_years": "50%"
+      "0_to_6_months": "0%",
+      "6_to_12_months": "5%",
+      "1_to_2_years": "10%",
+      "2_to_3_years": "15%",
+      "3_to_4_years": "25%",
+      "4_to_5_years": "35%",
+      "5_to_10_years": "40%",
+      "above_10_years": "50%"
+    },
+    "material_depreciation": {
+      "glass": "0%",
+      "rubber_nylon_plastic_tyres_tubes_batteries": "50%",
+      "fibreglass": "30%"
     },
     "total_loss_threshold": "75% of IDV",
     "max_settlement_without_survey": 50000,

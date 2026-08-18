@@ -1,17 +1,125 @@
 @import "tailwindcss";
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   ClaimIntel design system — light, enterprise SaaS.
+   Palette, radii, typography and shadows are defined once here as theme tokens
+   and consumed as Tailwind utilities (bg-canvas, text-ink, border-line, …).
+   Reference: Linear / Stripe Dashboard / Vercel — minimal, spacious, trustworthy.
+   ───────────────────────────────────────────────────────────────────────────── */
+@theme {
+  --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo,
+    Consolas, monospace;
+
+  /* Surfaces */
+  --color-canvas: #f7f9fc;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f9fafb;
+  --color-line: #e5e7eb;
+  --color-line-strong: #d1d5db;
+
+  /* Text */
+  --color-ink: #111827;
+  --color-muted: #6b7280;
+  --color-faint: #9ca3af;
+
+  /* Brand — IBM/Carbon blue #0F62FE */
+  --color-brand-50: #eef4ff;
+  --color-brand-100: #dbe6ff;
+  --color-brand-200: #bcd0ff;
+  --color-brand-500: #0f62fe;
+  --color-brand-600: #0b53dd;
+  --color-brand-700: #0a45b5;
+
+  /* Success — #16A34A */
+  --color-success-50: #ecfdf3;
+  --color-success-100: #d1fadf;
+  --color-success-500: #16a34a;
+  --color-success-600: #15803d;
+  --color-success-700: #087443;
+
+  /* Warning — #F59E0B */
+  --color-warning-50: #fffaeb;
+  --color-warning-100: #fef0c7;
+  --color-warning-500: #f59e0b;
+  --color-warning-600: #d97706;
+  --color-warning-700: #b54708;
+
+  /* Danger / Fraud — #DC2626 */
+  --color-danger-50: #fef3f2;
+  --color-danger-100: #fee4e2;
+  --color-danger-500: #dc2626;
+  --color-danger-600: #d92d20;
+  --color-danger-700: #b42318;
+
+  /* Soft, single-layer shadows only */
+  --shadow-xs: 0 1px 2px 0 rgba(16, 24, 40, 0.05);
+  --shadow-sm: 0 1px 3px 0 rgba(16, 24, 40, 0.06), 0 1px 2px -1px rgba(16, 24, 40, 0.06);
+  --shadow-md: 0 4px 8px -2px rgba(16, 24, 40, 0.08), 0 2px 4px -2px rgba(16, 24, 40, 0.05);
+  --shadow-lg: 0 12px 20px -4px rgba(16, 24, 40, 0.1), 0 4px 8px -4px rgba(16, 24, 40, 0.06);
+}
+
 :root {
-  color-scheme: dark;
+  color-scheme: light;
+}
+
+html {
+  background-color: var(--color-canvas);
 }
 
 body {
   margin: 0;
-  background-color: #0f1117;
-  color: #e2e8f0;
-  font-family: system-ui, 'Segoe UI', sans-serif;
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-size: 16px;
 }
 
 #root {
   min-height: 100vh;
+}
+
+/* Quiet, consistent scrollbars for inner scroll regions */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #d8dee9;
+  border-radius: 9999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #c3cbd9;
+}
+
+/* Subtle, reusable entrance animation (respects reduced-motion) */
+@keyframes ci-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.ci-fade-in {
+  animation: ci-fade-in 0.35s ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
 }

@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Sparkles, ShieldCheck, UserRound, LogIn } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { landingFor } from '../auth/auth'
+import { Card, Button } from '../ui'
 
 export default function Login() {
   const { login } = useAuth()
@@ -29,72 +31,79 @@ export default function Login() {
   }
 
   const input =
-    'w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500'
+    'w-full bg-surface border border-line rounded-lg px-3.5 py-2.5 text-sm text-ink placeholder-faint focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400 transition'
+  const labelCls = 'block text-sm font-medium text-ink mb-1.5'
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950 px-4">
-      <div className="w-full max-w-sm">
+    <div className="min-h-[70vh] flex items-center justify-center px-4">
+      <div className="w-full max-w-sm ci-fade-in">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-indigo-400">ClaimIntel</h1>
-          <p className="text-slate-500 text-sm mt-1">Motor Insurance Claim Triage</p>
+          <span className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-brand-500 text-white shadow-sm mb-4">
+            <Sparkles className="w-6 h-6" />
+          </span>
+          <h1 className="text-2xl font-semibold tracking-tight text-ink">ClaimIntel</h1>
+          <p className="text-muted text-sm mt-1">Agentic Motor-Insurance Claim Triage</p>
         </div>
 
-        <form onSubmit={submit} className="bg-slate-900 rounded-2xl border border-slate-700 p-6 space-y-4">
-          <h2 className="text-lg font-semibold text-white">Sign in</h2>
+        <Card className="p-6">
+          <form onSubmit={submit} className="space-y-4">
+            <h2 className="text-base font-semibold text-ink">Sign in</h2>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">Username</label>
-            <input
-              className={input}
-              placeholder="user or adjudicator"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              autoFocus
-            />
-          </div>
+            <div>
+              <label className={labelCls}>Username</label>
+              <input
+                className={input}
+                placeholder="user or adjudicator"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                autoFocus
+              />
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">Password</label>
-            <input
-              type="password"
-              className={input}
-              placeholder="••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </div>
+            <div>
+              <label className={labelCls}>Password</label>
+              <input
+                type="password"
+                className={input}
+                placeholder="••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
 
-          {error && <p className="text-red-400 text-sm">{error}</p>}
+            {error && <p className="text-danger-600 text-sm">{error}</p>}
 
-          <button
-            type="submit"
-            className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl transition-colors"
-          >
-            Sign in
-          </button>
+            <Button type="submit" size="lg" icon={LogIn} className="w-full">
+              Sign in
+            </Button>
+          </form>
 
-          <div className="border-t border-slate-700 pt-4">
-            <p className="text-xs text-slate-500 mb-2">Demo accounts — click to fill:</p>
-            <div className="flex gap-2">
+          <div className="border-t border-line mt-5 pt-4">
+            <p className="text-xs text-muted mb-2.5">Demo accounts — click to fill:</p>
+            <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => quickFill('user')}
-                className="flex-1 text-xs px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700"
+                className="text-left px-3 py-2.5 rounded-lg bg-surface-muted hover:bg-gray-100 border border-line transition-colors"
               >
-                👤 Policyholder
-                <span className="block text-[10px] text-slate-500">user / user</span>
+                <span className="flex items-center gap-1.5 text-xs font-semibold text-ink">
+                  <UserRound className="w-3.5 h-3.5 text-muted" /> Policyholder
+                </span>
+                <span className="block text-[11px] text-faint mt-0.5">user / user</span>
               </button>
               <button
                 type="button"
                 onClick={() => quickFill('adjudicator')}
-                className="flex-1 text-xs px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700"
+                className="text-left px-3 py-2.5 rounded-lg bg-surface-muted hover:bg-gray-100 border border-line transition-colors"
               >
-                🛡 Adjudicator
-                <span className="block text-[10px] text-slate-500">adjudicator / adjudicator</span>
+                <span className="flex items-center gap-1.5 text-xs font-semibold text-ink">
+                  <ShieldCheck className="w-3.5 h-3.5 text-brand-500" /> Adjudicator
+                </span>
+                <span className="block text-[11px] text-faint mt-0.5">adjudicator / adjudicator</span>
               </button>
             </div>
           </div>
-        </form>
+        </Card>
       </div>
     </div>
   )

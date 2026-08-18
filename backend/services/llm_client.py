@@ -11,6 +11,7 @@ Public API (kept stable across the original Gemini → Groq migration):
 """
 
 import base64
+import io
 import json
 import re
 import time
@@ -22,14 +23,36 @@ from services import token_tracker
 
 _client = Groq(api_key=GROQ_API_KEY)
 
-TEXT_MODEL   = "llama-3.3-70b-versatile"                      # text-only agents
-VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"    # vision agents (A1, A3)
+TEXT_MODEL   = "llama-3.3-70b-versatile"    # text-only agents
+# Vision agents (A1 damage assessment, A3 incident reconstruction) and the
+# document-authenticity check.
+#
+# WAS meta-llama/llama-4-scout-17b-16e-instruct — Groq DECOMMISSIONED it. The
+# API now returns 404 model_not_found, which surfaced as both vision agents
+# erroring out while the text agents carried on, so an investigation still
+# "completed" and still produced a settlement, just with no damage assessment
+# behind it. Verified against the live account: qwen/qwen3.6-27b is the only
+# remaining image-capable model Groq serves (llama-3.3-70b, llama-3.1-8b,
+# openai/gpt-oss-*, groq/compound* and whisper-* are all text or speech only).
+#
+# It is a reasoning model and wraps its answer in <think> — see _clean_raw,
+# which must strip that before ask_json's brace extraction runs.
+VISION_MODEL = "qwen/qwen3.6-27b"
 
 _TEXT_MAX_TOKENS   = 4096
-_VISION_MAX_TOKENS = 8192   # damage reports with many parts can exceed 4096
+# MUST stay well under the vision model's free-tier limit of 8,000 tokens per
+# minute, because Groq counts REQUESTED max_tokens toward that budget, not just
+# what the model actually emits. At the old 8192 the request exceeded the whole
+# per-minute allowance before a single prompt token was counted, and both vision
+# agents died with a 413 rate_limit_exceeded. 4096 plus a downscaled image and
+# the prompt lands around 6k, leaving headroom for the retry.
+_VISION_MAX_TOKENS = 4096
+# Used on the Bedrock vision path, which has no per-minute ceiling to fit under.
+_BEDROCK_VISION_MAX_TOKENS = 8192
 
 _MAX_RETRIES = 2
-_RETRY_DELAY = 5  # seconds between retries
+_RETRY_DELAY = 5       # seconds between retries, transient errors
+_RATE_LIMIT_DELAY = 30  # seconds, rate limits — the free tier's budget is per-minute
 
 # Groq's vision endpoint error says "supports up to 5 images" but rejected a
 # request with exactly 5 in testing (off-by-one in their enforcement) — capping
@@ -41,14 +64,34 @@ _MAX_VISION_IMAGES = 4
 
 # ── Image helpers ─────────────────────────────────────────────────────────────
 
+# A vision model bills image tokens by pixel area, and the free tier's budget is
+# small (see _VISION_MAX_TOKENS). Phone photos are 3-12MP and claim photos here
+# are already 1400px+, none of which buys any accuracy for "which panel is dented
+# and how badly" — but it does spend the whole per-minute allowance on one call.
+_MAX_IMAGE_DIMENSION = 1024
+
+
 def _b64_image(path: str) -> tuple[str, str]:
-    """Return (base64_string, mime_type) for an image file."""
-    ext = path.rsplit(".", 1)[-1].lower()
-    mime = {"jpg": "image/jpeg", "jpeg": "image/jpeg",
-            "png": "image/png", "gif": "image/gif",
-            "webp": "image/webp"}.get(ext, "image/jpeg")
-    with open(path, "rb") as f:
-        return base64.b64encode(f.read()).decode("utf-8"), mime
+    """Return (base64_string, mime_type), downscaled to _MAX_IMAGE_DIMENSION.
+
+    Sending the raw file used to be fine on the old vision model's larger budget;
+    on the current one a single 1424x900 photo pushed the request to 11,430
+    tokens against an 8,000 TPM limit and the agent failed outright with a 413.
+    EXIF rotation is applied before resizing — a sideways photo reads as nonsense
+    to the model, and phone cameras routinely set the orientation flag.
+    """
+    from PIL import Image, ImageOps
+
+    with Image.open(path) as img:
+        img = ImageOps.exif_transpose(img)
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+        if max(img.size) > _MAX_IMAGE_DIMENSION:
+            img.thumbnail((_MAX_IMAGE_DIMENSION, _MAX_IMAGE_DIMENSION), Image.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=85, optimize=True)
+
+    return base64.b64encode(buf.getvalue()).decode("utf-8"), "image/jpeg"
 
 
 # ── Core LLM call with retry ──────────────────────────────────────────────────
@@ -63,7 +106,14 @@ def _call(messages: list[dict], model: str, agent_name: str | None = None,
             resp = _client.chat.completions.create(
                 model=model,
                 messages=messages,
-                temperature=0.1,
+                # 0, not 0.1: every call in this app is structured JSON
+                # extraction/verification where run-to-run consistency beats
+                # sampling diversity — measured drift in the assessed fair
+                # value between identical runs was flagged by the user
+                # (2026-07-23). Greedy decoding is not bit-reproducible
+                # across provider hardware, but it removes the sampling
+                # component entirely.
+                temperature=0,
                 max_tokens=max_tokens,
             )
             usage = getattr(resp, "usage", None)
@@ -77,9 +127,48 @@ def _call(messages: list[dict], model: str, agent_name: str | None = None,
             return resp.choices[0].message.content.strip()
         except Exception as e:
             last_err = e
+            delay = _retry_delay_for(e, attempt)
+            if delay is None:
+                # Unretryable within this request's lifetime — stop immediately.
+                break
             if attempt < _MAX_RETRIES:
-                time.sleep(_RETRY_DELAY)
+                time.sleep(delay)
     raise RuntimeError(f"LLM call failed after {_MAX_RETRIES + 1} attempts: {last_err}")
+
+
+def _retry_delay_for(err: Exception, attempt: int) -> float | None:
+    """Seconds to wait before retrying, or None if retrying is pointless.
+
+    Groq enforces two different quotas and they need opposite handling:
+
+      per-MINUTE (TPM) — worth waiting out. The standard 5s retry is useless
+        here because the window is 60s wide, so three attempts land inside the
+        same window and fail identically.
+      per-DAY (TPD) — never worth waiting. The reset is hours away, so sleeping
+        just stalls the pipeline before failing anyway. Sitting on 30s + 60s
+        backoffs for every call of a 4-document parse added minutes to an
+        investigation that was doomed regardless. Fail fast, surface the real
+        reason, and let the operator switch provider or wait for the reset.
+    """
+    text = str(err).lower()
+    if "rate_limit" not in text and "429" not in text and "413" not in text:
+        return _RETRY_DELAY
+
+    # "tokens per day (TPD)" / "requests per day (RPD)" — quota, not a window.
+    if "per day" in text or "tpd" in text or "rpd" in text:
+        return None
+
+    retry_after = getattr(getattr(err, "response", None), "headers", {}) or {}
+    for key in ("retry-after", "x-ratelimit-reset-tokens"):
+        raw = retry_after.get(key)
+        if raw:
+            try:
+                wait = float(str(raw).rstrip("s")) + 1
+            except ValueError:
+                continue
+            # A "retry after 2 hours" is a daily quota in disguise.
+            return wait if wait <= 65 else None
+    return min(_RATE_LIMIT_DELAY * (attempt + 1), 65)
 
 
 # ── Public API (same interface as the original Gemini wrapper) ────────────────
@@ -93,8 +182,29 @@ def ask_text(prompt: str, agent_name: str | None = None, claim_id: str | None = 
 
 def ask_with_images(prompt: str, image_paths: list[str], agent_name: str | None = None,
                      claim_id: str | None = None) -> str:
+    """Every image-bearing call in this project funnels through here — the two
+    vision agents (damage assessment, incident reconstruction) and the document
+    authenticity check.
+
+    Routed to Bedrock by default (see _bedrock_vision). Groq's free tier caps the
+    only vision model it still serves at 8,000 tokens/minute, which one
+    ordinary-sized claim photo plus the damage prompt is enough to exceed — and
+    Groq retired the previous vision model on 30 days' notice, mid-project. The
+    Bedrock model is also ~9x larger (235B vs 27B) and runs in ap-south-1, so
+    claim photos stay in-region. Groq remains the provider for all TEXT calls,
+    where the rate limit is far higher and none of this applies.
+    """
     if len(image_paths) > _MAX_VISION_IMAGES:
         image_paths = image_paths[:_MAX_VISION_IMAGES]
+
+    if _bedrock_vision_available():
+        try:
+            return _bedrock_vision(prompt, image_paths, agent_name, claim_id)
+        except Exception:
+            # Fall through to Groq rather than fail the agent outright — same
+            # "never a hard dependency" contract as grounding_client.py.
+            pass
+
     content: list[dict] = [{"type": "text", "text": prompt}]
     for i, path in enumerate(image_paths):
         b64, mime = _b64_image(path)
@@ -110,7 +220,74 @@ def ask_with_images(prompt: str, image_paths: list[str], agent_name: str | None 
     return _call(messages, VISION_MODEL, agent_name, claim_id)
 
 
+# ── Bedrock vision ────────────────────────────────────────────────────────────
+
+_bedrock_vision_client = None
+
+
+def _bedrock_vision_available() -> bool:
+    from config import AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, VISION_PROVIDER
+    return VISION_PROVIDER == "bedrock" and bool(AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY)
+
+
+def _bedrock_vision(prompt: str, image_paths: list[str], agent_name: str | None,
+                    claim_id: str | None) -> str:
+    from config import (
+        AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, BEDROCK_VISION_MODEL,
+    )
+    from services.grounding_client import _prepare_image_bytes
+
+    global _bedrock_vision_client
+    if _bedrock_vision_client is None:
+        import boto3
+        from botocore.config import Config
+        _bedrock_vision_client = boto3.client(
+            "bedrock-runtime",
+            region_name=AWS_REGION,
+            aws_access_key_id=AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+            # Vision calls on many-part damage reports are the slowest in the
+            # pipeline; the SSE stream is waiting on them.
+            config=Config(connect_timeout=10, read_timeout=120, retries={"max_attempts": 2}),
+        )
+
+    # Same [Image N] interleaving as the Groq path — damage_assessment relies on
+    # `bounding_box.image_index` to know which photo a part was found in, and it
+    # cannot infer that without the labels.
+    content: list[dict] = [{"text": prompt}]
+    for i, path in enumerate(image_paths):
+        content.append({"text": f"[Image {i}]"})
+        content.append({"image": {"format": "jpeg",
+                                  "source": {"bytes": _prepare_image_bytes(path)}}})
+
+    response = _bedrock_vision_client.converse(
+        modelId=BEDROCK_VISION_MODEL,
+        messages=[{"role": "user", "content": content}],
+        # Bedrock has no per-minute token ceiling to squeeze under, so this
+        # restores the original headroom: a damage report covering many parts
+        # genuinely exceeds 4096, and a truncated response is unparseable JSON.
+        inferenceConfig={"maxTokens": _BEDROCK_VISION_MAX_TOKENS, "temperature": 0},
+    )
+
+    usage = response.get("usage") or {}
+    if usage:
+        token_tracker.log_usage(
+            claim_id, agent_name, BEDROCK_VISION_MODEL,
+            prompt_tokens=usage.get("inputTokens", 0),
+            completion_tokens=usage.get("outputTokens", 0),
+            total_tokens=usage.get("totalTokens", 0),
+        )
+    return response["output"]["message"]["content"][0]["text"].strip()
+
+
 def _clean_raw(raw: str) -> str:
+    # Reasoning models (the vision model below is one) narrate inside <think>
+    # before answering. This MUST be stripped before the brace-extraction pass
+    # in ask_json: that pass is a greedy `\{.*\}`, so a single brace anywhere in
+    # the reasoning text drags the whole monologue into the "JSON" it extracts
+    # and every parse attempt fails.
+    raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL | re.IGNORECASE)
+    raw = re.sub(r"<reasoning>.*?</reasoning>", "", raw, flags=re.DOTALL | re.IGNORECASE)
     raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.MULTILINE)
     raw = re.sub(r"\s*```$",           "", raw, flags=re.MULTILINE)
     return raw.strip()

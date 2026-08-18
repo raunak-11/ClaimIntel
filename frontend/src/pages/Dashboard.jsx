@@ -1,10 +1,23 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
+import { ArrowLeft, Download, ShieldQuestion, Camera, SearchX } from 'lucide-react'
 import api from '../utils/api'
+import { useInvestigationSSE } from '../hooks/useInvestigationSSE'
+import ClaimOverview from '../components/ClaimOverview'
+import InvestigationWorkflow from '../components/InvestigationWorkflow'
+import RiskAndSettlement from '../components/RiskAndSettlement'
+import StoryboardPanel from '../components/StoryboardPanel'
+import ClaimDecision from '../components/ClaimDecision'
+import EvidencePanel from '../components/EvidencePanel'
+import AdjusterPanel from '../components/AdjusterPanel'
+import DecisionLetter from '../components/DecisionLetter'
+import { SkeletonDashboard } from '../components/Skeleton'
+import { Button, Badge, Card } from '../ui'
+import { statusTone } from '../ui/tokens'
 
 function DownloadReportButton({ claimId, hasResult }) {
   const [loading, setLoading] = useState(false)
-  const [error, setError]     = useState('')
+  const [error, setError] = useState('')
 
   if (!hasResult) return null
 
@@ -18,9 +31,9 @@ function DownloadReportButton({ claimId, hasResult }) {
         throw new Error(err.detail || 'Failed to generate report')
       }
       const blob = await resp.blob()
-      const url  = URL.createObjectURL(blob)
-      const a    = document.createElement('a')
-      a.href     = url
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
       a.download = `ClaimIntel_Report_${claimId}.pdf`
       document.body.appendChild(a)
       a.click()
@@ -35,37 +48,30 @@ function DownloadReportButton({ claimId, hasResult }) {
 
   return (
     <div className="flex items-center gap-2">
-      <button
-        onClick={handleDownload}
-        disabled={loading}
-        className="inline-flex items-center gap-2 px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-sm font-semibold transition-colors shadow-sm"
-      >
-        {loading ? (
-          <>
-            <span className="w-3.5 h-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-            Generating PDF…
-          </>
-        ) : (
-          <>
-            <span>⬇</span>
-            Download Report
-          </>
-        )}
-      </button>
-      {error && <span className="text-xs text-red-400">{error}</span>}
+      {error && <span className="text-xs text-danger-600">{error}</span>}
+      <Button variant="secondary" size="sm" icon={Download} loading={loading} onClick={handleDownload}>
+        {loading ? 'Generating…' : 'Download Report'}
+      </Button>
     </div>
   )
 }
-import { useInvestigationSSE } from '../hooks/useInvestigationSSE'
-import ClaimOverview from '../components/ClaimOverview'
-import InvestigationWorkflow from '../components/InvestigationWorkflow'
-import InvestigationSummary from '../components/InvestigationSummary'
-import StoryboardPanel from '../components/StoryboardPanel'
-import ClaimDecision from '../components/ClaimDecision'
-import EvidencePanel from '../components/EvidencePanel'
-import AdjusterPanel from '../components/AdjusterPanel'
-import DecisionLetter from '../components/DecisionLetter'
-import { SkeletonDashboard } from '../components/Skeleton'
+
+function Notice({ tone, icon: Icon, title, items }) {
+  const cls = {
+    warning: 'bg-warning-50 border-warning-100 text-warning-700',
+    danger: 'bg-danger-50 border-danger-100 text-danger-700',
+  }[tone]
+  return (
+    <div className={`rounded-xl border px-4 py-3 ${cls}`}>
+      <p className="flex items-center gap-1.5 text-sm font-semibold mb-1">
+        <Icon className="w-4 h-4" /> {title}
+      </p>
+      <ul className="list-disc list-inside text-xs space-y-0.5 opacity-90">
+        {(items || []).map((r, i) => <li key={i}>{r}</li>)}
+      </ul>
+    </div>
+  )
+}
 
 function ReviewBanner({ summary }) {
   const needsReview = summary?.needs_human_review
@@ -75,22 +81,8 @@ function ReviewBanner({ summary }) {
 
   return (
     <div className="space-y-2">
-      {needsReview && (
-        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3">
-          <p className="text-sm font-semibold text-amber-300 mb-1">⚠ Routed for human review</p>
-          <ul className="list-disc list-inside text-xs text-amber-200/90 space-y-0.5">
-            {(summary.routing_reasons || []).map((r, i) => <li key={i}>{r}</li>)}
-          </ul>
-        </div>
-      )}
-      {imgIssue && (
-        <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3">
-          <p className="text-sm font-semibold text-red-300 mb-1">📷 Image quality — resubmission recommended</p>
-          <ul className="list-disc list-inside text-xs text-red-200/90 space-y-0.5">
-            {(imgQ.issues || []).map((r, i) => <li key={i}>{r}</li>)}
-          </ul>
-        </div>
-      )}
+      {needsReview && <Notice tone="warning" icon={ShieldQuestion} title="Routed for human review" items={summary.routing_reasons} />}
+      {imgIssue && <Notice tone="danger" icon={Camera} title="Image quality — resubmission recommended" items={imgQ.issues} />}
     </div>
   )
 }
@@ -106,24 +98,17 @@ export default function Dashboard() {
   const [apiError, setApiError] = useState('')
 
   const fetchResult = useCallback(() => {
-    // Re-fetch both the claim/result AND docs — investigation parses
-    // FIR/estimate/telematics and extracts dash-cam frames during the run,
-    // so the Documents tab needs fresh data too, not just the agent results.
     api.get(`/claims/${claimId}`)
-      .then(r => {
+      .then((r) => {
         setClaim(r.data.claim)
         setResult(r.data.result)
         if (r.data.policy) setPolicy(r.data.policy)
       })
       .catch(() => {})
-    api.get(`/claims/${claimId}/docs`)
-      .then(r => setClaimDocs(r.data))
-      .catch(() => {})
+    api.get(`/claims/${claimId}/docs`).then((r) => setClaimDocs(r.data)).catch(() => {})
   }, [claimId])
 
   useEffect(() => {
-    // Clean slate for each claim — prevents a previously-viewed claim's photos,
-    // result or docs from lingering when switching between claims.
     setLoading(true)
     setApiError('')
     setClaim(null)
@@ -148,12 +133,13 @@ export default function Dashboard() {
       .finally(() => setLoading(false))
   }, [claimId])
 
-  const { agentStatuses, liveAgents, investigating, start } = useInvestigationSSE(claimId, fetchResult)
+  const { agentStatuses, liveAgents, skippedAgents, investigating, streamLost, start } =
+    useInvestigationSSE(claimId, fetchResult)
 
   const handleDeleteImage = useCallback((url) => {
     const filename = url.split('/').pop()
     api.delete(`/claims/${claimId}/images/${encodeURIComponent(filename)}`)
-      .then(() => setImageUrls(prev => prev.filter(u => u !== url)))
+      .then(() => setImageUrls((prev) => prev.filter((u) => u !== url)))
       .catch(() => {})
   }, [claimId])
 
@@ -161,11 +147,13 @@ export default function Dashboard() {
 
   if (apiError || !claim) {
     return (
-      <div className="flex flex-col items-center justify-center h-80 text-center">
-        <p className="text-4xl mb-4">🔍</p>
-        <p className="text-red-400 font-medium mb-2">{apiError || 'Claim not found'}</p>
-        <Link to="/" className="text-indigo-400 hover:underline text-sm mt-2">← Back to Claims Queue</Link>
-      </div>
+      <Card className="p-12 flex flex-col items-center justify-center text-center">
+        <span className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gray-100 text-gray-400 mb-4">
+          <SearchX className="w-6 h-6" />
+        </span>
+        <p className="text-danger-600 font-medium mb-2">{apiError || 'Claim not found'}</p>
+        <Link to="/" className="text-brand-600 hover:text-brand-700 text-sm mt-1">← Back to Claims Queue</Link>
+      </Card>
     )
   }
 
@@ -175,38 +163,50 @@ export default function Dashboard() {
   const settlement = agents.settlement_recommendation
 
   return (
-    <div className="max-w-7xl mx-auto space-y-4">
-
-      <div className="flex items-center justify-between">
-        <Link to="/" className="text-slate-500 hover:text-slate-300 text-sm transition-colors">
-          ← Claims Queue
-        </Link>
+    <div className="space-y-4 ci-fade-in">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <Link
+            to="/"
+            className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink transition-colors shrink-0"
+          >
+            <ArrowLeft className="w-4 h-4" /> Queue
+          </Link>
+          <span className="w-px h-5 bg-line shrink-0" />
+          <div className="min-w-0">
+            <p className="text-xs font-mono text-brand-600 leading-none">{claim.claim_id}</p>
+            <h1 className="text-lg font-semibold tracking-tight text-ink truncate leading-tight mt-0.5">{claim.claimant}</h1>
+          </div>
+          {claim.status && <Badge tone={statusTone(claim.status)} dot className="shrink-0">{claim.status}</Badge>}
+        </div>
         <DownloadReportButton claimId={claimId} hasResult={hasResult} />
       </div>
 
-      {/* Routing / data-quality alerts (#6) */}
       {hasResult && <ReviewBanner summary={summary} />}
 
-      {/* Row 1: 3 columns */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {/* Row 1 */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
         <ClaimOverview claim={claim} policy={policy} />
         <InvestigationWorkflow
           agentStatuses={agentStatuses}
           liveAgents={agents}
+          skippedAgents={skippedAgents}
           onStart={start}
           investigating={investigating}
+          streamLost={streamLost}
           hasResult={hasResult}
         />
-        <InvestigationSummary summary={summary} />
+        <RiskAndSettlement summary={summary} settlement={settlement} />
       </div>
 
-      {/* Row 2: full-width storyboard (only when incident_reconstruction has storyboard data) */}
+      {/* Storyboard */}
       {agents.incident_reconstruction?.storyboard_panels?.length > 0 && (
         <StoryboardPanel reconstructionData={agents.incident_reconstruction} />
       )}
 
-      {/* Row 3: 2 columns */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* Row 3 */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
         <ClaimDecision summary={summary} settlementData={settlement} />
         <EvidencePanel
           imageUrls={imageUrls}
@@ -217,19 +217,13 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Row 4: human-in-the-loop (#1) + customer letter (#7) */}
+      {/* Row 4 */}
       {hasResult && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <AdjusterPanel
-            claimId={claimId}
-            result={result}
-            aiDecision={summary.decision}
-            onUpdated={fetchResult}
-          />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+          <AdjusterPanel claimId={claimId} result={result} aiDecision={summary.decision} onUpdated={fetchResult} />
           <DecisionLetter claimId={claimId} />
         </div>
       )}
-
     </div>
   )
 }

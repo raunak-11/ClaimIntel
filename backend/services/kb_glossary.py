@@ -89,6 +89,16 @@ def expand_code(raw: str, fraud_checks: list[dict] | None = None) -> dict:
                 f"Past case ({case.get('decision', 'Unknown')}, "
                 f"fraud {case.get('fraud_label', 'Unknown')}): {case.get('lesson', '')}"
             ),
+            # The archive's own outcome figures, for the expanded detail view —
+            # "what happened to the case this one is being compared with" is the
+            # question an adjudicator actually has when they see a precedent ID.
+            "decision": case.get("decision"),
+            "fraud_score": case.get("fraud_score"),
+            "fraud_label": case.get("fraud_label"),
+            "claimed_amount": case.get("claimed_amount"),
+            "settlement_amount": case.get("settlement_amount"),
+            "incident_location": case.get("incident_location"),
+            "damaged_parts": case.get("damaged_parts") or [],
         }
 
     if code and code.startswith("FS-") and code in kb["schemes"]:

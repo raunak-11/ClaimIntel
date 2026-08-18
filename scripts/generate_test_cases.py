@@ -1,0 +1,1046 @@
+"""
+Generates the FIR and Garage Estimate PDFs for all 3 showcase cases in test/, with
+dates computed relative to a reference date (default: today) instead of a fixed
+calendar date. This is what keeps each case's fraud-check profile correct no matter
+when the demo is actually run:
+
+  Case 1 (Vijay M)  — incident 2 days ago  -> FC-05 passes (genuine, no flags)
+  Case 2 (Rohit Madeshiya)   — incident 12 days ago  -> FC-05 flags "late reporting" (by design)
+  Case 3 (Arjun Mehta)  — incident 2 days ago  -> FC-05 passes (flags come from telematics only)
+
+Re-run this the morning of the demo, then type the printed incident date/time/location
+into each case's New Claim form exactly as shown (see the per-case README.md).
+
+Usage: python scripts/generate_test_cases.py [YYYY-MM-DD]   (reference date, default today)
+"""
+
+import csv
+import json
+import sys
+from datetime import date, datetime, timedelta
+from pathlib import Path
+
+from fpdf import FPDF
+
+ROOT = Path(__file__).resolve().parent.parent
+TEST_DIR = ROOT / "test"
+
+
+def _load_policy(policy_no: str) -> dict:
+    """Vehicle facts come from data/policies.csv — the single source of truth.
+    Hardcoded regs drifted once before (Case 3 shipped a stale DL-05 plate that
+    made FC-20 fire an unintended FIR-vehicle mismatch)."""
+    with open(ROOT / "data" / "policies.csv", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            if row["policy_no"] == policy_no:
+                return row
+    raise SystemExit(f"policy {policy_no} not found in data/policies.csv")
+
+
+def _fmt_reg(reg: str) -> str:
+    """MH28BQ2255 -> MH-28-BQ-2255 (display format used on FIRs/estimates)."""
+    r = reg.replace("-", "").replace(" ", "").upper()
+    out, groups = [], []
+    i = 0
+    while i < len(r):
+        j = i
+        is_digit = r[i].isdigit()
+        while j < len(r) and r[j].isdigit() == is_digit:
+            j += 1
+        groups.append(r[i:j])
+        i = j
+    return "-".join(groups)
+
+DARK_GREEN = (27, 94, 58)
+LIGHT_GREEN_BG = (235, 245, 238)
+DARK_BLUE = (17, 62, 110)
+LIGHT_BLUE_BG = (223, 236, 249)
+GREY_TEXT = (90, 90, 90)
+
+
+def _s(text: str) -> str:
+    """fpdf2 core fonts are Latin-1 only — sanitize any non-Latin-1 characters."""
+    return (
+        text.replace("–", "-").replace("—", "-")
+        .replace("'", "'").replace("'", "'")
+        .replace(""", '"').replace(""", '"')
+        .encode("latin-1", "replace").decode("latin-1")
+    )
+
+
+def _ref_date(argv: list[str]) -> date:
+    if len(argv) > 1:
+        return datetime.strptime(argv[1], "%Y-%m-%d").date()
+    return date.today()
+
+
+def _section_bar(pdf: FPDF, text: str, rgb):
+    pdf.set_fill_color(*rgb)
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.cell(0, 7, _s(text), fill=True, new_x="LMARGIN", new_y="NEXT")
+    pdf.set_text_color(0, 0, 0)
+    pdf.ln(1)
+
+
+def _field(pdf: FPDF, label: str, value: str):
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_text_color(*GREY_TEXT)
+    pdf.cell(0, 5, _s(label), new_x="LMARGIN", new_y="NEXT")
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.cell(0, 6, _s(value), new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(1)
+
+
+# ── Generic FIR template ──────────────────────────────────────────────────────
+def generate_fir(out_path: Path, *, district: str, station: str, fir_no: str,
+                  filed_date_str: str, filed_time: str, complainant: str, father_name: str,
+                  address: str, mobile: str, occupation: str,
+                  incident_date_str: str, incident_time: str, location: str, nature: str,
+                  reg_no: str, make_model: str, colour: str, offending_vehicle: str,
+                  statement: str, action_taken: str, station_note: str, investigating_officer: str,
+                  demo_note: str = ""):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
+
+    pdf.set_fill_color(*DARK_GREEN)
+    pdf.rect(0, 0, 210, 22, style="F")
+    pdf.set_xy(0, 5)
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font("Helvetica", "B", 13)
+    pdf.cell(0, 7, "GOVERNMENT OF INDIA - INDIAN POLICE SERVICE", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_x(0)
+    pdf.cell(0, 6, _s(f"District: {district} | {station}"), align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_y(28)
+
+    pdf.set_fill_color(*LIGHT_GREEN_BG)
+    pdf.set_font("Helvetica", "B", 13)
+    pdf.cell(0, 10, "FIRST INFORMATION REPORT (FIR)", align="C", fill=True, new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(3)
+
+    pdf.set_font("Helvetica", "", 9)
+    pdf.cell(95, 6, _s(f"FIR No.: {fir_no}"), border=1)
+    pdf.cell(95, 6, _s(f"Date & Time Filed: {filed_date_str} {filed_time}"), border=1, new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(190, 6, _s(f"Police Station: {station}"), border=1, new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(3)
+
+    _section_bar(pdf, "SECTION 1 - COMPLAINANT INFORMATION", DARK_GREEN)
+    _field(pdf, "Name of Complainant:", complainant)
+    _field(pdf, "Father's / Husband's Name:", father_name)
+    _field(pdf, "Address:", address)
+    _field(pdf, "Mobile Number:", mobile)
+    _field(pdf, "Occupation:", occupation)
+
+    _section_bar(pdf, "SECTION 2 - INCIDENT DETAILS", DARK_GREEN)
+    _field(pdf, "Date of Incident:", incident_date_str)
+    _field(pdf, "Time of Incident:", incident_time)
+    _field(pdf, "Place / Location of Incident:", location)
+    _field(pdf, "Nature of Incident:", nature)
+
+    _section_bar(pdf, "SECTION 3 - VEHICLE DETAILS", DARK_GREEN)
+    _field(pdf, "Registration Number:", reg_no)
+    _field(pdf, "Make / Model:", make_model)
+    _field(pdf, "Colour:", colour)
+    _field(pdf, "Accused / Offending Vehicle:", offending_vehicle)
+
+    _section_bar(pdf, "SECTION 4 - STATEMENT OF FACTS", DARK_GREEN)
+    pdf.set_font("Helvetica", "", 9)
+    pdf.multi_cell(0, 5.5, _s(statement))
+    pdf.ln(2)
+
+    _section_bar(pdf, "SECTION 5 - ACTION TAKEN / NOTES", DARK_GREEN)
+    _field(pdf, "Action Taken:", action_taken)
+    _field(pdf, "Station Note:", station_note)
+    _field(pdf, "Investigating Officer:", investigating_officer)
+
+    if demo_note:
+        pdf.ln(1)
+        pdf.set_font("Helvetica", "BI", 7.5)
+        pdf.set_text_color(180, 40, 40)
+        pdf.multi_cell(0, 4, _s(demo_note))
+        pdf.set_text_color(0, 0, 0)
+
+    pdf.ln(6)
+    pdf.set_font("Helvetica", "I", 10)
+    pdf.cell(95, 6, _s(f"Sd/- {complainant}"), align="C")
+    pdf.cell(95, 6, _s(f"Sd/- {investigating_officer.split(',')[0]}"), align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 8)
+    pdf.cell(95, 5, "Complainant Signature", align="C")
+    pdf.cell(95, 5, "Station Officer Signature & Stamp", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "I", 8)
+    pdf.cell(95, 5, _s(f"({complainant})"), align="C")
+    pdf.cell(95, 5, _s(f"({investigating_officer.split(',')[0]})"), align="C", new_x="LMARGIN", new_y="NEXT")
+
+    pdf.set_y(-20)
+    pdf.set_font("Helvetica", "I", 7)
+    pdf.set_text_color(*GREY_TEXT)
+    pdf.cell(0, 5, _s(f"FIR No. {fir_no} | {station} | Page 1 | Official Document - Not for Commercial Use"), align="C")
+
+    pdf.output(str(out_path))
+    print(f"Wrote {out_path}")
+
+
+# ── Generic Garage Estimate template ──────────────────────────────────────────
+def generate_estimate(out_path: Path, *, workshop_name: str, workshop_address: str,
+                       workshop_phone: str, gstin: str, job_card_no: str, date_str: str,
+                       customer_name: str, vehicle: str, reg_no: str, odometer: str,
+                       policy_no: str, rows: list[tuple[str, str, str, str, int]],
+                       note: str, dealer_footer: str, demo_note: str = ""):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
+
+    pdf.set_fill_color(*DARK_BLUE)
+    pdf.rect(0, 0, 210, 20, style="F")
+    pdf.set_xy(0, 4)
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font("Helvetica", "B", 13)
+    pdf.cell(0, 7, _s(workshop_name), align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 8)
+    pdf.set_x(0)
+    pdf.cell(0, 6, _s(f"{workshop_address} | Ph: {workshop_phone} | GSTIN: {gstin}"),
+             align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_y(26)
+
+    pdf.set_fill_color(*LIGHT_BLUE_BG)
+    pdf.set_font("Helvetica", "B", 13)
+    pdf.cell(0, 10, "VEHICLE REPAIR ESTIMATION SLIP", align="C", fill=True, new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(3)
+
+    pdf.set_font("Helvetica", "", 9)
+    pdf.cell(95, 6, _s(f"Job Card No.: {job_card_no}"), border=1)
+    pdf.cell(95, 6, _s(f"Date: {date_str}"), border=1, new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(3)
+
+    _section_bar(pdf, "CUSTOMER & VEHICLE DETAILS", DARK_BLUE)
+    _field(pdf, "Customer Name:", customer_name)
+    _field(pdf, "Vehicle:", vehicle)
+    _field(pdf, "Registration No.:", reg_no)
+    _field(pdf, "Odometer Reading:", odometer)
+    _field(pdf, "Insurance / Policy No.:", f"Ganit Motors Insurance / {policy_no}")
+    pdf.ln(2)
+
+    subtotal = sum(r[4] for r in rows)
+    cgst = round(subtotal * 0.09)
+    sgst = round(subtotal * 0.09)
+    grand_total = subtotal + cgst + sgst
+
+    with pdf.table(
+        col_widths=(3.5, 8.5, 3.2, 1.6, 2.2, 3.0),
+        text_align=("LEFT", "LEFT", "CENTER", "CENTER", "CENTER", "RIGHT"),
+    ) as table:
+        header = table.row()
+        for h in ("#", "Part / Service Description", "Work Type", "Qty", "Source", "Amount (Rs.)"):
+            header.cell(_s(h))
+        for i, (desc, wtype, qty, src, amt) in enumerate(rows, start=1):
+            row = table.row()
+            row.cell(str(i))
+            row.cell(_s(desc))
+            row.cell(_s(wtype))
+            row.cell(qty)
+            row.cell(_s(src))
+            row.cell(f"{amt:,}")
+
+    pdf.ln(2)
+    pdf.set_font("Helvetica", "", 10)
+    for label, val in [("Sub-Total", subtotal), ("CGST @ 9%", cgst), ("SGST @ 9%", sgst)]:
+        pdf.cell(160, 6, _s(label), border=1, align="R")
+        pdf.cell(30, 6, f"Rs. {val:,}", border=1, align="R", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_fill_color(*LIGHT_BLUE_BG)
+    pdf.cell(160, 8, "GRAND TOTAL", border=1, align="R", fill=True)
+    pdf.cell(30, 8, f"Rs. {grand_total:,}", border=1, align="R", fill=True, new_x="LMARGIN", new_y="NEXT")
+
+    pdf.ln(4)
+    pdf.set_font("Helvetica", "I", 8)
+    pdf.multi_cell(0, 5, _s(f"Note: {note}"))
+
+    if demo_note:
+        pdf.ln(1)
+        pdf.set_font("Helvetica", "BI", 7.5)
+        pdf.set_text_color(180, 40, 40)
+        pdf.multi_cell(0, 4, _s(demo_note))
+        pdf.set_text_color(0, 0, 0)
+
+    pdf.ln(6)
+    pdf.set_font("Helvetica", "I", 10)
+    pdf.cell(95, 6, _s(f"Sd/- {customer_name}"), align="C")
+    pdf.cell(95, 6, _s(f"Sd/- {workshop_name}"), align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 8)
+    pdf.cell(95, 5, "Customer Signature", align="C")
+    pdf.cell(95, 5, "Authorised Signatory", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "I", 8)
+    pdf.cell(95, 5, _s(f"({customer_name})"), align="C")
+    pdf.cell(95, 5, _s(f"({workshop_name})"), align="C", new_x="LMARGIN", new_y="NEXT")
+
+    pdf.set_y(-20)
+    pdf.set_font("Helvetica", "I", 7)
+    pdf.set_text_color(*GREY_TEXT)
+    pdf.cell(0, 5, _s(dealer_footer), align="C")
+
+    pdf.output(str(out_path))
+    print(f"Wrote {out_path}  (Grand Total Rs. {grand_total:,})")
+
+
+# ── Case 1: Vijay M — genuine, recent, no flags ───────────────────────────
+# ── Ownership documents (DL + RC) — mandatory uploads since 2026-07-10 ────────
+# Redesigned 2026-07-15 to match the real Indian DL/RC visual language (state
+# header bar, chip, photo box, QR code, COV authorisation table, digital-
+# signature stamp) instead of a generic black-and-white form — while keeping
+# every field the fraud engine actually reads (reg_no, owner name, chassis,
+# engine, fuel, DL validity) exactly where it was, just restyled.
+
+_STATE_THEMES = {
+    "TN": {"name": "Tamil Nadu",     "rgb": (0, 121, 107),  "bg": (224, 247, 242)},
+    "UP": {"name": "Uttar Pradesh",  "rgb": (191, 54, 12),  "bg": (253, 236, 231)},
+    "MH": {"name": "Maharashtra",    "rgb": (176, 0, 32),   "bg": (255, 235, 238)},
+    "KA": {"name": "Karnataka",      "rgb": (0, 90, 156),   "bg": (222, 238, 250)},
+    "DL": {"name": "Delhi",          "rgb": (106, 27, 154), "bg": (237, 224, 247)},
+}
+_DEFAULT_THEME = {"name": "India", "rgb": (17, 62, 110), "bg": (223, 236, 249)}
+
+
+def _theme_for(reg_or_dl: str) -> dict:
+    return _STATE_THEMES.get((reg_or_dl or "")[:2].upper(), _DEFAULT_THEME)
+
+
+def _draw_chip(pdf: FPDF, x: float, y: float, w: float = 16, h: float = 12):
+    """A gold EMV-style contact-chip icon, as printed on every Indian smart-card DL/RC."""
+    pdf.set_fill_color(212, 175, 55)
+    pdf.set_draw_color(140, 110, 20)
+    pdf.set_line_width(0.3)
+    pdf.rect(x, y, w, h, style="DF")
+    for i in range(1, 4):
+        pdf.line(x + w * i / 4, y, x + w * i / 4, y + h)
+    pdf.line(x, y + h / 2, x + w, y + h / 2)
+    pdf.set_line_width(0.2)
+    pdf.set_draw_color(0, 0, 0)
+
+
+def _draw_fake_qr(pdf: FPDF, x: float, y: float, size: float, seed: str):
+    """A visually QR-like grid (3 finder patterns + deterministic pseudo-random
+    cells) — NOT a real scannable code, just a demo visual cue matching where
+    a genuine document's DigiLocker/verification QR would sit."""
+    import random
+    n = 14
+    cell = size / n
+    rng = random.Random(seed)
+    pdf.set_draw_color(0, 0, 0)
+    pdf.set_line_width(0.2)
+    pdf.set_fill_color(255, 255, 255)
+    pdf.rect(x, y, size, size, style="DF")
+
+    def _finder(cx: float, cy: float):
+        pdf.set_fill_color(0, 0, 0)
+        pdf.rect(cx, cy, cell * 3, cell * 3, style="F")
+        pdf.set_fill_color(255, 255, 255)
+        pdf.rect(cx + cell * 0.6, cy + cell * 0.6, cell * 1.8, cell * 1.8, style="F")
+        pdf.set_fill_color(0, 0, 0)
+        pdf.rect(cx + cell * 1.1, cy + cell * 1.1, cell * 0.8, cell * 0.8, style="F")
+
+    _finder(x, y)
+    _finder(x + size - cell * 3, y)
+    _finder(x, y + size - cell * 3)
+    for row in range(n):
+        for col in range(n):
+            in_finder = (row < 4 and col < 4) or (row < 4 and col >= n - 4) or (row >= n - 4 and col < 4)
+            if in_finder:
+                continue
+            if rng.random() < 0.45:
+                pdf.rect(x + col * cell, y + row * cell, cell, cell, style="F")
+
+
+def _draw_photo_box(pdf: FPDF, x: float, y: float, w: float = 26, h: float = 32):
+    pdf.set_draw_color(120, 120, 120)
+    pdf.set_fill_color(235, 235, 235)
+    pdf.rect(x, y, w, h, style="DF")
+    pdf.set_font("Helvetica", "", 7)
+    pdf.set_text_color(150, 150, 150)
+    pdf.set_xy(x, y + h / 2 - 2)
+    pdf.cell(w, 4, "PHOTO", align="C")
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_draw_color(0, 0, 0)
+
+
+def _two_col_field(pdf: FPDF, x: float, y: float, col_w: float,
+                   label1: str, val1: str, label2: str, val2: str):
+    pdf.set_xy(x, y)
+    pdf.set_font("Helvetica", "", 8)
+    pdf.set_text_color(*GREY_TEXT)
+    pdf.cell(col_w, 5, _s(label1))
+    pdf.cell(col_w, 5, _s(label2), new_x="LMARGIN", new_y="NEXT")
+    pdf.set_x(x)
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.set_text_color(0, 0, 0)
+    pdf.cell(col_w, 6, _s(val1))
+    pdf.cell(col_w, 6, _s(val2), new_x="LMARGIN", new_y="NEXT")
+
+
+def _demo_disclaimer(pdf: FPDF):
+    pdf.ln(3)
+    pdf.set_font("Helvetica", "BI", 7.5)
+    pdf.set_text_color(180, 40, 40)
+    pdf.multi_cell(0, 4, _s("[FOR DEMO PURPOSES ONLY] Synthetic document generated for the ClaimIntel "
+                            "showcase. Not a genuine government document — do not use for identification."))
+    pdf.set_text_color(0, 0, 0)
+
+
+def generate_license(out_path: Path, *, holder: str, father_name: str, dl_no: str, dob: str,
+                     issue_date: str, valid_till: str, address: str, authority: str,
+                     state: str, vehicle_class: str = "LMV (Non-Transport)", blood_group: str = "O+"):
+    theme = _theme_for(dl_no)
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
+
+    pdf.set_fill_color(*theme["rgb"])
+    pdf.rect(0, 0, 210, 24, style="F")
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_xy(0, 3)
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 6, _s("UNION OF INDIA"), align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_x(0)
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.cell(0, 6, _s(f"{state.upper()} STATE MOTOR DRIVING LICENCE"), align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_x(0)
+    pdf.set_font("Helvetica", "", 7)
+    pdf.cell(0, 5, _s(f"Issued by {authority}  |  Motor Vehicles Act, 1988"), align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_text_color(0, 0, 0)
+
+    pdf.set_fill_color(*theme["bg"])
+    pdf.rect(0, 24, 210, 82, style="F")
+
+    top = 30
+    _draw_chip(pdf, 14, top, 16, 12)
+    _draw_photo_box(pdf, 166, top - 2, 28, 34)
+    _draw_fake_qr(pdf, 166, top + 36, 28, seed=dl_no)
+    pdf.set_font("Helvetica", "", 6)
+    pdf.set_text_color(*GREY_TEXT)
+    pdf.set_xy(166, top + 65)
+    pdf.multi_cell(28, 3, _s("Scan for digital\nverification"), align="C")
+    pdf.set_text_color(0, 0, 0)
+
+    pdf.set_xy(14, top + 16)
+    pdf.set_font("Helvetica", "", 8)
+    pdf.set_text_color(*GREY_TEXT)
+    pdf.cell(0, 5, "DL No.", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_x(14)
+    pdf.set_font("Helvetica", "B", 13)
+    pdf.set_text_color(*theme["rgb"])
+    pdf.cell(0, 8, _s(dl_no), new_x="LMARGIN", new_y="NEXT")
+    pdf.set_text_color(0, 0, 0)
+
+    _two_col_field(pdf, 14, top + 32, 75, "Date of Issue", issue_date, "Valid Till (NT)", valid_till)
+    _two_col_field(pdf, 14, top + 45, 75, "Date of Birth", dob, "Blood Group", blood_group)
+
+    pdf.set_xy(14, top + 60)
+    pdf.set_font("Helvetica", "", 8)
+    pdf.set_text_color(*GREY_TEXT)
+    pdf.cell(0, 5, "Name", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_x(14)
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.set_text_color(0, 0, 0)
+    pdf.cell(0, 7, _s(holder.upper()), new_x="LMARGIN", new_y="NEXT")
+
+    pdf.set_x(14)
+    pdf.set_font("Helvetica", "", 8)
+    pdf.set_text_color(*GREY_TEXT)
+    pdf.cell(0, 5, "Son / Daughter / Wife of", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_x(14)
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.set_text_color(0, 0, 0)
+    pdf.cell(0, 6, _s(father_name.upper()), new_x="LMARGIN", new_y="NEXT")
+
+    pdf.set_x(14)
+    pdf.set_font("Helvetica", "", 8)
+    pdf.set_text_color(*GREY_TEXT)
+    pdf.cell(0, 5, "Address", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_x(14)
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.set_text_color(0, 0, 0)
+    pdf.multi_cell(148, 5, _s(address))
+
+    # Flow naturally from wherever the (variable-length) address text ended,
+    # rather than a hardcoded y — a fixed y clipped/overlapped short addresses
+    # differently than long ones. Clamp to just past the photo/QR column
+    # (bottom ~94mm) so this section never collides with it either.
+    pdf.ln(4)
+    if pdf.get_y() < 100:
+        pdf.set_y(100)
+    _section_bar(pdf, "AUTHORISATION TO DRIVE FOLLOWING CLASS OF VEHICLES THROUGHOUT INDIA", theme["rgb"])
+    with pdf.table(col_widths=(1, 1), text_align=("LEFT", "LEFT")) as table:
+        header = table.row()
+        header.cell(_s("Class of Vehicle (COV)"))
+        header.cell(_s("Date of Issue (DOI)"))
+        row = table.row()
+        row.cell(_s(vehicle_class))
+        row.cell(_s(issue_date))
+
+    pdf.ln(6)
+    pdf.set_font("Helvetica", "I", 9)
+    pdf.cell(95, 6, _s("Signature & ID of Issuing Authority"), align="C")
+    pdf.cell(95, 6, _s("Signature / Thumb Impression of Holder"), align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 8)
+    pdf.cell(95, 5, _s(f"({authority})"), align="C")
+    pdf.cell(95, 5, _s(f"({holder})"), align="C", new_x="LMARGIN", new_y="NEXT")
+
+    _demo_disclaimer(pdf)
+    pdf.output(str(out_path))
+    print(f"  wrote {out_path.relative_to(ROOT)}")
+
+
+def generate_rc(out_path: Path, *, reg_no: str, owner: str, father_name: str,
+                make: str, model: str, colour: str, body_type: str,
+                reg_date: str, reg_valid: str, chassis: str, engine: str, fuel: str,
+                cc: str, seating: str, address: str, issuing_authority: str, state: str,
+                financer: str | None = None):
+    theme = _theme_for(reg_no)
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
+
+    pdf.set_fill_color(*theme["rgb"])
+    pdf.rect(0, 0, 210, 20, style="F")
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_xy(0, 3)
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 6, _s("REGISTRATION CERTIFICATE FOR VEHICLE"), align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_x(0)
+    pdf.set_font("Helvetica", "", 8)
+    pdf.cell(0, 6, _s(f"Issued by Government of {state}  |  Issuing Authority: {issuing_authority}"),
+             align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_text_color(0, 0, 0)
+
+    top = 27
+    _draw_chip(pdf, 14, top, 16, 12)
+    _draw_fake_qr(pdf, 168, top - 2, 26, seed=reg_no)
+
+    pdf.set_xy(14, top + 16)
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_text_color(*GREY_TEXT)
+    pdf.cell(0, 5, "Registration Number", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_x(14)
+    pdf.set_font("Helvetica", "B", 17)
+    pdf.set_text_color(*theme["rgb"])
+    pdf.cell(0, 9, _s(reg_no), new_x="LMARGIN", new_y="NEXT")
+    pdf.set_text_color(0, 0, 0)
+
+    _two_col_field(pdf, 14, top + 32, 90, "Date of Registration", reg_date, "Registration Valid Upto", reg_valid)
+    _two_col_field(pdf, 14, top + 45, 90, "Chassis Number", chassis, "Engine / Motor Number", engine)
+    pdf.ln(4)
+
+    _section_bar(pdf, "OWNER DETAILS", theme["rgb"])
+    _field(pdf, "Owner Name", owner)
+    _field(pdf, "Son / Wife / Daughter of", father_name)
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_text_color(*GREY_TEXT)
+    pdf.cell(0, 5, "Address", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.set_text_color(0, 0, 0)
+    pdf.multi_cell(0, 5, _s(address))
+    pdf.ln(1)
+
+    _section_bar(pdf, "VEHICLE PARTICULARS", theme["rgb"])
+    vp_rows = [
+        ("Maker's Name", make), ("Model Name", model),
+        ("Colour", colour), ("Body Type", body_type),
+        ("Fuel Type", fuel), ("Cubic Capacity (cc)", cc),
+        ("Seating Capacity", seating), ("Emission Norms", "Bharat Stage VI"),
+    ]
+    with pdf.table(col_widths=(1, 1), text_align=("LEFT", "LEFT")) as table:
+        for i in range(0, len(vp_rows), 2):
+            row = table.row()
+            for label, val in vp_rows[i:i + 2]:
+                row.cell(_s(f"{label}: {val}"))
+    pdf.ln(1)
+
+    _section_bar(pdf, "FINANCIAL ENCUMBRANCE", theme["rgb"])
+    _field(pdf, "Financer / Hypothecation", financer or "None (vehicle owned outright, no hypothecation)")
+
+    pdf.ln(3)
+    stamp_y = pdf.get_y()
+    pdf.set_draw_color(0, 130, 60)
+    pdf.set_line_width(0.4)
+    pdf.rect(120, stamp_y, 70, 20)
+    pdf.set_xy(122, stamp_y + 2)
+    pdf.set_font("Helvetica", "", 7)
+    pdf.set_text_color(0, 110, 50)
+    pdf.multi_cell(66, 3.6, _s("[OK] Digitally signed by Ministry of Road\n"
+                               "Transport and Highways, Government of India\n"
+                               f"Date: {reg_date}"))
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_draw_color(0, 0, 0)
+    pdf.set_line_width(0.2)
+    pdf.set_y(stamp_y + 24)
+
+    pdf.set_font("Helvetica", "", 7)
+    pdf.set_text_color(*GREY_TEXT)
+    pdf.multi_cell(0, 4, _s("Note: This Vehicle Registration Certificate reflects data provided by the "
+                            "issuing authority in the National Registry of the Ministry of Road Transport "
+                            "and Highways (DigiLocker-style verification)."))
+    pdf.set_text_color(0, 0, 0)
+
+    _demo_disclaimer(pdf)
+    pdf.output(str(out_path))
+    print(f"  wrote {out_path.relative_to(ROOT)}")
+
+
+def generate_ownership_docs(out_dir: Path, prefix: str, policy: dict, ref: date, *,
+                            dob: str, address: str, father_name: str,
+                            colour: str, body_type: str, blood_group: str = "O+",
+                            financer: str | None = None):
+    """DL + RC pair consistent with policies.csv, so FC-29 passes for the
+    genuine demo flows (RC reg == policy reg, DL name == claimant, DL valid)."""
+    reg_disp = _fmt_reg(policy["vehicle_reg_no"])
+    state_code = policy["vehicle_reg_no"][:2].upper()
+    state_name = _theme_for(policy["vehicle_reg_no"])["name"]
+
+    issue_dt = ref - timedelta(days=365 * 4)
+    valid_till_dt = issue_dt + timedelta(days=365 * 20)
+    reg_date_dt = date(int(policy["vehicle_year"]), 6, 15)
+    reg_valid_dt = date(reg_date_dt.year + 15, reg_date_dt.month, reg_date_dt.day)
+
+    generate_license(
+        out_dir / f"{prefix}_Driving_License.pdf",
+        holder=policy["customer_name"], father_name=father_name,
+        dl_no=f"{state_code}01 {policy['vehicle_year']}00{policy['phone'][-5:]}",
+        dob=dob, issue_date=issue_dt.strftime("%d-%m-%Y"), valid_till=valid_till_dt.strftime("%d-%m-%Y"),
+        address=address, authority=f"RTO {state_code}-01", state=state_name, blood_group=blood_group,
+    )
+    generate_rc(
+        out_dir / f"{prefix}_Vehicle_RC.pdf",
+        reg_no=reg_disp, owner=policy["customer_name"], father_name=father_name,
+        make=policy["vehicle_make"], model=policy["vehicle_model"],
+        colour=colour, body_type=body_type,
+        reg_date=reg_date_dt.strftime("%d-%m-%Y"), reg_valid=reg_valid_dt.strftime("%d-%m-%Y"),
+        chassis=f"MA{policy['vehicle_year']}{policy['phone'][-6:]}XX",
+        engine=f"E{policy['engine_cc']}{policy['phone'][-4:]}",
+        fuel="Electric" if policy["engine_cc"] == "0" else "Petrol",
+        cc=policy["engine_cc"], seating="5", address=address,
+        issuing_authority=f"RTO {state_code}-01", state=state_name, financer=financer,
+    )
+
+
+def case_aditya(ref: date):
+    out_dir = TEST_DIR / "1-vijay-m-genuine-approve"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    policy = _load_policy("POL-112233")
+    reg = _fmt_reg(policy["vehicle_reg_no"])
+    incident_dt = ref - timedelta(days=2)
+    filed_dt = incident_dt + timedelta(days=1)
+    estimate_dt = filed_dt + timedelta(days=1)
+
+    incident_date_str = incident_dt.strftime("%d %B %Y")
+    location = "NH-32, near Ulundurpet, Tamil Nadu"
+
+    generate_fir(
+        out_dir / "Vijay_M_FIR.pdf",
+        district="Villupuram", station="Ulundurpet Highway Police Station", fir_no="0512 / 2026",
+        filed_date_str=filed_dt.strftime("%d %B %Y"), filed_time="10:05 hrs",
+        complainant="Vijay M", father_name="Madesh",
+        address="Kotturpuram, Chennai - 600085, Tamil Nadu", mobile="9567890123",
+        occupation="Business Consultant",
+        incident_date_str=incident_date_str, incident_time="12:15 hrs", location=location,
+        nature="Motor Vehicle Accident - Head-on Collision with Roadside Barrier",
+        reg_no=reg, make_model=f"{policy['vehicle_make']} {policy['vehicle_model']}", colour="Sunset Orange",
+        offending_vehicle="None - single-vehicle accident",
+        statement=(
+            f"The complainant states that on {incident_date_str} at approximately 12:15 hrs he was driving his "
+            f"Kia Seltos bearing registration {reg} on NH-32 near Ulundurpet when a stray animal suddenly "
+            "crossed the carriageway. Swerving to avoid it, the vehicle veered off line and struck the roadside "
+            "culvert wall head-on on the front-right side. The impact caused severe damage to the front bumper, "
+            "bonnet, front grille and right headlight assembly. The vehicle was towed to an authorised service "
+            "centre in Chennai for repair. No other vehicle was involved and no bodily injury was reported."
+        ),
+        action_taken="Case registered as single-vehicle road accident, property damage only.",
+        station_note="Vehicle RC, DL and insurance copy verified. Scene photographs taken by complainant.",
+        investigating_officer="Sub-Inspector M. Selvakumar, Badge No. VP-2217",
+    )
+
+    # Recalibrated 2026-07-23 against the live claim CLM-2026-07-000001 run
+    # AFTER the double-GST comparison fix (see docs/changelog.md 2026-07-23
+    # update 4): the AI assessed these 6 parts at Rs.54,100-69,900 raw
+    # (parts, GST-inclusive web retail) + Rs.8,300 labour, giving an
+    # inclusive-basis assessed mid of Rs.63,494. The previous Rs.50,386 total
+    # sat at -20.6% — a hair OUTSIDE the ±20% Consistent band (this was the
+    # "case 1 always shows >20% negative variance" report; under the old
+    # double-GST math it showed an even worse phantom -31%). Three part
+    # prices bumped +Rs.3,300 to centre the fair total at ~-14.5%, leaving
+    # ~5 points of margin for run-to-run pricing drift (#10c). newupdates.md
+    # item #10 still applies: the "clean approve" case must land within the
+    # AI's own fair-value band or FC-17/inflation-cap fires on a genuine
+    # claim. Re-run/get the agent's fresh total before any future demo if the
+    # live pricing cache has turned over (30-day TTL), the photo changes, or
+    # price_lookup.py / damage_assessment.py change again.
+    rows = [
+        ("Front Bumper Assembly (OEM)", "Replace", "1", "OEM", 5800),
+        ("Bonnet / Hood Panel (OEM)", "Replace", "1", "OEM", 11800),
+        ("Front Grille Assembly (OEM)", "Replace", "1", "OEM", 3200),
+        ("Headlight Assembly RH (OEM)", "Replace", "1", "OEM", 7900),
+        ("Front Right Fender", "Repair + Paint", "1", "OEM", 2800),
+        ("Radiator Assembly (OEM)", "Replace", "1", "OEM", 6100),
+        ("Labour - Panel Beating, Denting & Fitment", "Labour", "1", "-", 4800),
+        ("Labour - Painting (2-coat oven finish, 4 panels)", "Labour", "1", "-", 3600),
+    ]
+    generate_estimate(
+        out_dir / "Vijay_M_Garage_Estimate_Fair.pdf",
+        workshop_name="Kia Authorised Service Centre - Chennai",
+        workshop_address="12, Anna Salai, Chennai, Tamil Nadu - 600002",
+        workshop_phone="044-28451190", gstin="33AAKCK5678M1Z4",
+        job_card_no="JC-CHN-2026-5127", date_str=estimate_dt.strftime("%d %B %Y"),
+        customer_name="Vijay M", vehicle="Kia Seltos HTX Plus", reg_no=reg,
+        odometer="24,680 km", policy_no="POL-112233", rows=rows,
+        note="Severe front-right impact damage from a head-on collision with a roadside barrier. "
+             "All parts OEM wherever possible. Repair scope matches damage survey and FIR.",
+        dealer_footer="Kia India Authorised Dealer Workshop | Page 1 | E&OE - Subject to Workshop Terms & Conditions",
+    )
+
+    # Fraud variant: same damage, non-empanelled body shop quoting ~75% above
+    # fair OEM+labour rates with padded diagnostic/alignment lines (FC-17 / FS-004)
+    rows_inflated = [
+        ("Front Bumper Assembly (OEM)", "Replace", "1", "OEM", 24500),
+        ("Bonnet / Hood Panel (OEM)", "Replace", "1", "OEM", 44500),
+        ("Front Grille Assembly (OEM)", "Replace", "1", "OEM", 13800),
+        ("Headlight Assembly RH (OEM)", "Replace", "1", "OEM", 27500),
+        ("Front Right Fender", "Repair + Paint", "1", "OEM", 15500),
+        ("Radiator Assembly (OEM)", "Replace", "1", "OEM", 22500),
+        ("Suspension Geometry Check & Wheel Alignment", "Service", "1", "-", 4800),
+        ("Labour - Panel Beating, Denting & Fitment", "Labour", "1", "-", 16500),
+        ("Labour - Painting (2-coat oven finish, 4 panels)", "Labour", "1", "-", 12000),
+    ]
+    generate_estimate(
+        out_dir / "Vijay_M_Garage_Estimate_Inflated.pdf",
+        workshop_name="Sri Balaji Auto Body Works",
+        workshop_address="47, GST Road, Chromepet, Chennai, Tamil Nadu - 600044",
+        workshop_phone="044-22765431", gstin="33BBPSB4412N1Z9",
+        job_card_no="SB-2026-1189", date_str=estimate_dt.strftime("%d %B %Y"),
+        customer_name="Vijay M", vehicle="Kia Seltos HTX Plus", reg_no=reg,
+        odometer="24,680 km", policy_no="POL-112233", rows=rows_inflated,
+        note="Heavy front-end structural damage. Full OEM replacement recommended for all "
+             "impacted assemblies. Estimate valid 15 days; parts subject to availability.",
+        dealer_footer="Multi-Brand Body Shop | Page 1 | E&OE - Subject to Workshop Terms & Conditions",
+    )
+
+    generate_ownership_docs(out_dir, "Vijay_M", policy, ref,
+                            dob="01-05-1998", father_name="Madesh",
+                            address="Kotturpuram, Chennai - 600085, Tamil Nadu",
+                            colour="Sunset Orange", body_type="SUV", blood_group="B+")
+
+    fair_subtotal = sum(r[4] for r in rows)
+    fair_total = fair_subtotal + 2 * round(fair_subtotal * 0.09)
+    inflated_subtotal = sum(r[4] for r in rows_inflated)
+    inflated_total = inflated_subtotal + 2 * round(inflated_subtotal * 0.09)
+
+    print("\n--- Case 1 (Vijay M) - type these into the New Claim form ---")
+    print("Claim type:        Motor - Own Damage")
+    print(f"Incident date:     {incident_dt.isoformat()}")
+    print("Incident time:     12:15")
+    print(f"Incident location: {location}")
+    print("Upload DL + RC:    Vijay_M_Driving_License.pdf / Vijay_M_Vehicle_RC.pdf")
+    print("Estimate option A (genuine -> Approve):    Vijay_M_Garage_Estimate_Fair.pdf,")
+    print(f"    amount {fair_total}, workshop: Kia Authorised Service Centre - Chennai")
+    print("Estimate option B (inflated -> Escalate):  Vijay_M_Garage_Estimate_Inflated.pdf,")
+    print(f"    amount {inflated_total}, workshop: Sri Balaji Auto Body Works  (FC-17 / FS-004 + inflation cap)")
+
+
+# ── Case 2: Rohit Madeshiya — inflated estimate + FIR mismatch, deliberately late ──
+def case_meera(ref: date):
+    out_dir = TEST_DIR / "2-rohit-madeshiya-inflation-escalate"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    policy = _load_policy("POL-445566")
+    reg = _fmt_reg(policy["vehicle_reg_no"])
+    incident_dt = ref - timedelta(days=12)
+    estimate_dt = incident_dt + timedelta(days=4)
+    filed_dt = incident_dt + timedelta(days=5)
+
+    incident_date_str = incident_dt.strftime("%d %B %Y")
+    fir_location = "Civil Lines Crossing, Etawah"
+
+    generate_fir(
+        out_dir / "Rohit_Madeshiya_FIR.pdf",
+        district="Etawah", station="Etawah Kotwali Police Station", fir_no="0145 / 2026",
+        filed_date_str=filed_dt.strftime("%d %B %Y"), filed_time="09:20 hrs",
+        complainant="Rohit Madeshiya", father_name="Ravindra Madeshiya",
+        address="Civil Lines, Etawah - 206001, Uttar Pradesh", mobile="8890123456",
+        occupation="Bank Officer",
+        incident_date_str=incident_date_str, incident_time="19:40 hrs", location=fir_location,
+        nature="Motor Vehicle Accident - Front-End Collision with Secondary Side Impact",
+        reg_no=reg, make_model=f"{policy['vehicle_make']} {policy['vehicle_model']}", colour="Nexa Blue",
+        offending_vehicle="Unidentified motorcycle - fled the scene",
+        statement=(
+            f"The complainant states that on {incident_date_str} at approximately 19:40 hours his Maruti Suzuki "
+            f"Baleno bearing {reg} was struck head-on by an unidentified motorcycle near Civil Lines "
+            "Crossing, Etawah. On impact the vehicle swerved and struck the road divider on its right-of-way, "
+            "grazing along it on the driver-opposite side. The complainant reports damage to the front bumper, "
+            "bonnet and windscreen, with the left-side fender, both left doors and the left mirror damaged "
+            "against the divider. The offending motorcycle rider fled the scene before any details could be "
+            "recorded. The complainant filed this report five days after the incident for insurance purposes "
+            "and stated that no injury occurred."
+        ),
+        action_taken="FIR registered based on complainant statement. No witness available at the time of filing.",
+        station_note="Vehicle not inspected at scene. FIR recorded from statement; photographs and garage estimate to follow.",
+        investigating_officer="Head Constable R. Pandey, Badge No. ET-3342",
+    )
+
+    # Recalibrated 2026-07-23 against the case's own damage photos (now shipped
+    # in this folder: a blue Baleno with a crumpled bonnet, shattered
+    # windscreen, damaged front bumper, and heavy LEFT-side damage — both left
+    # doors, left fender, left ORVM, torn wheel-arch liner). The previous
+    # bumper+bonnet-only scope (#36 pass 2) was a defence against phantom
+    # unverifiable lines when no photo shipped with the case; with real photos
+    # in the folder the estimate-anchored verification can confirm every line
+    # below against pixels, and an estimate that ignored the obvious door/glass
+    # damage would itself read as under-declaration. FIR story updated to match
+    # (motorcycle head-on + swerve into the divider explains the left side).
+    # Inflated variant = identical scope at ~+90% prices — a clean
+    # price-inflation signal only, no scope/quantity padding mixed in.
+    rows = [
+        ("Front Bumper Assembly (OEM)", "Replace + Paint", "1", "OEM", 9800),
+        ("Bonnet Panel (OEM)", "Replace + Paint", "1", "OEM", 17800),
+        ("Windscreen Glass with Moulding", "Replace", "1", "OEM", 14500),
+        ("Front Fender LH", "Repair + Paint", "1", "OEM", 5900),
+        ("Front Door LH Skin (OEM)", "Replace + Paint", "1", "OEM", 16200),
+        ("Rear Door LH", "Repair + Paint", "1", "OEM", 8400),
+        ("ORVM LH (Electric, with Indicator)", "Replace", "1", "OEM", 7200),
+        ("Wheel Arch Liner LH", "Replace", "1", "OEM", 2400),
+        ("Labour - Panel Beating & Alignment", "Labour", "1", "-", 12000),
+        ("Labour - Painting (5 panels, oven finish)", "Labour", "1", "-", 10500),
+        ("Consumables (Primer, Polish, Masking)", "Material", "1", "-", 4900),
+    ]
+    generate_estimate(
+        out_dir / "Rohit_Madeshiya_Garage_Estimate_Inflated.pdf",
+        workshop_name="Ganga Motors & Body Works",
+        workshop_address="Sarvodaya Nagar, Etawah, Uttar Pradesh - 206001",
+        workshop_phone="0568-2456789", gstin="09ZZZZG8888X1Z2",
+        job_card_no="JC-UP-2026-0734", date_str=estimate_dt.strftime("%d %B %Y"),
+        customer_name="Rohit Madeshiya", vehicle="Maruti Suzuki Baleno Alpha", reg_no=reg,
+        odometer="32,150 km", policy_no="POL-445566", rows=rows,
+        note="Extensive front-end damage. All parts OEM as per customer request. "
+             "Structural alignment included. Estimate valid 10 days.",
+        dealer_footer="Multi-Brand Workshop (Non-Empanelled) | Page 1 | E&OE - Subject to Workshop Terms & Conditions",
+    )
+
+    # Fair benchmark from the authorised Maruti workshop — same photo-matched
+    # scope as rows above at honest MGP/authorised rates (realistic Baleno
+    # market prices as the anchor; #10c documents run-to-run AI pricing
+    # volatility, so prices sit mid-market, not at the cheap edge, to hold the
+    # "Consistent" band). Re-verify against a live run before the demo if the
+    # price cache has turned over.
+    rows_fair = [
+        ("Front Bumper Assembly (OEM)", "Replace + Paint", "1", "OEM", 5200),
+        ("Bonnet Panel (OEM)", "Replace + Paint", "1", "OEM", 9500),
+        ("Windscreen Glass with Moulding", "Replace", "1", "OEM", 7800),
+        ("Front Fender LH", "Repair + Paint", "1", "OEM", 2800),
+        ("Front Door LH Skin (OEM)", "Replace + Paint", "1", "OEM", 8500),
+        ("Rear Door LH", "Repair + Paint", "1", "OEM", 4200),
+        ("ORVM LH (Electric, with Indicator)", "Replace", "1", "OEM", 3600),
+        ("Wheel Arch Liner LH", "Replace", "1", "OEM", 1100),
+        ("Labour - Panel Beating & Alignment", "Labour", "1", "-", 6500),
+        ("Labour - Painting (5 panels, oven finish)", "Labour", "1", "-", 5800),
+        ("Consumables (Primer, Polish, Masking)", "Material", "1", "-", 2400),
+    ]
+    generate_estimate(
+        out_dir / "Rohit_Madeshiya_Garage_Estimate_Fair.pdf",
+        workshop_name="Maruti Suzuki Arena Authorised Service - Etawah",
+        workshop_address="NH-19 Bypass, Etawah, Uttar Pradesh - 206001",
+        workshop_phone="0568-2401122", gstin="09AAACM4154K1Z6",
+        job_card_no="MSA-ET-2026-0912", date_str=estimate_dt.strftime("%d %B %Y"),
+        customer_name="Rohit Madeshiya", vehicle="Maruti Suzuki Baleno Alpha", reg_no=reg,
+        odometer="32,150 km", policy_no="POL-445566", rows=rows_fair,
+        note="Front-end impact repair as per survey. Genuine MGP parts. "
+             "Insurance-approved labour rates applied.",
+        dealer_footer="Maruti Suzuki Authorised Service Station | Page 1 | E&OE - Subject to Workshop Terms & Conditions",
+    )
+
+    generate_ownership_docs(out_dir, "Rohit_Madeshiya", policy, ref,
+                            dob="26-03-1996", father_name="Ravindra Madeshiya",
+                            address="Civil Lines, Etawah - 206001, Uttar Pradesh",
+                            colour="Nexa Blue", body_type="Hatchback", blood_group="O+",
+                            financer="HDFC Bank Ltd")
+
+    fair_subtotal = sum(r[4] for r in rows_fair)
+    fair_total = fair_subtotal + 2 * round(fair_subtotal * 0.09)
+    inflated_subtotal = sum(r[4] for r in rows)
+    inflated_total = inflated_subtotal + 2 * round(inflated_subtotal * 0.09)
+
+    print("\n--- Case 2 (Rohit Madeshiya) - type these into the New Claim form ---")
+    print("Claim type:        Motor - Own Damage")
+    print(f"Incident date:     {incident_dt.isoformat()}  (matches the FIR -> triggers FC-05 late reporting)")
+    print("Incident time:     19:40")
+    print("Incident location: MG Road, Bengaluru  (deliberately NOT the FIR's location -> triggers FC-20)")
+    print("Upload DL + RC:    Rohit_Madeshiya_Driving_License.pdf / Rohit_Madeshiya_Vehicle_RC.pdf")
+    print("FIR number (optional):                  0145/2026")
+    print("Estimate option A (fair -> milder path):     Rohit_Madeshiya_Garage_Estimate_Fair.pdf,")
+    print(f"    amount {fair_total}, workshop: Maruti Suzuki Arena Authorised Service - Etawah")
+    print("Estimate option B (inflated -> Escalate):    Rohit_Madeshiya_Garage_Estimate_Inflated.pdf,")
+    print(f"    amount {inflated_total}, workshop: Ganga Motors & Body Works  (FC-17/FS-004 + FC-20 + FC-05)")
+
+
+# ── Case 3: Arjun Mehta — telematics/GPS contradicts the claim, kept recent ───
+def case_arjun(ref: date):
+    out_dir = TEST_DIR / "3-arjun-mehta-telematics-escalate"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    policy = _load_policy("POL-567890")
+    reg = _fmt_reg(policy["vehicle_reg_no"])
+    incident_dt = ref - timedelta(days=2)
+    filed_dt = incident_dt + timedelta(days=1)
+    estimate_dt = incident_dt + timedelta(days=2)
+
+    incident_date_str = incident_dt.strftime("%d %B %Y")
+    location = "Near Ramanujan IT City Parking, Perungudi, Chennai"
+
+    generate_fir(
+        out_dir / "Arjun_Mehta_FIR.pdf",
+        district="Kancheepuram", station="Perungudi Traffic Police Station", fir_no="0378 / 2026",
+        filed_date_str=filed_dt.strftime("%d %B %Y"), filed_time="17:45 hrs",
+        complainant="Arjun Mehta", father_name="Suresh Mehta",
+        address="23, Whitefield Main Road, Bengaluru - 560066", mobile="9900112233",
+        occupation="IT Professional",
+        incident_date_str=incident_date_str, incident_time="16:30 hrs", location=location,
+        nature="Motor Vehicle Accident - Front-End Collision / Hit and Run",
+        reg_no=reg, make_model=f"{policy['vehicle_make']} {policy['vehicle_model']}", colour="Polar White",
+        offending_vehicle="Unidentified white goods tempo - fled the scene, partial Tamil Nadu registration",
+        statement=(
+            f"The complainant states that on {incident_date_str} at approximately 16:30 hours he was driving his "
+            f"vehicle Hyundai ({reg}) on the service road adjacent to the Ramanujan IT City parking area, "
+            "Perungudi, Chennai, when an unidentified white goods tempo abruptly cut into his lane and braked "
+            "sharply. Despite braking, his vehicle collided head-on with the rear of the tempo. Both front "
+            "airbags deployed on impact. The tempo driver fled the scene without stopping. The complainant "
+            "reports severe damage to the bonnet, front bumper and grille, the right headlamp and right fender, "
+            "with the engine undertray torn loose. No bodily injury was reported; seat belts were worn. CCTV "
+            "footage from the IT City gate requested but not yet retrieved at time of FIR filing."
+        ),
+        action_taken="Case registered under Section 279 IPC. CCTV footage requisition sent to Ramanujan IT City "
+                      "security. Vehicle inspected on-site. Damage consistent with statement.",
+        station_note="Vehicle RC, DL, and insurance documents verified originals. Damage assessment photographs "
+                     "taken at scene. Airbag deployment noted on inspection.",
+        investigating_officer="Sub-Inspector Karunakaran P., Badge No. T-5512",
+    )
+
+    # Recalibrated 2026-07-23 against the case's own damage photos (now shipped
+    # in this folder: a white Hyundai, plate matching this policy, with a
+    # severe FRONT impact — bonnet folded, bumper broken loose, grille smashed,
+    # RH headlamp destroyed, undertray hanging, and DEPLOYED AIRBAGS visible on
+    # the dash through the windscreen). The old story (minor rear parking dent,
+    # ~Rs.11k) contradicted these photos outright and would have tripped the
+    # damage-vs-story guard for the wrong reason — this case's designed signal
+    # is the telematics contradiction (FC-21/FC-22), so the story must MATCH
+    # the photos. FIR rewritten to a front-end hit-and-run at the same
+    # time/location. Airbag + pretensioner lines are real-world mandatory after
+    # deployment and the deployed bags are photo-visible; telematics still says
+    # airbag_deployed=false — a deliberate evidence contradiction for the
+    # reconstruction agent to catch.
+    rows = [
+        ("Front Bumper Assembly (OEM)", "Replace", "1", "OEM", 6800),
+        ("Bonnet Panel (OEM)", "Replace + Paint", "1", "OEM", 11500),
+        ("Front Grille Assembly (OEM)", "Replace", "1", "OEM", 5200),
+        ("Headlamp Assembly RH (LED, OEM)", "Replace", "1", "OEM", 14500),
+        ("Front Fender RH", "Repair + Paint", "1", "OEM", 3200),
+        ("Engine Undertray / Lower Skid Cover", "Replace", "1", "OEM", 2100),
+        ("Airbag Module Set (Driver + Passenger) with Clock Spring", "Replace", "1", "OEM", 34000),
+        ("Seat Belt Pretensioner Set (Front)", "Replace", "1", "OEM", 8500),
+        ("Labour - Panel Beating, Fitment & Alignment", "Labour", "1", "-", 7500),
+        ("Labour - Painting (3 panels, oven finish)", "Labour", "1", "-", 5500),
+    ]
+    generate_estimate(
+        out_dir / "Arjun_Mehta_Garage_Estimate_Fair.pdf",
+        workshop_name="Hyundai Exclusive Service - Perungudi",
+        workshop_address="12-A, OMR Old Mahabalipuram Rd, Perungudi, Chennai - 600096",
+        workshop_phone="044-40123456", gstin="33AABHH2345K1Z8",
+        job_card_no="JC-CHN-2026-3301", date_str=estimate_dt.strftime("%d %B %Y"),
+        customer_name="Arjun Mehta", vehicle="Hyundai Creta SX Turbo", reg_no=reg,
+        odometer="18,765 km", policy_no="POL-567890", rows=rows,
+        note="Severe front-end collision with airbag deployment. SRS components (airbags, "
+             "pretensioners) replaced as mandatory after deployment. Structural inspection included.",
+        dealer_footer="Hyundai Motor India Authorised Dealer Workshop | Page 1 | E&OE - Subject to Workshop Terms & Conditions",
+    )
+
+    # Fraud variant: suspiciously LOW quote from an unregistered roadside garage —
+    # classic cash-settlement bypass signal (FC-23 garage under-declaration).
+    # Skipping the deployed airbags entirely is the tell: no honest repair of
+    # this damage can omit SRS replacement.
+    rows_low = [
+        ("Bonnet - Dent Repair & Repaint (Local)", "Repair", "1", "Local", 4500),
+        ("Front Bumper - Repair & Refit (Local)", "Repair", "1", "Local", 2200),
+        ("Headlamp RH (Aftermarket)", "Replace", "1", "Local", 4800),
+        ("Front Grille (Aftermarket)", "Replace", "1", "Local", 1900),
+        ("Labour", "Labour", "1", "-", 2600),
+    ]
+    generate_estimate(
+        out_dir / "Arjun_Mehta_Garage_Estimate_Underdeclared.pdf",
+        workshop_name="Roadside QuickFix Garage",
+        workshop_address="Shop 3, Service Lane, OMR, Perungudi, Chennai - 600096",
+        workshop_phone="98401-55672", gstin="Unregistered",
+        job_card_no="QF-1188", date_str=estimate_dt.strftime("%d %B %Y"),
+        customer_name="Arjun Mehta", vehicle="Hyundai Creta SX Turbo", reg_no=reg,
+        odometer="18,765 km", policy_no="POL-567890", rows=rows_low,
+        note="Quick job, cash payment. Airbag replacement NOT included - customer to arrange "
+             "separately. Non-genuine parts used where required.",
+        dealer_footer="Local Workshop | Page 1 | Rates as agreed",
+    )
+
+    generate_ownership_docs(out_dir, "Arjun_Mehta", policy, ref,
+                            dob="21-11-1990", father_name="Suresh Mehta",
+                            address="23, Whitefield Main Road, Bengaluru - 560066",
+                            colour="Polar White", body_type="SUV", blood_group="A+")
+
+    fair_subtotal = sum(r[4] for r in rows)
+    fair_total = fair_subtotal + 2 * round(fair_subtotal * 0.09)
+    low_subtotal = sum(r[4] for r in rows_low)
+    low_total = low_subtotal + 2 * round(low_subtotal * 0.09)
+
+    print("\n--- Case 3 (Arjun Mehta) - type these into the New Claim form ---")
+    print("Claim type:        Motor - Own Damage")
+    print(f"Incident date:     {incident_dt.isoformat()}  (recent -> FC-05 passes, keeps the case clean)")
+    print("Incident time:     16:30")
+    print(f"Incident location: {location}  (must match the FIR)")
+    print("Upload DL + RC:    Arjun_Mehta_Driving_License.pdf / Arjun_Mehta_Vehicle_RC.pdf")
+
+    # The telematics fixture must be regenerated with the same date math as the
+    # FIR/estimates — it used to be a static file with timestamps frozen at its
+    # authoring date, so after a few weeks the "vehicle evidence" predated the
+    # claimed incident by more than a month in plain sight on the telematics
+    # panel. The event sits at the claimed 16:30 incident time, but the GPS
+    # trail is Mumbai (~1,000 km from the claimed Chennai parking lot) — the
+    # vehicle was demonstrably elsewhere, driving, at 18 km/h, with no impact:
+    # FC-21 (no collision physics) + FC-22 (GPS nowhere near the claim).
+    event_ts = f"{incident_dt.isoformat()}T16:30:42"
+    telematics = {
+        "_description": (
+            "No hard-braking/impact event despite a claimed collision, and the "
+            "GPS trail is nowhere near the claimed incident location — drives "
+            "the Fraud Intelligence physics-mismatch + GPS-mismatch flags."
+        ),
+        "event_timestamp": event_ts,
+        "speed_kmph_at_event": 18.0,
+        "hard_braking_detected": False,
+        "impact_g_force": 0.2,
+        "airbag_deployed": False,
+        "gps_trail": [
+            {"lat": 19.0760, "lon": 72.8777, "timestamp": f"{incident_dt.isoformat()}T16:29:50"},
+            {"lat": 19.0762, "lon": 72.8780, "timestamp": f"{incident_dt.isoformat()}T16:30:20"},
+            {"lat": 19.0765, "lon": 72.8783, "timestamp": event_ts},
+        ],
+    }
+    with open(out_dir / "sample_fraud_mismatch.json", "w", encoding="utf-8") as fh:
+        json.dump(telematics, fh, indent=1, ensure_ascii=False)
+    print("Telematics upload:                       sample_fraud_mismatch.json"
+          f"  (event {event_ts}, GPS = Mumbai)")
+    print("Estimate option A (fair, authorised):        Arjun_Mehta_Garage_Estimate_Fair.pdf,")
+    print(f"    amount {fair_total}, workshop: Hyundai Exclusive Service - Perungudi")
+    print("Estimate option B (under-declared -> FC-23): Arjun_Mehta_Garage_Estimate_Underdeclared.pdf,")
+    print(f"    amount {low_total}, workshop: Roadside QuickFix Garage  (cash-bypass signal, skips deployed airbags)")
+
+
+if __name__ == "__main__":
+    ref = _ref_date(sys.argv)
+    print(f"Generating all 3 test cases relative to reference date {ref.isoformat()}...")
+    case_aditya(ref)
+    case_meera(ref)
+    case_arjun(ref)
+    print("\nDone. Each case folder's README.md has the full step-by-step filing instructions.")

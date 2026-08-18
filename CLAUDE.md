@@ -1,5 +1,16 @@
+---
+title: ClaimIntel — Codebase Context
+description: Primary AI-context file for Claude Code sessions — architecture, key backend/frontend decisions, and current state. Read this first; detailed reference material lives in docs/.
+metadata:
+  type: ai-context
+  status: living document
+  related: docs/changelog.md, newupdates.md, docs/file-map.md, docs/fraud-checks.md, docs/api-routes.md
+---
+
 # ClaimIntel — CLAUDE.md
-> Codebase context for Claude Code. Read this first in every session.
+> Codebase context for Claude Code. Read this first in every session. Detailed reference material
+> (full file map, full fraud-check list, full API route list, architecture reviews, changelog) lives
+> in [`docs/`](docs/) — this file stays short on purpose so key instructions don't get lost.
 
 ---
 
@@ -7,19 +18,85 @@
 
 **ClaimIntel** is an agentic motor-insurance claim triage platform built for an ideathon.
 It replaces manual claim investigation with a pipeline of 5 sequential AI agents powered by
-**Groq-hosted LLaMA models** (llama-3.3-70b for text, llama-4-scout-17b for vision),
+**Groq-hosted LLaMA models** (llama-3.3-70b for text, llama-4-scout-17b for vision), with an
+**optional AWS Bedrock grounding layer** (Nova or Qwen3-VL) sharpening Agent 1's bounding boxes,
 grounded by a local RAG knowledge base (ChromaDB + local ONNX embeddings).
 
-- **Runs 100% on a laptop** — no cloud, no database, no managed deployment. *Storage, embeddings, and the React/FastAPI stack are entirely local — but claim text/images ARE transmitted to Groq's third-party API for inference, and incident location is sent to Nominatim/OpenWeatherMap. See "Data Residency & PII" below.*
-- **Free APIs only** — Groq (6,000 text req/day · 1,000 vision req/day), Nominatim, OpenWeatherMap optional.
-- **Stack:** FastAPI + Python 3.10+ · React 19 + Vite + Tailwind CSS 4 + Recharts · ChromaDB · fpdf2 + PyMuPDF + OpenCV.
+- **Runs 100% on a laptop** — no cloud, no database, no managed deployment required. *Storage,
+  embeddings, and the React/FastAPI stack are entirely local — but claim text/images ARE
+  transmitted to Groq's third-party API for inference, incident location to
+  Nominatim/OpenWeatherMap, and (only if AWS credentials are configured) damage photos to Bedrock
+  for grounding. See "Data Residency & PII" below.*
+- **Free APIs only** — Groq (6,000 text req/day · 1,000 vision req/day), Nominatim, OpenWeatherMap
+  optional. Bedrock is opt-in and never a hard dependency (falls back to Groq boxes if unset/fails).
+- **Stack:** FastAPI + Python 3.10+ · React 19 + Vite + Tailwind CSS 4 + Recharts · ChromaDB ·
+  fpdf2 + PyMuPDF + OpenCV.
 
 ### Data Residency & PII
-- **Third-party transmission:** every agent call sends claim data to Groq (US-hosted). Context Verification additionally sends `incident_location` to Nominatim (EU) and OpenWeatherMap (US). No on-prem/local LLM option in this build.
-- **PII masking before LLM calls:** `backend/services/pii.py` masks `phone` (last 4 digits) and `claimant` (first name + initial) via `build_llm_safe_claim()`, applied in `fraud_intelligence.py` and `settlement_recommendation.py` (the two agents that embed the full claim dict). Other agents only pull non-PII fields. Vehicle reg, policy_no, and location are sent unmasked — required for catalog/fraud/geocoding logic.
-- **Encryption at rest:** `backend/services/crypto.py` (Fernet/AES via `ENCRYPTION_KEY` in `.env`) transparently encrypts the `claimant` and `phone` columns in `claims.csv` on write/read (`backend/storage.py`). Without a key the app runs but stores PII in plaintext. Uploaded binaries are not field-encrypted (a full-disk/volume concern).
-- **Token/cost observability:** `backend/services/token_tracker.py` logs every Groq call to `data/token_usage.csv` (git-ignored), exposed via `GET /api/analytics/tokens` and the Analytics page.
-- **Photo authenticity:** the damage agent flags AI-generated/stock/manipulated/screenshot images (`authenticity_flags`) plus a local EXIF-presence check (`_exif_authenticity_check`); either routes the claim through the image-quality gate into "Pending Review".
+- **Third-party transmission:** every agent call sends claim data to Groq (US-hosted). Context
+  Verification additionally sends `incident_location` to Nominatim (EU) and OpenWeatherMap (US).
+  If configured, Bedrock grounding sends damage photos to AWS (region depends on
+  `AWS_REGION` — `ap-south-1`/Mumbai is genuinely in-region for the Qwen3-VL option; Nova has no
+  India-region presence at any size — see `docs/changelog.md` item #34 for the verified detail).
+  **Uploaded documents are the exception:** when AWS is configured they go to Textract + Bedrock
+  in `AWS_REGION` and never reach Groq (see "Document parsing" below).
+- **PII masking before LLM calls:** `backend/services/pii.py` masks `phone` (last 4 digits) and
+  `claimant` (first name + initial) via `build_llm_safe_claim()`, applied in
+  `fraud_intelligence.py` and `settlement_recommendation.py`. `build_llm_safe_text()` additionally
+  masks known PII *inside free text* before it enters a prompt — fraud-check details quote real
+  values (FC-29 names the DL holder), which previously undid `build_llm_safe_claim` one line later.
+  Vehicle reg, policy_no, and location are sent unmasked — required for catalog/fraud/geocoding.
+- **Document parsing (GaniParser path):** the four uploaded documents (garage estimate, FIR, DL,
+  RC) are parsed by `services/gani_parser.py` running Ganit's GaniParser pipeline —
+  **OCR → Bedrock extraction → Bedrock authenticity → PII masking**, all in `ap-south-1`.
+  **Text comes from the PDF's own layer where there is one** (`services/ocr.py`, see "Document
+  text" below); only real images and scans reach Textract.
+  **Textract runs on GaniParser's AWS account** (`GANI_AWS_*`) because it is entitled only there
+  (ours returns `SubscriptionRequiredException`); **all Bedrock inference runs on ours** (`AWS_*`)
+  — this project has no authority to put inference load on an account it doesn't own. Consequence: GaniParser's default model, Claude 3 Sonnet, is blocked on our account
+  behind an unsubmitted Anthropic use-case form, so `BEDROCK_DOC_MODEL` defaults to Qwen3-235B —
+  GaniParser's other supported extraction model. Masking is
+  applied at every egress (disk, UI, PDF, prompts) via
+  `services/gani_redaction.py`. **Dual-value model:** parsed docs stay CLEAR in memory because
+  FC-20/FC-29 compare real registration numbers and holder names against the policy; only egress
+  is masked. Forgery detection can't survive OCR (it needs fonts/stamps/layout), so it stays an
+  image call — `grounding_client.assess_document_authenticity()`, also in-region — keeping FC-28
+  intact. Falls back to the original Groq vision path (`document_parser.py`) on any failure; a
+  `parser` field on each result records which one actually ran. Damage photos and dash-cam frames
+  are **not** in this path — they carry no PII of this kind and still go to Groq vision. The same
+  pipeline also powers the pre-claim **claim-form auto-fill**
+  (`gani_parser.extract_form_for_prefill()`): stateless, no authenticity pass, values returned
+  clear to the submitter (their own handwriting), never trips the circuit breaker.
+- **Encryption at rest:** `backend/services/crypto.py` (Fernet/AES via `ENCRYPTION_KEY` in `.env`)
+  transparently encrypts the `claimant` and `phone` columns in `claims.csv`. Without a key the app
+  runs but stores PII in plaintext.
+- **Token/cost observability:** `backend/services/token_tracker.py` logs every billable call to
+  `data/token_usage.csv` — Groq, Bedrock, and Textract pages via `log_pages()` — exposed at
+  `GET /api/analytics/tokens` and rendered in Analytics → FinOps. Rates carry a **provider** and a
+  `verified_on` date, and **cost is recomputed on read** so a rate correction fixes history. See
+  `docs/changelog.md` item #43 for the mispricing this replaced.
+- **Photo authenticity:** three independent signals — vision-model `authenticity_flags`, a local
+  EXIF-presence check, and a dedicated local AI-image forensics model — feed FC-28 and the
+  image-quality gate. Missing EXIF alone is advisory-only (WhatsApp's "Photo" send mode strips it
+  on virtually every genuine photo; "Send as Document" does not — the app can't tell which mode
+  produced an upload, so this stays a soft signal either way).
+- **Prompt-injection defense:** every vision-LLM prompt includes
+  `services/prompt_guards.IMAGE_INJECTION_DEFENSE` — mitigation, not a guarantee; red-team before
+  a real pilot.
+
+#### Pre-pilot decision gates (deployment/commercial decisions, not code)
+- **PII-bearing third-party transmission (DPDP Act 2023 / IRDAI):** unmasked vehicle
+  reg/policy_no/location + raw images going to a US-hosted Groq API has no signed DPA for this use
+  case. Options: (a) India-hosted/dedicated LLM for PII-bearing calls, (b) phased story —
+  India-region model for PII, Groq only for non-PII, (c) an enterprise DPA with Groq.
+  **Partially narrowed, not closed:** the GaniParser path took the highest-density PII off Groq
+  (DL/RC/FIR carry DOB, father's name, address, chassis no.) by keeping documents in `AWS_REGION`.
+  Claim text and damage photos still go to Groq, and Textract/Bedrock are still third parties — so
+  this remains a residency-plus-DPA argument, not "nothing is transmitted". Option (b) is now the
+  partially-built path rather than a hypothetical.
+- **Scale economics:** Groq free tier is demo-scale only — a real pilot exhausts it in hours. Same
+  underlying decision as the PII gate — decide both together. Current usage is at least visible
+  (not silent failure) via the token-usage observability above.
 
 ---
 
@@ -39,8 +116,12 @@ Policyholder submits claim (phone lookup → auto-fill policy → photos + FIR/e
 └────────────────────┬────────────────────────────────────────┘
                      │ similarity search per agent
                      ▼
-A1 Damage Assessment       — Groq Vision (llama-4-scout) + vehicle_catalog KB
-A2 Fraud Intelligence      — 24 deterministic checks (FC-01…FC-24) + fraud_knowledge + claim_history KB
+G0 Eligibility Screen      — deterministic, NO model call, runs BEFORE document parsing.
+                              13 metadata-only checks + policy-coverage hard stop; an out-of-cover
+                              claim is rejected here and A1–A5 never run (see "Eligibility gate")
+A1 Damage Assessment       — Groq Vision + optional Bedrock grounding, anchored to garage-estimate
+                              line items (estimate-driven verification — see docs/changelog.md #34)
+A2 Fraud Intelligence      — 32 deterministic checks (FC-01…FC-32) + fraud_knowledge + claim_history KB
 A3 Incident Reconstruction — Groq Vision (photos + dash-cam frames) + claim_history KB
 A4 Context Verification    — Nominatim + telematics GPS + OpenWeatherMap + policy_documents KB
 A5 Settlement Recommendation — all findings + all KB collections
@@ -48,61 +129,7 @@ A5 Settlement Recommendation — all findings + all KB collections
 Deterministic guards + IRDAI settlement math (+ inflation cap) → SSE stream → React frontend
 ```
 
----
-
-## Complete File Map
-
-```
-backend/
-├── config.py                       ← loads .env; GROQ_API_KEY, thresholds, KB_DIR, VECTORSTORE_DIR
-├── main.py                         ← FastAPI app, all routes, role guard (_require_adjudicator)
-├── storage.py                      ← all CSV/JSON I/O, claim-ID gen, PII encryption hooks, _csv_lock
-├── orchestrator.py                 ← runs A1→A5, parses docs/telematics/dash-cam, guards, SSE, result.json
-├── agents/
-│   ├── base_agent.py               ← abstract BaseAgent.run(context) -> dict
-│   ├── damage_assessment.py        ← A1: Groq Vision + pricing engine + image-quality/authenticity gate
-│   ├── fraud_intelligence.py       ← A2: _run_fraud_checks() = 24 checks (FC-01…FC-24) + fraud KB
-│   ├── incident_reconstruction.py  ← A3: Groq Vision (photos + dash-cam frames) + claim_history
-│   ├── context_verification.py     ← A4: geocode (memoized) + telematics GPS + weather + policy KB
-│   └── settlement_recommendation.py← A5: all agents + all KB
-└── services/
-    ├── llm_client.py               ← Groq SDK wrapper (formerly gemini_client.py); ask_text/ask_json/ask_with_images
-    ├── rag_client.py               ← ChromaDB query service (graceful fallback if not built)
-    ├── pricing_engine.py           ← segment-aware parts pricing (+ optional live web prices)
-    ├── settlement_calc.py          ← IRDAI breakdown + fair-value analysis + >40% inflation cap
-    ├── garage_intel.py             ← cross-claim garage inflation scoring (FC-24 + analytics)
-    ├── document_parser.py          ← FIR / garage-estimate PDF parsing (vision LLM)
-    ├── telematics_parser.py        ← telematics/IoT JSON-or-CSV ingestion
-    ├── video_parser.py             ← dash-cam video → evenly-spaced still frames (OpenCV)
-    ├── report_generator.py         ← explainable PDF report (incl. settlement breakdown)
-    ├── letter_generator.py         ← auto-drafted customer decision letter
-    ├── pii.py                      ← build_llm_safe_claim() PII masking
-    ├── crypto.py                   ← Fernet field encryption for claims.csv
-    └── token_tracker.py            ← Groq token-usage logging → data/token_usage.csv
-
-frontend/src/
-├── App.jsx, utils/api.js (X-Role header), auth/ (login + ProtectedRoute), hooks/useInvestigationSSE.js
-├── pages/        Login, ClaimsQueue, NewClaim, Dashboard, Analytics, NotFound
-└── components/   InvestigationWorkflow (+ FraudCheckList), SettlementBreakdown, EvidencePanel,
-                  AdjusterPanel, DecisionLetter, ClaimDecision, InvestigationSummary,
-                  StoryboardPanel, VisualEvidenceAnalysis, ClaimOverview, Skeleton, ErrorBoundary
-
-scripts/
-├── generate_policy_pdfs.py         ← 3-page policy PDF per policy (fpdf2)
-├── build_vectorstore.py            ← indexes KB → ChromaDB (LOCAL ONNX embeddings, no API)
-├── generate_sample_telematics.py   ← sample telematics JSON (genuine / fraud / partial)
-└── generate_demo_assets.py         ← the 3 live showcase cases → test/
-
-data/
-├── claims.csv                      ← claim records (ships EMPTY; created at runtime)
-├── policies.csv                    ← 15 demo policies (phone → policy lookup)
-├── claims/{claim_id}/              ← per-claim images, docs/, dashcam_frames/, result.json
-├── kb/  fraud_indicators.json · vehicle_parts.json · claim_history.json · policies/*.pdf · sample_telematics/
-├── token_usage.csv                 ← Groq usage log (git-ignored)
-└── vectorstore/                    ← ChromaDB store (built by script; git-ignored)
-
-test/                               ← showcase fixtures + per-case README (presenter adds photos/dash-cam)
-```
+**Full file map:** [`docs/file-map.md`](docs/file-map.md).
 
 ---
 
@@ -111,29 +138,95 @@ test/                               ← showcase fixtures + per-case README (pre
 ### Storage (no database)
 - `claims.csv` fields: `claim_id, policy_no, claimant, phone, vehicle, claim_type, incident_date, incident_location, claim_amount, description, status, created_at, garage_estimate_amount, garage_workshop_name, fir_number`.
 - `data/claims/{claim_id}/result.json` — all agent outputs + summary.
-- `save_claim()` and `update_claim_field()` both hold `_csv_lock` (concurrent-write safe).
+- `save_claim()` and `update_claim_field()` both hold `_csv_lock` (concurrent-write safe — single
+  worker only, see `docs/changelog.md` item #30).
 - `claim_amount` starts at 0 — set by Agent 1 (AI mid-estimate) after damage assessment.
 
 ### Customer flow
 - Phone-first: `GET /api/customers/lookup?phone=XXX` auto-fills the policy. No manual policy/amount entry.
+- **Hard-copy auto-fill (optional):** the customer can print ClaimIntel's own claim form
+  (`GET /api/claim-form/blank`, template in `services/claim_form.py`), handwrite it, and upload a
+  photo — `POST /api/claims/extract-form` (GaniParser path, Groq vision fallback; stateless,
+  pre-claim) pre-fills claim type, incident date/time, location, description, FIR no, workshop
+  and estimate amount. Everything stays editable; manual entry remains available.
 
 ### Claim ID format
 `CLM-{YYYY-MM}-{count:06d}` — `count` is max(existing CSV IDs ∪ on-disk folders)+1 (never reuses a deleted ID).
 
 ### LLM Client (`backend/services/llm_client.py`)
-> **Uses the Groq SDK, not Gemini.** Formerly `gemini_client.py`; renamed once the last Gemini reference was gone. All agents import `from services.llm_client import …`.
+> **Text runs on Groq; every image call runs on AWS Bedrock.**
 ```python
-TEXT_MODEL   = "llama-3.3-70b-versatile"                    # A2, A4, A5 (text)
-VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"  # A1, A3 (image+text)
+TEXT_MODEL           = "llama-3.3-70b-versatile"    # Groq — A2, A4, A5
+BEDROCK_VISION_MODEL = "qwen.qwen3-vl-235b-a22b"    # Bedrock ap-south-1 — A1, A3, doc authenticity
+VISION_MODEL         = "qwen/qwen3.6-27b"           # Groq — fallback only, if Bedrock fails
 ```
-- `ask_text` / `ask_with_images` / `ask_json` (4-pass JSON repair). Multi-image calls interleave `[Image N]` labels so the vision model can set `bounding_box.image_index` correctly. 2 retries, 5s delay.
+**Why vision moved off Groq (2026-07):** Groq retired
+`meta-llama/llama-4-scout-17b-16e-instruct` on 17 July with 30 days' notice, breaking A1 and A3
+outright — while the text agents kept running, so investigations still "completed" and still
+emitted a settlement with no damage assessment behind it. Its only remaining vision model is
+capped at **8,000 tokens/minute** on the free tier, which one 1424x900 photo plus the damage
+prompt exceeds (11,430-token request → 413). Bedrock's model is ~9× larger and in-region.
+`ask_with_images()` still falls back to Groq if a Bedrock call fails.
+- `ask_text` / `ask_with_images` / `ask_json` (4-pass JSON repair). Multi-image calls interleave
+  `[Image N]` labels so the vision model can set `bounding_box.image_index` correctly.
+
+### Bedrock grounding (`backend/services/grounding_client.py`) — optional enhancement
+- Re-localizes Agent 1's bounding boxes via AWS Bedrock (Nova Lite or Qwen3-VL-235B-A22B), never a
+  hard dependency — `is_available()` gates on credentials, a circuit breaker disables it for the
+  rest of the process on any failure, and a part's original Groq box is kept untouched if Bedrock
+  doesn't return one. Configure via `.env` (`AWS_REGION` + `BEDROCK_GROUNDING_MODEL`) — see
+  `.env.example` for the Nova-vs-Qwen/Mumbai comparison. `grounding_source` on each part records
+  which model actually produced the box.
+
+### Document text (`backend/services/ocr.py`)
+Textract used to run on every uploaded document. It now runs only on what genuinely needs
+recognition:
+```
+born-digital PDF  → its own text layer   (free, exact, never leaves the machine)
+image / scan      → Textract             (GANI_AWS_*, GaniParser's account)
+```
+In practice the estimate, FIR and RC are digital PDFs and **never reach Textract**; only a
+photographed licence and the handwritten claim form do. `ocr_engine` on each parsed result
+records what ran (`pdf_text_layer` / `textract` / `pdf_text_layer→textract`).
+- **Why the text layer first:** rasterising a digital PDF and recognising the picture is strictly
+  lossy. Case 1's estimate draws its line-item table as light text on a dark fill — a 77%-dark
+  block that OCR reads as empty, silently dropping every priced row while the header and grand
+  total come through. `line_items: []` then collapses the estimate-driven verification: no claimed
+  parts, everything lands in `undeclared`, and **no part gets a bounding box** (only
+  estimate-matched parts are boxed). The text layer returns the table exactly.
+- **Line structure is the contract.** Output is one newline-separated string and the newlines
+  carry meaning: a lost row boundary mis-pairs an amount with a part, which becomes
+  `settlement_calc`'s repair basis. Textract LINE blocks preserve rows (WORD blocks, GaniParser's
+  own choice, do not).
+- **Estimate reconciliation retry:** if the extracted line items don't sum to the document's own
+  stated total — including the zero-items case — Textract gets a second opinion. A misread table
+  still produces confident, plausible text elsewhere on the page, so nothing else catches it.
+- **No local OCR tier.** A Tesseract stage sat between these two and was removed 2026-08-14: it
+  never ran on digital PDFs, could not clear the quality gate on a sparse ID card, and had caused
+  FC-29 to report a false "DL holder does not match claimant". See `docs/changelog.md` #46.
+
+### Eligibility gate (`backend/services/eligibility_gate.py`) — fail fast, fail free
+Runs **first**, before document parsing, so a hard fail costs zero model calls (no Textract/Bedrock
+doc pass, no vision agent, no LLM agent). Deterministic — no LLM, no network, no image.
+- **Hard stop:** policy not in force on the incident date (expiry *or* pre-inception, via
+  `context_verification._check_policy_validity`). The orchestrator writes `decision: Reject`,
+  status `Rejected`, `fraud_risk_score: null` ("Not assessed" — A2 never ran), emits
+  `agent_skipped` for all five agents, and returns. Previously this was detected by A4 and acted
+  on 37 lines after A5 finished — the whole pipeline was paid for first.
+- **Also runs** the 13 metadata-only checks (`fraud_intelligence.METADATA_CHECK_IDS`) so early
+  signals surface at the top of the pipeline. A2 still recomputes the full 32 from scratch, so
+  the gate changes no score.
 
 ### Orchestrator (`backend/orchestrator.py`)
-- Parses uploaded docs (FIR/estimate), telematics, and dash-cam frames into `context["docs"]` **before** the agent loop, so A2's fraud checks can use them.
-- Runs A1→A5 async; emits SSE `agent_start/agent_done/agent_error/done/ping`; writes `result.json` incrementally.
-- After A1: writes the AI mid-estimate to `claim_amount`.
-- Hard guards (override the LLM): policy expiry → Reject; damage-vs-story mismatch → block auto-approve → Escalate; low confidence / failed image gate → Pending Review.
-- Computes the settlement breakdown and reconciles the headline `recommended_settlement` to `net_payable` on Approve.
+- Runs the eligibility gate first (above); on a hard fail the pipeline returns immediately.
+- Parses uploaded docs (FIR/estimate), telematics, and dash-cam frames into `context["docs"]`
+  **before** the agent loop, so A2's fraud checks can use them.
+- Runs A1→A5 async; emits SSE `agent_start/agent_done/agent_error/done/ping`; writes `result.json`
+  incrementally.
+- Hard guards (override the LLM): policy expiry → Reject; damage-vs-story mismatch → block
+  auto-approve → Escalate; low confidence / failed image gate → Pending Review;
+  fraud-score decision bands (`>=70` Reject, `40–69` Escalate) are code-enforced, not prompt-only.
+- Computes the settlement breakdown and reconciles `recommended_settlement` to `net_payable`.
 
 ### RAG Client (`backend/services/rag_client.py`)
 - Graceful fallback: no vectorstore → returns `""` → agents work without KB context.
@@ -141,15 +234,38 @@ VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"  # A1, A3 (image+text
 
 ---
 
-## Agent 2 — Fraud Intelligence: 24 deterministic checks (FC-01…FC-24)
+## Agent 2 — Fraud Intelligence (32 checks)
 
-`_run_fraud_checks(claim, damage, docs)` returns a list of `{id, name, status, detail}` where status ∈ `pass | flag | na`. Only `flag` results feed the LLM prompt and the score; all 24 are surfaced in the UI **Fraud Check List** panel (toggle on the fraud agent row). Counts exposed as `fraud_check_counts`.
-
-- FC-01 high-value threshold · FC-02 prior claims · FC-03 policy validity · FC-04 new-policy syndrome (tiered) · FC-05 reporting delay · FC-06 night-time · FC-07 description red-flags · FC-08 repeat-location · FC-09 30-day clustering · FC-10 duplicate description · FC-11 claim-to-SI ratio · FC-12 damage-present · FC-13 vehicle identity · FC-14 pre-existing damage · FC-15 plate verification · FC-16 multiple vehicles · FC-17 workshop inflation (this claim) · FC-18 FIR present (theft/TP) · FC-19 estimate-without-photos · FC-20 FIR consistency cross-check · FC-21 telematics impact · FC-22 telematics GPS · FC-23 garage under-declaration · **FC-24 cross-claim garage inflation (FS-004)**.
-- **Score is Python-authoritative:** deterministic base score from flag weights (CRITICAL 35, NPS tiered, else 8), LLM clamped to base ±15. Label derived from final score (`<40 Low / 40–69 Medium / 70+ High`). The `summary` string is **regenerated** from the authoritative score/label (never the stale LLM value).
-- **FC-24** uses `services/garage_intel.py` to scan prior investigated claims for the same `garage_workshop_name` and flag systematic inflation.
+`_run_fraud_checks(claim, damage, docs)` returns `{id, name, status, detail}` per check
+(`pass | flag | na`); all 32 surface in the UI **Fraud Check List** panel. Score is
+Python-authoritative (deterministic base + LLM clamped ±15); decision bands are code-enforced.
+**Full itemized list + scoring-tier detail:** [`docs/fraud-checks.md`](docs/fraud-checks.md).
 
 ---
+
+## Pricing & labour — the assessed value is independent by construction
+
+- **Parts: live web only** (`services/price_lookup.py` → Serper/Tavily, ≥2 independent domains
+  must corroborate). The garage-estimate line amount used to be tier 2 of the waterfall; it was
+  **removed 2026-08-13** because it made the "independent" fair value partly a copy of the
+  document it audits — a live miss priced the part at the garage's own number, driving that
+  line's variance to zero. `pricing_source` is now `live_web | unpriced`; a part with no
+  corroborated price is reported unpriced, never invented. OEM/insurer catalog is the intended
+  second tier and the waterfall is shaped for it — the slot is deliberately empty for now.
+- **`pricing_coverage`** (`fair_value_breakdown.pricing_coverage`) records how much of the claim
+  actually priced. Below `PRICING_MIN_COVERAGE` (default 70%) the fair-value bands **abstain**:
+  no over/under-claim verdict, no inflation cap, FC-17/FC-23 emit `na`, and depreciation falls
+  back to the blanket parts fraction (per-part depreciation on ₹0 parts would under-deduct and
+  overpay). Abstaining is correct — a fair value built from 3 of 9 parts is not a benchmark.
+- **Labour: `services/labour_engine.py`** — deterministic, explainable, per-operation. Config in
+  `data/config/labour_config.json` (operation map, baseline hours, complexity factors, ₹/h rate
+  card by region × garage tier, variance thresholds); provider abstraction in
+  `services/labour_providers.py` (`RuleBasedLabourProvider` now, `OEMLabourProvider` a stub).
+  **These are NOT OEM standard times** and every operation says so via `source: "rule_based_mvp"`
+  plus a disclaimer carried into the UI and the PDF. Code owns hours/rates/arithmetic; the LLM
+  contributes only classification, and it already has — Agent 1's `repair_type` is the operation
+  signal, so **no new model call**. Labour variance vs the garage's own labour lines goes to A2
+  as *evidence* (`labour_layer`): no new FC, no score change, explicitly "not proof of fraud".
 
 ## Settlement (`backend/services/settlement_calc.py`)
 
@@ -157,77 +273,90 @@ Deterministic, IRDAI-aligned, no LLM:
 ```
 Net Payable = Approved Repair Basis − Depreciation (material-wise) − Deductibles (− Salvage on total loss)
 ```
-- **Fair-value bands** (garage quote vs AI assessed fair value): ±20% Consistent · +20–40% Review · **>40% Investigate**.
-- **Inflation cap:** only the **>40% (Investigate)** band changes the payout — repair basis becomes the **AI fair value**, the excess is `disallowed_inflation` (surfaced as *leakage prevented* in analytics), and `inflation_cap_applied=True`. Consistent/Review use the garage quote.
-- Material-wise depreciation (glass 0%, tyre/rubber/battery 50%, fibre 30%, metal by age slab). GST treated as already included. Total-loss path: IDV − salvage when repair ≥ 75% of sum insured. NCB advisory on Approve.
-- `SettlementBreakdown.jsx` first row reads "AI Assessed Value (Inflation Cap Applied)" when capped; the PDF report mirrors the breakdown.
+- **Fair-value bands** (garage quote vs AI assessed fair value — compared on one GST-inclusive
+  basis via the shared `assessed_fair_value()` helper: web-retail part prices are already
+  GST-inclusive, only labour is grossed up; see `docs/changelog.md` item #35 + the 2026-07-23
+  double-GST correction): ±20% Consistent · +20–40% Review · **>40% Investigate**.
+- **Inflation cap:** only the **>40% (Investigate)** band changes the payout — repair basis
+  becomes the **AI fair value**, the excess is `disallowed_inflation` (surfaced as *leakage
+  prevented* in analytics). Consistent/Review use the garage quote.
+- Material-wise depreciation (glass 0%, tyre/rubber/battery 50%, fibre 30%, metal by age slab).
+  Total-loss path: IDV − salvage when repair ≥ 75% of sum insured. NCB advisory on Approve.
 
 ---
 
 ## Frontend — Key Patterns
 
-- **Routing:** `/login`, `/` ClaimsQueue, `/new` NewClaim, `/claims/:id` Dashboard, `/analytics`, `*` NotFound. Investigate/decision are role-guarded (`X-Role: adjudicator`, set from `localStorage` session in `utils/api.js`).
-- **SSE hook (`useInvestigationSSE`):** POST investigate → EventSource → merges `liveAgents`; on `done` calls `onDone` (Dashboard `fetchResult`, which re-fetches both `/claims/{id}` **and** `/docs` so parsed FIR/telematics + dash-cam frames appear immediately). Clears `esRef` on done/error.
+- **Routing:** `/login`, `/` ClaimsQueue, `/new` NewClaim, `/claims/:id` Dashboard,
+  `/fraud` FraudQueue, `/fraud/:id` FraudDetail, `/analytics`, `*` NotFound.
+  Investigate/decision/fraud-list are role-guarded (`X-Role: adjudicator`).
+- **Analytics is three sub-tabs** (`pages/analytics/`): **Claim Analytics** (volumes, decision
+  mix with approval/rejection rates, payout as % of ask, fraud cases, garages), **Solution
+  Performance** (AI–human agreement, override matrix, auto-decision rate, confidence), **FinOps**
+  (spend by provider/model/agent, cost per claim, Textract pages, free-tier caps, value created).
+- **Fraud workspace:** `/fraud` ranks investigated claims worst-first; `/fraud/:id` groups all 32
+  checks into the 8 clusters from `FRAUD_CHECK_GROUPS` with each layer rendered inside its own
+  group, showing everything by default (it is the audit view) with a hide-passed toggle.
+- **SSE hook (`useInvestigationSSE`):** POST investigate → EventSource → merges `liveAgents`; on
+  `done` re-fetches `/claims/{id}` and `/docs`. `agent_skipped` → a grey "Skipped" row (without
+  it a skipped agent sits on "Waiting" forever). "↻ Re-investigate" re-runs a decided claim.
+- **Dashboard row 1:** ClaimOverview · InvestigationWorkflow · **RiskAndSettlement** (fraud donut
+  + the settlement ledger). `SettlementBreakdown` renders here only — it was moved out of
+  `ClaimDecision`, and `InvestigationSummary` was deleted (it repeated four verdicts already
+  shown in the agent details).
+- **Pipeline panel exposes signals, not checklists:** the fraud list shows flags + n/a and hides
+  the ~26 passes (the header still reports the passed count); `visual_forensics_layer` renders as
+  a dedicated "Evidence Authenticity" block; `similar_historical_cases_expanded` renders through
+  the shared `KBPill` (hover = case, click = its outcome) instead of bare `HIST-003` badges.
 - **Vite proxy:** `/api` and `/uploads` → backend.
-- **Bounding boxes:** `VisualEvidenceAnalysis.jsx` draws percentage-coord boxes per `image_index`; Severe=red/Moderate=amber/Minor=green.
-
----
-
-## Knowledge Base (data/kb/)
-- `fraud_indicators.json` — 15 indicators (FI-POL/CLM/DMG/LOC/INF/BEH) + 5 schemes (FS-001 New-Policy Pre-Existing · FS-002 Staged Collision · FS-003 Serial Theft · FS-004 Workshop Inflation · FS-005 Weather Fabrication) + IRDAI depreciation/scoring.
-- `vehicle_parts.json` — OEM/aftermarket/labour for 6 vehicles (Swift Dzire, Alto K10, City ZX, Amaze, Innova Crysta, Creta SX, Nexon EV).
-- `claim_history.json` — 20 annotated historical cases (HIST-001…020).
-- `policies/` — policy PDFs (fpdf2; Latin-1 sanitized via `_s()`; parsed by PyMuPDF at build).
-- `sample_telematics/` — genuine / fraud-mismatch / partial-data JSON for the upload demo.
+- **Bounding boxes:** `VisualEvidenceAnalysis.jsx` draws percentage-coord boxes per `image_index`;
+  Severe=red/Moderate=amber/Minor=green.
 
 ---
 
 ## API Routes
-```
-GET  /api/health
-GET  /api/kb/status
-GET  /api/customers/lookup?phone=XXX
-POST /api/claims/                              create claim
-GET  /api/claims/                              list (enriched with decision)
-GET  /api/claims/{id}                          {claim, result, policy} (+ lazy breakdown backfill)
-GET  /api/claims/{id}/images   ·  DELETE /images/{filename}   ·  POST /files (doc_type: images|estimate|fir|dashcam|telematics)
-GET  /api/claims/{id}/docs                     {parsed, files, dashcam_frames}
-POST /api/claims/{id}/investigate              [adjudicator] background pipeline
-GET  /api/claims/{id}/stream                   SSE events
-GET  /api/claims/{id}/report                   PDF report (incl. settlement breakdown)
-POST /api/claims/{id}/adjuster/decision        [adjudicator]   ·  POST /adjuster/notes [adjudicator]
-GET  /api/claims/{id}/letter                   customer decision letter (LLM)
-GET  /api/analytics            ·  GET /api/analytics/tokens     (+ garage_intel table)
-GET  /api/sample-telematics/{filename}
-GET  /uploads/{claim_id}/...                   StaticFiles
-```
+
+Full list: [`docs/api-routes.md`](docs/api-routes.md). Key ones: `POST /api/claims/` (create),
+`POST /api/claims/{id}/investigate` (adjudicator-only pipeline trigger),
+`GET /api/claims/{id}/stream` (SSE), `POST /api/claims/{id}/adjuster/decision`.
 
 ---
 
 ## Demo customers & the 3 showcase cases
 
-`data/policies.csv` has 15 policies. The live demo uses three (assets generated by `python scripts/generate_demo_assets.py` → `test/`, filed live as **adjudicator**, garage-amount field left blank):
+`data/policies.csv` has 15 policies. The live demo uses three (assets generated by
+`python scripts/generate_test_cases.py` → `test/`, filed live as **adjudicator**). Case 1 and
+Case 2's claimant name/DOB/father's-name are based on real driving licences supplied for this
+demo — DL/RC **numbers**, exact address, and photo are synthetic. Case 3 is fully synthetic.
 
-| Case | Customer (phone) | Generated evidence | Presenter adds | Expected |
-|---|---|---|---|---|
-| A genuine | Rajesh Kumar (`9876543210`) | consistent estimate + genuine telematics | damage photos | **Approve** |
-| B inflation+FIR | Meera Iyer (`8890123456`, POL-445566) | inflated estimate + mismatched FIR | front-damage photos | **Escalate** (FC-17/FS-004 + FC-20 + inflation cap) |
-| C staged collision | Arjun Mehta (`9900112233`) | consistent estimate + fraud telematics | dash-cam .mp4 | **Escalate** (FC-21 + FC-22 + FC-02) |
+| Case | Customer (phone) | Presenter adds | Expected |
+|---|---|---|---|
+| 1 genuine | Vijay M (`9567890123`, POL-112233) | pick which estimate to upload | **Approve** on the fair estimate (₹50,386, recalibrated against the AI's own assessed value) |
+| 2 inflation+FIR | Rohit Madeshiya (`8890123456`, POL-445566) | front-end damage photo(s) showing bumper+bonnet | **Escalate regardless of estimate** — FC-05 + FC-20 fire either way; the inflated option additionally trips FC-17/FS-004 + the inflation cap |
+| 3 staged collision | Arjun Mehta (`9900112233`, POL-567890, synthetic) | damage photos, optionally dash-cam .mp4 | **Escalate regardless of estimate** (FC-21 + FC-22; the under-declared option additionally trips FC-23) |
 
-`claims.csv` ships **empty** — there are no pre-seeded result.json claims; everything is filed live. `test/README.md` has the exact per-case filing steps.
+`claims.csv` ships **empty**; everything is filed live. Each case's own `test/{n}-.../README.md`
+has the exact per-case filing steps.
 
 ---
 
 ## Known gotchas / conventions
-- **fpdf2 is Latin-1 only** — sanitize all text via a `_s()` helper (₹→"Rs.", em-dash→"-", etc.); don't mix `cell()` + `multi_cell()` on one row (fpdf2 silently drops the value).
-- **Embeddings are local ONNX** — `build_vectorstore.py` needs no API key; agents fall back gracefully if the store isn't built.
+- **fpdf2 is Latin-1 only** — sanitize via a `_s()` helper; don't mix `cell()` + `multi_cell()` on
+  one row (fpdf2 silently drops the value).
+- **Embeddings are local ONNX** — agents fall back gracefully if the vectorstore isn't built.
 - **Investigate as adjudicator** — `/investigate` 403s otherwise (by design).
-- **Dash-cam** must be a standard `.mp4` (H.264) for OpenCV; unreadable video → 0 frames (graceful, not an error).
-- **GPS / weather** need network at investigate time; offline → those checks report N/A, never crash.
+- **Dash-cam** must be a standard `.mp4` (H.264); unreadable video → 0 frames (graceful).
+- **GPS / weather / Bedrock** need network at investigate time; offline → graceful degradation,
+  never a crash.
 
 ---
 
 ## Current state
-- Backend (FastAPI, all routes), 5 agents, frontend (all pages incl. Analytics), PII masking + at-rest encryption, token observability, 24 fraud checks, garage intelligence, settlement breakdown + inflation cap, telematics + dash-cam evidence, PDF report + customer letter — all working; frontend production build verified.
-- ChromaDB vectorstore is **built locally** via `scripts/build_vectorstore.py` (not committed; rebuilt on demand).
-- `claims.csv` ships empty; demo claims are filed live from `test/` fixtures.
+- Eligibility gate + 5 agents (incl. optional Bedrock grounding), full frontend, PII masking +
+  at-rest encryption, token observability, 32 fraud checks, garage intelligence, live-web-only
+  part pricing with coverage abstention, rule-based labour engine, settlement breakdown +
+  inflation cap, telematics + dash-cam, PDF report + customer letter — all working.
+- Two items remain **deployment/commercial decisions, not code** — see "Pre-pilot decision gates"
+  above.
+- Full history and every fix's live-verification detail: [`newupdates.md`](newupdates.md) (index)
+  → [`docs/changelog.md`](docs/changelog.md) (full detail).

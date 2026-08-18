@@ -2,7 +2,7 @@ from typing import Any
 
 from agents.base_agent import BaseAgent
 from services.llm_client import ask_json
-from services.pii import build_llm_safe_claim
+from services.pii import build_llm_safe_claim, build_llm_safe_text
 from services.rag_client import get_settlement_context
 
 BASE_PROMPT = """You are a senior motor insurance claims adjudicator with access to historical precedents
@@ -29,16 +29,19 @@ Agent 4 — Context Verification:
 {context}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Decision Rules (IRDAI-aligned):
+Decision Rules (internal claims-triage policy — NOT an IRDAI mandate; never attribute
+these score thresholds to IRDAI. IRDAI rules apply only to the surveyor requirement,
+depreciation schedule and deductibles):
 - APPROVE:   fraud_score < 40 AND damage consistent with story AND location plausible
 - ESCALATE:  fraud_score 40–69 OR mixed signals OR incomplete documentation
 - REJECT:    fraud_score >= 70 OR damage severely inconsistent OR known fraud scheme matched
 
-Settlement Calculation:
-- Start from total_repair_estimate (from Agent 1)
-- Apply IRDAI depreciation if no Zero Depreciation add-on
-- Deduct compulsory deductible (Rs. 1,000) + voluntary deductible
-- If escalating or rejecting, set recommended_settlement to 0
+Note on recommended_settlement: services/settlement_calc.py recomputes the actual payout
+deterministically from Agent 1's figures (depreciation, deductibles, GST, IDV cap) and
+orchestrator.py overwrites this field with that result on Approve, and zeroes it on
+Escalate/Reject. Your number here is not the payout the customer sees — set it to your best
+estimate of the fair repair cost on Approve, or 0 on Escalate/Reject, but do not spend reasoning
+effort re-deriving IRDAI depreciation/deductible math; it will be discarded either way.
 
 Instructions:
 - Reference specific historical precedents from KB (if any) in your reasoning trail
@@ -75,7 +78,7 @@ Return a JSON object with exactly these fields:
 decision_reasons must be 3–5 short, plain-English bullets that a non-technical insurance officer can read.
 Each must name the specific evidence: fraud score number, indicator ID, document excerpt, photo finding, etc.
 Example good reasons:
-- "Fraud score 82% exceeds IRDAI Escalate threshold of 40%"
+- "Fraud score 82% exceeds the insurer's SIU-escalation threshold of 40%"
 - "Vehicle in submitted photos does not match Tata Nexon EV registered on policy (vehicle substitution flag)"
 - "Policy was active for only 47 days at time of incident — new policy syndrome (FI-POL-001)"
 - "Incident location could not be geocoded — location unverifiable"
@@ -116,7 +119,8 @@ class SettlementRecommendationAgent(BaseAgent):
         ])
         ctx = agents.get("context_verification", {})
         ctx_summary = _trim(ctx, [
-            "location_verified", "weather", "policy_coverage_note",
+            "location_verified", "weather_at_investigation_time",
+            "weather_verification_note", "policy_coverage_note",
         ])
 
         claim_summary = "\n".join(
@@ -132,6 +136,13 @@ class SettlementRecommendationAgent(BaseAgent):
             reconstruction=recon_summary,
             context=ctx_summary,
         )
+        # This agent forwards other agents' free-text findings verbatim —
+        # fraud `indicators`, reconstruction `inconsistencies` — several of which
+        # quote real names taken from the parsed DL/RC. Masking the assembled
+        # prompt rather than each summary means a newly-added field that happens
+        # to quote a value can't silently reopen the leak. Only exactly-known
+        # values are substituted, so the instruction text is untouched.
+        prompt = build_llm_safe_text(prompt, claim, context.get("docs"))
         result = ask_json(prompt, agent_name="settlement_recommendation", claim_id=claim.get("claim_id"))
         result.setdefault("status", "completed")
 

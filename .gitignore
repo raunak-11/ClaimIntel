@@ -3,6 +3,14 @@
 *.env
 !.env.example
 
+# GaniParser (Ganit's own document-parsing product) — reference copy only.
+# NOT vendored into this repo: it is ~39MB, ships real customer invoices/PDFs as
+# test fixtures, and several legacy Streamlit modules hardcode live AWS keys in
+# .py source (which the .env rules above do NOT cover). The integration in
+# backend/services/gani_*.py reimplements the logic against backend/config.py
+# credentials instead of importing any of it.
+Gani_Parser_Latest/
+
 # ── Python ────────────────────────────────────────────────────────────────────
 venv/
 __pycache__/
@@ -25,6 +33,10 @@ dist-ssr/
 data/vectorstore/
 data/price_cache.json
 data/token_usage.csv
+
+# ── Runtime claim data (created by the app, never committed) ──────────────────
+data/claims/
+data/reports/
 
 # ── Demo media supplied at demo time ──────────────────────────────────────────
 # The generated showcase fixtures (PDFs, telematics JSON, *_NEEDED.txt, README)

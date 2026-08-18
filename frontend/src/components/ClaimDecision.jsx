@@ -1,175 +1,111 @@
-import { useState } from 'react'
-import SettlementBreakdown from './SettlementBreakdown'
+import { CheckCircle2, XCircle, AlertTriangle } from 'lucide-react'
+import { Card, Badge, ProgressBar, Collapsible, cx } from '../ui'
+import { inr, decisionTone } from '../ui/tokens'
 
-const DECISION_STYLES = {
-  Approve:  { bg: 'bg-green-500/10',  border: 'border-green-500/40',  text: 'text-green-400',  badge: 'bg-green-500/20 text-green-300',  bar: 'bg-green-500' },
-  Reject:   { bg: 'bg-red-500/10',    border: 'border-red-500/40',    text: 'text-red-400',    badge: 'bg-red-500/20 text-red-300',    bar: 'bg-red-500' },
-  Escalate: { bg: 'bg-yellow-500/10', border: 'border-yellow-500/40', text: 'text-yellow-400', badge: 'bg-yellow-500/20 text-yellow-300', bar: 'bg-yellow-500' },
-}
-const ICONS = { Approve: '✓', Reject: '✗', Escalate: '⚠' }
-
-const DECISION_CONTEXT = {
+const DECISION_META = {
   Approve: {
-    color:  'text-green-400',
-    bg:     'bg-green-500/8 border-green-500/20',
-    bullet: 'bg-green-500',
-    title:  'Why approved',
-    blurb:  'This claim passed all verification checks. Settlement will be processed after deductible.',
+    tone: 'success', Icon: CheckCircle2, title: 'Why approved',
+    blurb: 'This claim passed all verification checks. Settlement will be processed after deductible.',
+    strip: 'bg-success-50 border-success-100', chip: 'bg-success-100 text-success-700',
   },
   Reject: {
-    color:  'text-red-400',
-    bg:     'bg-red-500/8 border-red-500/20',
-    bullet: 'bg-red-500',
-    title:  'Why rejected',
-    blurb:  'This claim was rejected due to high fraud risk or severe inconsistencies. The claimant may appeal with additional evidence.',
+    tone: 'danger', Icon: XCircle, title: 'Why rejected',
+    blurb: 'This claim was rejected due to high fraud risk or severe inconsistencies. The claimant may appeal with additional evidence.',
+    strip: 'bg-danger-50 border-danger-100', chip: 'bg-danger-100 text-danger-700',
   },
   Escalate: {
-    color:  'text-amber-400',
-    bg:     'bg-amber-500/8 border-amber-500/20',
-    bullet: 'bg-amber-500',
-    title:  'Why escalated',
-    blurb:  'Mixed signals detected. A senior adjudicator will review this claim before a final decision is made.',
+    tone: 'warning', Icon: AlertTriangle, title: 'Why escalated',
+    blurb: 'Mixed signals detected. A senior adjudicator will review this claim before a final decision is made.',
+    strip: 'bg-warning-50 border-warning-100', chip: 'bg-warning-100 text-warning-700',
   },
 }
 
+const toneBar = { success: 'success', danger: 'danger', warning: 'warning' }
+
 export default function ClaimDecision({ summary, settlementData }) {
-  const [showReasons, setShowReasons] = useState(true)
   const decision = summary?.decision
-  const style = DECISION_STYLES[decision] || DECISION_STYLES['Escalate']
-  const ctx   = DECISION_CONTEXT[decision]  || DECISION_CONTEXT['Escalate']
 
   if (!decision) {
     return (
-      <div className="bg-slate-900 rounded-2xl border border-slate-700 p-5 flex items-center justify-center min-h-[140px]">
-        <p className="text-slate-500 text-sm">Decision pending investigation</p>
-      </div>
+      <Card className="p-6 flex items-center justify-center min-h-[160px]">
+        <p className="text-muted text-sm">Decision pending investigation</p>
+      </Card>
     )
   }
 
+  const meta = DECISION_META[decision] || DECISION_META.Escalate
+  const { Icon } = meta
   const confidence = summary?.overall_confidence ?? 0
-  const reasons    = settlementData?.decision_reasons || []
-  const breakdown  = summary?.settlement_breakdown || settlementData?.settlement_breakdown
+  const reasons = settlementData?.decision_reasons || []
+  const breakdown = summary?.settlement_breakdown || settlementData?.settlement_breakdown
+
+  const fallbackReasons = [
+    (summary?.fraud_risk_score ?? 0) > 0 && `Fraud risk score: ${summary.fraud_risk_score}% (${summary.fraud_risk_label})`,
+    summary?.damage_consistency && summary.damage_consistency !== 'Unknown' && `Damage consistency with description: ${summary.damage_consistency}`,
+    summary?.incident_consistency && summary.incident_consistency !== 'Unknown' && `Incident reconstruction consistency: ${summary.incident_consistency}`,
+    summary?.external_verification && summary.external_verification !== 'Unknown' && `External location verification: ${summary.external_verification}`,
+    summary?.behavioural_analysis && summary.behavioural_analysis !== 'Unknown' && `Behavioural risk profile: ${summary.behavioural_analysis}`,
+  ].filter(Boolean)
+
+  const shown = reasons.length > 0 ? reasons : fallbackReasons
 
   return (
-    <div className={`rounded-2xl border p-5 ${style.bg} ${style.border}`}>
-      <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Claim Decision</h3>
-
-      {/* Decision badge */}
-      <div className="flex items-center gap-3 mb-5">
-        <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl ${style.badge}`}>
-          {ICONS[decision]}
-        </div>
+    <Card className="overflow-hidden">
+      {/* Coloured decision strip */}
+      <div className={cx('flex items-center gap-3 px-6 py-4 border-b', meta.strip)}>
+        <span className={cx('inline-flex items-center justify-center w-11 h-11 rounded-xl', meta.chip)}>
+          <Icon className="w-6 h-6" />
+        </span>
         <div>
-          <p className={`text-2xl font-bold ${style.text}`}>{decision}</p>
-          <p className="text-xs text-slate-500">AI Recommendation</p>
+          <p className="text-xl font-semibold tracking-tight text-ink leading-tight">{decision}</p>
+          <p className="text-xs text-muted">AI Recommendation</p>
         </div>
+        <Badge tone={decisionTone(decision)} className="ml-auto">{summary?.fraud_risk_label || 'Reviewed'}</Badge>
       </div>
 
-      {/* Settlement */}
-      <div className="bg-slate-800/60 rounded-xl p-3 mb-3">
-        <p className="text-xs text-slate-500 mb-1">Recommended Settlement</p>
-        <p className="text-xl font-bold text-white">
-          ₹{Number(summary?.recommended_settlement ?? 0).toLocaleString('en-IN')}
-        </p>
-        {settlementData?.deductibles_applied > 0 && !breakdown && (
-          <p className="text-xs text-slate-500 mt-1">
-            Deductible applied: ₹{Number(settlementData.deductibles_applied).toLocaleString('en-IN')}
-          </p>
-        )}
-      </div>
-
-      {/* Transparent settlement math (#2) */}
-      <SettlementBreakdown breakdown={breakdown} />
-
-      {/* Confidence bar */}
-      <div className="mb-4">
-        <div className="flex justify-between text-xs text-slate-500 mb-1">
-          <span>AI Confidence</span>
-          <span>{confidence}%</span>
+      <div className="p-6">
+        {/* Recommended settlement — the itemised ledger behind this number now
+            lives in the Risk & Settlement panel above, so it is visible without
+            scrolling and appears exactly once on the page. */}
+        <div className="rounded-xl border border-line bg-surface-muted p-4 mb-4">
+          <p className="text-xs text-faint mb-1">Recommended Settlement</p>
+          <p className="text-2xl font-semibold text-ink tabular-nums">{inr(summary?.recommended_settlement)}</p>
+          {settlementData?.deductibles_applied > 0 && !breakdown && (
+            <p className="text-xs text-faint mt-1">Deductible applied: {inr(settlementData.deductibles_applied)}</p>
+          )}
+          {breakdown && (
+            <p className="text-xs text-faint mt-1">
+              Itemised breakdown in the Risk &amp; Settlement panel.
+            </p>
+          )}
         </div>
-        <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-          <div
-            className={`h-full rounded-full transition-all duration-700 ${style.bar}`}
-            style={{ width: `${confidence}%` }}
-          />
-        </div>
-      </div>
 
-      {/* Why this decision — collapsible */}
-      <div className={`rounded-xl border ${ctx.bg} overflow-hidden`}>
-        <button
-          onClick={() => setShowReasons(o => !o)}
-          className="w-full flex items-center justify-between px-3 py-2.5 text-left"
-        >
-          <span className={`text-xs font-semibold uppercase tracking-wider ${ctx.color}`}>
-            {ctx.title}
-          </span>
-          <span className="text-slate-500 text-xs transition-transform" style={{ display: 'inline-block', transform: showReasons ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
-        </button>
-
-        {showReasons && (
-          <div className="px-3 pb-3">
-            {/* Context blurb */}
-            <p className="text-xs text-slate-400 italic mb-2.5 leading-relaxed">{ctx.blurb}</p>
-
-            {/* LLM-generated reasons */}
-            {reasons.length > 0 ? (
-              <ul className="space-y-2">
-                {reasons.map((r, i) => (
-                  <li key={i} className="flex items-start gap-2">
-                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5 ${ctx.bullet}`} />
-                    <p className="text-xs text-slate-300 leading-relaxed">{r}</p>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              /* Fallback: derive from summary fields if decision_reasons not yet in result */
-              <ul className="space-y-2">
-                {(summary?.fraud_risk_score ?? 0) > 0 && (
-                  <li className="flex items-start gap-2">
-                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5 ${ctx.bullet}`} />
-                    <p className="text-xs text-slate-300 leading-relaxed">
-                      Fraud risk score: <span className={`font-semibold ${style.text}`}>{summary.fraud_risk_score}% ({summary.fraud_risk_label})</span>
-                    </p>
-                  </li>
-                )}
-                {summary?.damage_consistency && summary.damage_consistency !== 'Unknown' && (
-                  <li className="flex items-start gap-2">
-                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5 ${ctx.bullet}`} />
-                    <p className="text-xs text-slate-300 leading-relaxed">
-                      Damage consistency with description: <span className="font-semibold">{summary.damage_consistency}</span>
-                    </p>
-                  </li>
-                )}
-                {summary?.incident_consistency && summary.incident_consistency !== 'Unknown' && (
-                  <li className="flex items-start gap-2">
-                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5 ${ctx.bullet}`} />
-                    <p className="text-xs text-slate-300 leading-relaxed">
-                      Incident reconstruction consistency: <span className="font-semibold">{summary.incident_consistency}</span>
-                    </p>
-                  </li>
-                )}
-                {summary?.external_verification && summary.external_verification !== 'Unknown' && (
-                  <li className="flex items-start gap-2">
-                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5 ${ctx.bullet}`} />
-                    <p className="text-xs text-slate-300 leading-relaxed">
-                      External location verification: <span className="font-semibold">{summary.external_verification}</span>
-                    </p>
-                  </li>
-                )}
-                {summary?.behavioural_analysis && summary.behavioural_analysis !== 'Unknown' && (
-                  <li className="flex items-start gap-2">
-                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5 ${ctx.bullet}`} />
-                    <p className="text-xs text-slate-300 leading-relaxed">
-                      Behavioural risk profile: <span className="font-semibold">{summary.behavioural_analysis}</span>
-                    </p>
-                  </li>
-                )}
-              </ul>
-            )}
+        {/* Confidence */}
+        <div className="mt-4 mb-4">
+          <div className="flex justify-between text-xs text-muted mb-1.5">
+            <span>AI Confidence</span>
+            <span className="tabular-nums font-medium text-ink">{confidence}%</span>
           </div>
-        )}
+          <ProgressBar value={confidence} tone={toneBar[meta.tone]} />
+        </div>
+
+        {/* Why this decision */}
+        <Collapsible title={meta.title} tone={meta.tone} defaultOpen>
+          <p className="text-xs text-muted italic mb-2.5 leading-relaxed">{meta.blurb}</p>
+          {shown.length > 0 && (
+            <ul className="space-y-2">
+              {shown.map((r, i) => (
+                <li key={i} className="flex items-start gap-2">
+                  <span className={cx('w-1.5 h-1.5 rounded-full shrink-0 mt-1.5', {
+                    success: 'bg-success-500', danger: 'bg-danger-500', warning: 'bg-warning-500',
+                  }[meta.tone])} />
+                  <p className="text-xs text-ink leading-relaxed">{r}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Collapsible>
       </div>
-    </div>
+    </Card>
   )
 }

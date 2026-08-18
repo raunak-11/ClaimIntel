@@ -50,9 +50,13 @@ def _get_client():
 # ---------------------------------------------------------------------------
 # Core query function
 # ---------------------------------------------------------------------------
-def query_collection(collection_name: str, query: str, n_results: int = 3) -> list[str]:
+def query_collection(collection_name: str, query: str, n_results: int = 3,
+                     where: dict | None = None) -> list[str]:
     """
     Query a knowledge base collection.
+
+    `where` is an optional ChromaDB metadata filter (e.g. {"policy_no": "POL-123"})
+    so a customer-scoped query can never return another customer's chunks.
 
     Returns:
         List of relevant text chunks (strings). Empty list if vectorstore
@@ -76,10 +80,10 @@ def query_collection(collection_name: str, query: str, n_results: int = 3) -> li
         if count == 0:
             return []
 
-        results = collection.query(
-            query_texts=[query],
-            n_results=min(n_results, count),
-        )
+        kwargs: dict = {"query_texts": [query], "n_results": min(n_results, count)}
+        if where:
+            kwargs["where"] = where
+        results = collection.query(**kwargs)
         docs = results.get("documents", [[]])[0]
         return [d for d in docs if d]
     except Exception:
@@ -145,7 +149,15 @@ def get_policy_context(policy_no: str, query_hint: str = "") -> str:
     if not policy_no:
         return ""
     query = f"policy {policy_no} coverage exclusions terms conditions {query_hint}"
-    docs = query_collection("policy_documents", query, n_results=3)
+    # Hard metadata filter: only THIS customer's policy chunks may be returned.
+    # Without it, semantic search freely mixed pages from other customers'
+    # policies into the context (accuracy + privacy bug).
+    docs = query_collection("policy_documents", query, n_results=3,
+                            where={"policy_no": policy_no})
+    if not docs:
+        # Older vectorstores built without policy_no metadata: fall back to the
+        # unfiltered query rather than losing policy context entirely.
+        docs = query_collection("policy_documents", query, n_results=3)
     return format_context(docs, f"Policy Document — {policy_no}")
 
 

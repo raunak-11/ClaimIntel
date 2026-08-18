@@ -1,3 +1,4 @@
+import re
 from typing import Any
 from datetime import datetime
 
@@ -5,7 +6,7 @@ import storage
 from agents.base_agent import BaseAgent
 from config import NPS_HIGH_DAYS, NPS_LOW_DAYS, NPS_MEDIUM_DAYS, SURVEYOR_THRESHOLD
 from services.llm_client import ask_json
-from services.pii import build_llm_safe_claim
+from services.pii import build_llm_safe_claim, build_llm_safe_text
 from services.rag_client import get_fraud_kb_context
 
 BASE_PROMPT = """You are a senior motor insurance fraud analyst with access to an institutional fraud knowledge base.
@@ -22,6 +23,9 @@ Damage assessment findings (including visual fraud signals from image analysis):
 
 Rule-based flags raised by system ({flag_count} flags):
 {rule_flags}
+
+Labour cost evidence (independently assessed vs what the garage invoiced):
+{labour_evidence}
 
 Instructions:
 - CRITICAL flags (vehicle mismatch, duplicate submission, pre-existing damage) must push score to 70+
@@ -40,6 +44,12 @@ Instructions:
     * Filing the claim within a few days of the incident
   These alone are NOT evidence of fraud. Only flag behaviour that directly contradicts the claim story
   or matches a known fraud scheme from the KB.
+- LABOUR VARIANCE IS NOT AUTOMATICALLY FRAUD. The assessed labour figure is a rule-based estimate,
+  not an OEM standard time, so a gap can be entirely legitimate (an authorised-dealer rate card, extra
+  strip-down the photos don't show, a workshop bundling paint materials into labour). Judge whether the
+  discrepancy is EXPLAINABLE, REQUIRES REVIEW, or SUSPICIOUS, and say which in your reasoning. Only let it
+  move the score when it corroborates other evidence (e.g. operations billed for parts that were never
+  damaged, or the same operation billed twice). Never let it alone drive a high score.
 - Return ONLY valid JSON with no markdown fences or extra text
 
 Return a JSON object with exactly these fields:
@@ -106,20 +116,121 @@ FRAUD_CHECK_NAMES: dict[str, str] = {
     "FC-25": "Historical archive — garage fraud pattern",
     "FC-26": "Historical archive — claimant fraud pattern",
     "FC-27": "Historical archive — telematics fraud signature",
-    "FC-28": "Visual forensics — AI-generated/manipulated evidence (image or video)",
+    "FC-28": "Visual forensics — AI-generated/manipulated evidence (image, video, or document)",
+    "FC-29": "Ownership documents (DL / RC) verification",
+    "FC-30": "Cross-claimant fraud-ring / network detection",
+    "FC-31": "Unverified claimed parts (no photographic evidence)",
+    "FC-32": "Repair-scope inflation (claimed action vs. assessed action)",
 }
+
+# ── Thematic grouping ─────────────────────────────────────────────────────────
+# Grouped by what each check actually READS, not by what its title suggests —
+# that is what makes the groups useful to an adjudicator, because everything in
+# a group stands or falls on the same evidence. Server-side so the Fraud page,
+# the pipeline panel and the PDF cannot drift apart.
+FRAUD_CHECK_GROUPS: list[dict] = [
+    {"key": "policy", "label": "Policy & Exposure",
+     "description": "The policy record and the size of the ask against it.",
+     "checks": ["FC-01", "FC-03", "FC-04", "FC-11"]},
+    {"key": "claimant", "label": "Claimant History & Filing Behaviour",
+     "description": "Other claims on this policy, and how this one was filed and described.",
+     "checks": ["FC-02", "FC-05", "FC-06", "FC-07", "FC-08", "FC-09", "FC-10"]},
+    {"key": "documents", "label": "Document Integrity & Identity",
+     "description": "FIR, driving licence and RC — presence, and agreement with the claim.",
+     "checks": ["FC-18", "FC-19", "FC-20", "FC-29"]},
+    {"key": "damage", "label": "Photo & Damage Evidence",
+     "description": "What the submitted photos actually show.",
+     "checks": ["FC-12", "FC-13", "FC-14", "FC-15", "FC-16"]},
+    {"key": "forensics", "label": "Evidence Authenticity",
+     "description": "Whether the images and documents are genuine captures.",
+     "checks": ["FC-28"]},
+    {"key": "telematics", "label": "Telematics",
+     "description": "Vehicle IoT data against the claimed impact and location.",
+     "checks": ["FC-21", "FC-22"]},
+    {"key": "pricing", "label": "Pricing, Inflation & Repair Scope",
+     "description": "The garage quote against the independently assessed value.",
+     "checks": ["FC-17", "FC-23", "FC-31", "FC-32"]},
+    {"key": "network", "label": "Network & Historical Archive",
+     "description": "This claim against other claimants and past confirmed fraud.",
+     "checks": ["FC-24", "FC-25", "FC-26", "FC-27", "FC-30"]},
+]
+
+_GROUP_OF: dict[str, str] = {
+    cid: group["key"] for group in FRAUD_CHECK_GROUPS for cid in group["checks"]
+}
+
+# Corroborating evidence just under CRITICAL: an exact prior-fraud-case hit on
+# garage / claimant / telematics signature, a synthetic-image detection, or a
+# live cross-claimant network hit.
+_HIGH_WEIGHT_CHECKS = {"FC-25", "FC-26", "FC-27", "FC-28", "FC-30"}
+
+# Checks that need nothing but the claim row, the policy row and other claims on
+# disk — no damage assessment, no parsed documents, no telematics, no pixels.
+# services/eligibility_gate.py runs these BEFORE any model call so an
+# ineligible or obviously-duplicate claim can be stopped while it is still free.
+#
+# Deliberately excluded and why:
+#   FC-01 / FC-11  read `claim_amount`, which is 0 until the orchestrator writes
+#                  Agent 1's mid-estimate back after damage assessment.
+#   FC-27          needs parsed telematics, which the gate runs before.
+#   everything else needs damage output, parsed documents or images.
+METADATA_CHECK_IDS: tuple[str, ...] = (
+    "FC-02", "FC-03", "FC-04", "FC-05", "FC-06", "FC-07", "FC-08", "FC-09",
+    "FC-10", "FC-24", "FC-25", "FC-26", "FC-30",
+)
+
+
+def run_metadata_checks(claim: dict) -> list[dict]:
+    """The METADATA_CHECK_IDS subset, evaluated with no evidence inputs.
+
+    Shares one implementation with the full pass rather than reimplementing the
+    rules: `_run_fraud_checks` with empty damage/docs resolves every
+    evidence-dependent check to `na`, and this returns only the ones that were
+    genuinely evaluable. Agent 2 later recomputes the full set from scratch, so
+    the 32-check list and the score are unaffected by the gate having run — the
+    point of the gate is to skip MODEL calls, not these local ones.
+    """
+    checks, _ = _run_fraud_checks(claim, {}, {})
+    by_id = {c["id"]: c for c in checks}
+    return [by_id[cid] for cid in METADATA_CHECK_IDS if cid in by_id]
+
+
+def check_weight(check: dict) -> int:
+    """Points this check contributes to the deterministic base score when it
+    flags. Mirrors the scoring block in FraudIntelligenceAgent.run() — kept
+    here as a function so the UI can show severity without either re-deriving
+    it from the free-text detail or hardcoding a second copy of the tiers.
+    """
+    if check.get("status") != "flag":
+        return 0
+    detail = (check.get("detail") or "").upper()
+    if "CRITICAL" in detail:
+        return 35
+    if check.get("id") in _HIGH_WEIGHT_CHECKS:
+        return 30
+    if "NEW POLICY SYNDROME — HIGH" in detail:
+        return 30
+    if "NEW POLICY SYNDROME — MEDIUM" in detail:
+        return 17
+    if "NEW POLICY SYNDROME — LOW" in detail:
+        return 7
+    return 8
 
 
 def _run_fraud_checks(claim: dict, damage: dict, docs: dict | None = None) -> tuple[list[dict], dict]:
-    """Run all 28 deterministic fraud checks. Returns (checks, layers):
-    checks  — a list (in FC order) of {id, name, status: pass|flag|na, detail} dicts.
-    layers  — {"historical_fraud_layer": {...}, "visual_forensics_layer": {...}}."""
+    """Run all 32 deterministic fraud checks. Returns (checks, layers):
+    checks  — a list (in FC order) of
+              {id, name, group, status: pass|flag|na, detail, weight} dicts.
+    layers  — {"historical_fraud_layer": {...}, "visual_forensics_layer": {...},
+               "fraud_network_layer": {...}}."""
     docs = docs or {}
     damage = damage or {}
     results: dict[str, dict] = {}
 
     def emit(cid: str, status: str, detail: str = ""):
-        results[cid] = {"id": cid, "name": FRAUD_CHECK_NAMES[cid], "status": status, "detail": detail}
+        results[cid] = {"id": cid, "name": FRAUD_CHECK_NAMES[cid],
+                        "group": _GROUP_OF.get(cid, "other"),
+                        "status": status, "detail": detail}
 
     # ── Shared precomputed values ─────────────────────────────────────────────
     claim_id = claim.get("claim_id", "")
@@ -140,15 +251,33 @@ def _run_fraud_checks(claim: dict, damage: dict, docs: dict | None = None) -> tu
     ]
 
     # ── FC-01: High-value / total-loss threshold ──────────────────────────────
+    # Only total-loss-adjacent value (>5L) is treated as a FRAUD signal here —
+    # high-value/total-loss claims genuinely carry more fraud incentive, which
+    # is why the industry treats claim value as a soft risk factor. Crossing
+    # SURVEYOR_THRESHOLD (>50k) is NOT fraud evidence — it's an IRDAI *process*
+    # requirement (a licensed surveyor must inspect), true of every routine
+    # mid-size claim regardless of fraud risk. It was previously flagged here
+    # too, silently adding 8 points to the fraud score of almost every
+    # realistic own-damage claim — verified live: this alone kept a ₹52,250
+    # genuine claim (Case 1) out of a clean "near-zero" fraud score. The
+    # surveyor requirement is already handled correctly and separately by
+    # orchestrator.py's status routing (`final_status = "Survey Required"`),
+    # which reads SURVEYOR_THRESHOLD directly — this check no longer needs to
+    # duplicate that, only report it as context.
     try:
         amount = float(claim.get("claim_amount") or 0)
         if amount <= 0:
             emit("FC-01", "na", "Claim amount not yet assessed.")
         elif amount > 500000:
-            emit("FC-01", "flag", f"Claim amount ₹{amount:,.0f} exceeds ₹5,00,000 — potential total loss territory")
-        elif amount > SURVEYOR_THRESHOLD:
             emit("FC-01", "flag",
-                 f"Claim amount ₹{amount:,.0f} exceeds ₹{SURVEYOR_THRESHOLD:,} — mandatory surveyor required (IRDAI)")
+                 f"Claim amount ₹{amount:,.0f} exceeds ₹5,00,000 — potential total-loss territory, "
+                 f"elevated fraud scrutiny warranted")
+        elif amount > SURVEYOR_THRESHOLD:
+            emit("FC-01", "pass",
+                 f"Claim amount ₹{amount:,.0f} is within normal fraud-risk range. Note: exceeds "
+                 f"₹{SURVEYOR_THRESHOLD:,} — IRDAI mandates a surveyor for this claim (a regulatory "
+                 f"process requirement, not a fraud signal; already routed to Survey Required status "
+                 f"where applicable).")
         else:
             emit("FC-01", "pass", f"Claim amount ₹{amount:,.0f} within standard processing range.")
     except (ValueError, TypeError):
@@ -239,8 +368,8 @@ def _run_fraud_checks(claim: dict, damage: dict, docs: dict | None = None) -> tu
     suspicious = [
         ("no witnesses",     "No witnesses mentioned — unverifiable incident (FI-LOC-001)"),
         ("no witness",       "No witnesses mentioned — unverifiable incident (FI-LOC-001)"),
-        ("fled the scene",   "Hit-and-run: vehicle fled scene — third party unverifiable (FI-BEH-001)"),
-        ("unknown vehicle",  "Unknown/unidentified third party vehicle — unverifiable (FI-BEH-001)"),
+        ("fled the scene",   "Hit-and-run: vehicle fled scene — third party unverifiable (FI-LOC-001)"),
+        ("unknown vehicle",  "Unknown/unidentified third party vehicle — unverifiable (FI-LOC-001)"),
         ("empty road",       "Empty road claimed — no independent corroboration possible"),
         ("nobody around",    "No bystanders claimed — no independent corroboration possible"),
         ("parked",           "Vehicle was parked/unattended — no driver witness to impact"),
@@ -351,7 +480,7 @@ def _run_fraud_checks(claim: dict, damage: dict, docs: dict | None = None) -> tu
             emit("FC-12", "flag",
                  "No visible damage detected in the submitted photos despite a claim being filed "
                  "— vehicle appears undamaged; possible invalid claim, wrong/old photos, or "
-                 "pre-incident images (FI-DMG-002: Physics Mismatch)")
+                 "pre-incident images")
         else:
             emit("FC-12", "pass", "Visible damage detected in the submitted photos.")
 
@@ -361,10 +490,10 @@ def _run_fraud_checks(claim: dict, damage: dict, docs: dict | None = None) -> tu
             seen = damage.get("vehicle_seen_description", "unknown vehicle")
             emit("FC-13", "flag",
                  f"CRITICAL: Vehicle in images ({seen}) does NOT match registered vehicle "
-                 f"— possible vehicle substitution fraud (FI-DMG-004)")
+                 f"— possible vehicle substitution fraud")
         elif match == "Unclear":
             emit("FC-13", "flag",
-                 "Vehicle identity in images is unclear — make/model/plate not verifiable (FI-DMG-004)")
+                 "Vehicle identity in images is unclear — make/model/plate not verifiable")
         elif match == "Yes":
             emit("FC-13", "pass", "Vehicle in images matches the registered vehicle.")
         else:
@@ -384,7 +513,7 @@ def _run_fraud_checks(claim: dict, damage: dict, docs: dict | None = None) -> tu
         plate_seen = damage.get("plate_text_in_image", "")
         if plate_visible is False:
             emit("FC-15", "flag",
-                 "Registration plate not visible in any submitted image — vehicle identity unverifiable (FI-DMG-003)")
+                 "Registration plate not visible in any submitted image — vehicle identity unverifiable")
         elif plate_visible and plate_seen:
             policy_vehicle = claim.get("vehicle", "")
             if plate_seen.upper().replace(" ", "") not in policy_vehicle.upper().replace(" ", ""):
@@ -398,12 +527,33 @@ def _run_fraud_checks(claim: dict, damage: dict, docs: dict | None = None) -> tu
         else:
             emit("FC-15", "na", "Plate visibility not assessed.")
 
-        # FC-16: Multiple vehicles in frame
-        if damage.get("multiple_vehicles_in_frame"):
+        # FC-16: Undisclosed second vehicle in the collision.
+        # Real-world logic: another vehicle merely VISIBLE means nothing (garages
+        # and Indian streets are full of parked cars). Suspicious only when a
+        # second vehicle is physically IN CONTACT / freshly damaged in the same
+        # scene while the claimant's story never mentions one (FS-002 staging).
+        other_contact = damage.get("other_vehicle_in_contact")
+        if other_contact is None:  # legacy results / not assessed
+            other_contact = None if damage.get("multiple_vehicles_in_frame") is None else False
+        _OTHER_VEHICLE_WORDS = ("vehicle", "car", "bike", "motorcycle", "truck", "bus",
+                                "auto", "scooter", "lorry", "tempo", "hatchback",
+                                "suv", "sedan", "van", "rider")
+        story_mentions_other = any(w in desc_lower for w in _OTHER_VEHICLE_WORDS)
+        if other_contact is None:
+            emit("FC-16", "na", "Second-vehicle involvement not assessed in images.")
+        elif other_contact and not story_mentions_other:
             emit("FC-16", "flag",
-                 "Multiple vehicles visible in claim images — possible staged collision scenario (FS-002)")
+                 "Another vehicle is in contact/damaged in the claim photos but the "
+                 "claimant's account mentions no other vehicle — possible staged "
+                 "collision or undisclosed third party (FS-002)")
+        elif other_contact:
+            emit("FC-16", "pass",
+                 "Second vehicle visible in contact — consistent with the claimant's "
+                 "account of another vehicle being involved.")
         else:
-            emit("FC-16", "pass", "Single vehicle in frame — no staged-collision indicator.")
+            emit("FC-16", "pass",
+                 "No second vehicle involved in the collision scene (background/parked "
+                 "vehicles ignored).")
 
     # ── FC-17 / FC-23: Garage-vs-AI variance (inflation / under-declaration) ───
     garage_provided = damage.get("garage_estimate_provided")
@@ -429,6 +579,22 @@ def _run_fraud_checks(claim: dict, damage: dict, docs: dict | None = None) -> tu
                  f"— suspicious underdeclaration (possible cash settlement bypass)")
         else:
             emit("FC-23", "pass", "Garage estimate is not suspiciously below the AI assessment.")
+    elif garage_provided:
+        # Coverage abstention. Part prices are live-web only, so a claim whose
+        # parts mostly failed to price produces an assessed value that is
+        # missing whole line items — comparing a full garage quote against it
+        # would read as huge "under-declaration" and fire FC-23 on an honest
+        # claim. Report the gap, withhold the verdict.
+        cov = damage.get("pricing_coverage_pct")
+        detail = (
+            f"Independent pricing coverage is {cov}% — below the threshold needed for a "
+            f"reliable variance, so the garage estimate is not scored against the AI "
+            f"assessment on this claim."
+            if cov is not None else
+            "AI assessment unavailable — garage estimate not compared."
+        )
+        emit("FC-17", "na", detail)
+        emit("FC-23", "na", detail)
     else:
         emit("FC-17", "na", "No garage estimate to compare against the AI assessment.")
         emit("FC-23", "na", "No garage estimate to compare against the AI assessment.")
@@ -439,7 +605,7 @@ def _run_fraud_checks(claim: dict, damage: dict, docs: dict | None = None) -> tu
     elif not docs.get("fir"):
         emit("FC-18", "flag",
              f"No FIR uploaded for '{claim.get('claim_type')}' claim — "
-             f"FIR is mandatory for theft and third-party incidents (FI-CLM-003)")
+             f"FIR is mandatory for theft and third-party incidents")
     else:
         emit("FC-18", "pass", "FIR uploaded for theft / third-party claim.")
 
@@ -488,7 +654,7 @@ def _run_fraud_checks(claim: dict, damage: dict, docs: dict | None = None) -> tu
             mismatches.append(
                 f"FIR vehicle reg '{parsed_fir.get('vehicle_reg_in_fir')}' does not match policy vehicle")
         if mismatches:
-            emit("FC-20", "flag", "FI-LOC-001: FIR mismatch — " + "; ".join(mismatches) + " — story inconsistency")
+            emit("FC-20", "flag", "FIR cross-check mismatch — " + "; ".join(mismatches) + " — story inconsistency")
         else:
             emit("FC-20", "pass", "FIR date, location and vehicle registration are consistent with the claim.")
 
@@ -554,34 +720,265 @@ def _run_fraud_checks(claim: dict, damage: dict, docs: dict | None = None) -> tu
     # ── FC-28: Visual forensics — AI-generated/manipulated evidence ───────────
     # Combines the image-side signal (vision LLM authenticity_flags + EXIF +
     # local AI-image-detector, all already computed by damage_assessment) with
-    # the video-side signal (the same local detector run on dashcam frames).
+    # the video-side signal (the same local detector run on dashcam frames) and
+    # the document-side signal (vision LLM authenticity_flags on FIR/RC/DL/
+    # estimate images — see document_parser.py's _DOC_AUTHENTICITY_SECTION).
+    # Documents are folded into the same check rather than a new FC-30+ because
+    # they're the same underlying question (is this piece of evidence genuine?)
+    # answered by the same kind of signal (a vision-LLM authenticity flag).
     img_auth = (damage.get("image_quality") or {}).get("authenticity") or {}
     video_signals = docs.get("dashcam_forensics") or []
     video_suspects = [s for s in video_signals if s.get("is_ai_generated_suspected")]
+
+    doc_auth: dict[str, dict] = {}
+    for dt in ("fir", "rc", "license", "estimate"):
+        parsed = docs.get(dt)
+        if not parsed:
+            continue
+        # The vision model sometimes returns a bare string ("none") instead of
+        # a list (["none"]) for authenticity_flags despite the schema — iterating
+        # a string in Python walks it character-by-character, which silently
+        # turned "none" into 4 bogus flags ['n','o','n','e'] here (verified live:
+        # inflated a genuine claim's fraud score by 30 points via FC-28's
+        # high-weight tier). Same defensive coercion already used for the
+        # photo-side flags in damage_assessment.py's _image_quality_gate.
+        raw_flags = parsed.get("authenticity_flags") or []
+        if isinstance(raw_flags, str):
+            raw_flags = [raw_flags]
+        flags = [f for f in raw_flags if f and f != "none"]
+        if flags:
+            doc_auth[dt] = {"flags": flags, "notes": parsed.get("authenticity_notes")}
+
     visual_forensics_layer = {
         "image": img_auth,
         "video": {"signals": video_signals, "suspect_count": len(video_suspects)},
+        "documents": doc_auth,
     }
-    image_suspect = bool(img_auth.get("review_recommended"))
-    if image_suspect or video_suspects:
+    # Flag only on POSITIVE forgery signals (vision-model authenticity flag or
+    # the local AI-image detector). Missing EXIF alone is advisory — messaging
+    # apps strip EXIF from almost all genuine Indian claim photos, and flagging
+    # on it made FC-28 fire on every claim.
+    llm_auth_flags = [f for f in (img_auth.get("flags") or []) if f and f != "none"]
+    forensic_signals = img_auth.get("forensics_signals") or []
+    forensic_suspects = [s for s in forensic_signals if s.get("is_ai_generated_suspected")]
+    # Provenance hits (generator's default filename / embedded credit metadata)
+    # are reported separately from classifier hits — they are deterministic
+    # facts about the file, not a model opinion.
+    prov_suspects = [s for s in forensic_suspects if s.get("provenance")]
+    model_suspects = [s for s in forensic_suspects if not s.get("provenance")]
+    image_suspect = bool(llm_auth_flags or forensic_suspects)
+    if image_suspect or video_suspects or doc_auth:
         parts = []
-        if image_suspect:
-            parts.append("damage photo(s) flagged by the vision model/EXIF/local detector")
+        if llm_auth_flags:
+            parts.append(f"vision model flagged photo(s): {', '.join(llm_auth_flags)}")
+        if prov_suspects:
+            markers = ", ".join(sorted({s["provenance"]["marker"] for s in prov_suspects}))
+            parts.append(f"{len(prov_suspects)} photo(s) carry AI-generator provenance "
+                         f"({markers} — generator filename/embedded metadata)")
+        if model_suspects:
+            parts.append(f"{len(model_suspects)} photo(s) flagged by the local AI-image detector")
         if video_suspects:
             parts.append(f"{len(video_suspects)} dashcam frame(s) flagged by the local AI-image detector")
+        for dt, info in doc_auth.items():
+            parts.append(f"{dt.upper()} document flagged: {', '.join(info['flags'])}")
         emit("FC-28", "flag", "Visual forensics: " + "; ".join(parts) + " — possible synthetic/manipulated evidence.")
-    elif video_signals or img_auth:
-        emit("FC-28", "pass", "No AI-generated/manipulated signals detected in images or dashcam frames.")
+    elif video_signals or img_auth or docs.get("fir") or docs.get("rc") or docs.get("license") or docs.get("estimate"):
+        # Honesty about coverage: "no signals" from a scanner that never ran is
+        # not a clean scan. classifier_available is absent on results written
+        # before that field existed — infer from label (set iff it classified).
+        photo_count = (damage.get("image_quality") or {}).get("photo_count") or 0
+        classifier_ran = any(
+            s.get("classifier_available", s.get("label") is not None)
+            for s in forensic_signals
+        )
+        if photo_count and not classifier_ran:
+            emit("FC-28", "pass",
+                 "No AI-generator provenance, vision-model or document flags — but the local "
+                 "AI-image classifier did NOT run (model unavailable), so photo forensics "
+                 "coverage is reduced.")
+        else:
+            emit("FC-28", "pass", "No AI-generated/manipulated signals detected in images, documents, or dashcam frames.")
     else:
-        emit("FC-28", "na", "No images or dashcam frames available for visual forensics.")
+        emit("FC-28", "na", "No images, documents, or dashcam frames available for visual forensics.")
+
+    # ── FC-29: Ownership documents (DL / RC) verification ─────────────────────
+    # Both documents are mandatory. RC registration number must match the policy
+    # vehicle; DL holder name should match the claimant. A wrong-vehicle RC is a
+    # critical identity mismatch (vehicle substitution / borrowed documents).
+    parsed_rc = docs.get("rc") or {}
+    parsed_dl = docs.get("license") or {}
+
+    def _norm_reg(s: str) -> str:
+        return re.sub(r"[^A-Z0-9]", "", (s or "").upper())
+
+    policy_reg = _norm_reg(policy.get("vehicle_reg_no", "") if policy else "")
+    if not policy_reg:
+        m = re.search(r"\(([A-Z0-9 \-]+)\)", (claim.get("vehicle") or "").upper())
+        policy_reg = _norm_reg(m.group(1)) if m else ""
+
+    if not parsed_rc and not parsed_dl:
+        emit("FC-29", "flag",
+             "Mandatory ownership documents (driving licence + RC) not submitted or unreadable.")
+    else:
+        problems: list[str] = []
+        rc_reg = _norm_reg(parsed_rc.get("reg_no", ""))
+        if rc_reg and policy_reg and rc_reg != policy_reg:
+            problems.append(
+                f"CRITICAL: RC registration '{parsed_rc.get('reg_no')}' does not match the "
+                f"policy vehicle — possible vehicle substitution")
+        dl_name = (parsed_dl.get("holder_name") or "").strip().lower()
+        claimant_name = (claim.get("claimant") or "").strip().lower()
+        if dl_name and claimant_name:
+            dl_tokens = set(dl_name.split())
+            cl_tokens = set(claimant_name.split())
+            if not (dl_tokens & cl_tokens):
+                problems.append(
+                    f"DL holder '{parsed_dl.get('holder_name')}' does not match claimant "
+                    f"'{claim.get('claimant')}'")
+        valid_till = (parsed_dl.get("valid_till") or "")[:10]
+        if valid_till and incident_date:
+            try:
+                if datetime.strptime(valid_till, "%Y-%m-%d").date() < \
+                   datetime.strptime(incident_date[:10], "%Y-%m-%d").date():
+                    problems.append(f"Driving licence expired on {valid_till} — before the incident")
+            except ValueError:
+                pass
+        missing = [n for n, d in (("driving licence", parsed_dl), ("RC", parsed_rc)) if not d]
+        if missing:
+            problems.append(f"{' and '.join(missing)} not submitted/unreadable")
+        if problems:
+            emit("FC-29", "flag", "; ".join(problems))
+        else:
+            emit("FC-29", "pass",
+                 "RC matches the policy vehicle and DL holder matches the claimant; licence valid at incident.")
+
+    # ── FC-30: Cross-claimant fraud-ring / network detection ──────────────────
+    # Distinct from FC-24/25-27 (which each check ONE attribute against the
+    # current claim's own history): this builds a co-occurrence graph across
+    # OTHER claimants sharing this claim's garage or a third-party vehicle
+    # registration within a rolling window — see services/fraud_network.py.
+    try:
+        from services.fraud_network import build_claim_network
+        network_layer = build_claim_network(claim, docs)
+    except Exception:
+        network_layer = {"status": "na", "detail": "Cross-claimant network analysis unavailable.",
+                          "connected_claimants": [], "edges": []}
+    emit("FC-30", network_layer["status"], network_layer["detail"])
+
+    # ── FC-31: Unverified claimed parts (no photographic evidence) ────────────
+    # Distinct from FC-19 (estimate uploaded with ZERO photos) — this fires even
+    # when photos ARE present but specific claimed lines still have no
+    # supporting angle. Direct implementation of "the primary goal is claim
+    # validation, not generic damage detection" (see
+    # DAMAGE_VALIDATION_ARCHITECTURE.md #A.2): a claimed part with no photo used
+    # to silently vanish from the report; damage_assessment.py's estimate-driven
+    # verification loop now returns it as a first-class `unverified_parts`
+    # record instead, and this check turns it into a scoreable fraud signal.
+    unverified = damage.get("unverified_parts") or []
+    claimed_but_undamaged = damage.get("claimed_but_undamaged") or []
+    matched_damaged = damage.get("damaged_parts") or []
+    total_claimed = len(unverified) + len(claimed_but_undamaged) + len(matched_damaged)
+    if not photos_present:
+        emit("FC-31", "na", "No photos submitted — claimed-part verification not possible.")
+    elif total_claimed == 0:
+        emit("FC-31", "na", "No garage estimate line items to verify.")
+    elif not unverified:
+        emit("FC-31", "pass", f"All {total_claimed} claimed part(s) have photographic evidence.")
+    else:
+        pct = len(unverified) / total_claimed * 100
+        names = ", ".join(u.get("part", "?") for u in unverified[:3])
+        detail = (
+            f"{len(unverified)} of {total_claimed} claimed part(s) ({pct:.0f}%) have no "
+            f"photographic evidence to confirm them — {names}"
+            + ("..." if len(unverified) > 3 else "")
+        )
+        if pct > 30:
+            emit("FC-31", "flag", detail)
+        else:
+            emit("FC-31", "pass", detail + " — within normal range for limited photo angles.")
+
+    # ── FC-32: Repair-scope inflation (claimed action vs. assessed action) ────
+    # Different from FC-17 (aggregate rupee variance): a claim can pass FC-17 on
+    # a reasonable TOTAL while still hiding one inflated line item offset by an
+    # under-priced one elsewhere. Checks the estimate's claimed repair action
+    # (Replace/Repair/Paint) per line against this agent's own independent
+    # visual assessment for that same part.
+    scope_mismatches = damage.get("scope_mismatches") or []
+    if not photos_present:
+        emit("FC-32", "na", "No photos submitted — repair-scope cannot be assessed.")
+    elif not matched_damaged:
+        emit("FC-32", "na", "No verified-damaged claimed parts to compare repair scope against.")
+    elif scope_mismatches:
+        m = scope_mismatches[0]
+        detail = (
+            f"{len(scope_mismatches)} claimed line(s) request a costlier repair action than "
+            f"visually supported — e.g. '{m.get('part')}' claimed {m.get('claimed_action')}, "
+            f"assessed {m.get('assessed_action')} only"
+        )
+        emit("FC-32", "flag", detail)
+    else:
+        emit("FC-32", "pass", "Claimed repair actions are consistent with visual assessment.")
 
     # Return in FC order, defaulting any unexpectedly-missing check to na
     checks = [
-        results.get(cid, {"id": cid, "name": name, "status": "na", "detail": "Not evaluated."})
+        results.get(cid, {"id": cid, "name": name, "group": _GROUP_OF.get(cid, "other"),
+                          "status": "na", "detail": "Not evaluated."})
         for cid, name in FRAUD_CHECK_NAMES.items()
     ]
-    layers = {"historical_fraud_layer": historical_layer, "visual_forensics_layer": visual_forensics_layer}
+    # Severity was previously recoverable only by string-matching "CRITICAL" in
+    # the free-text detail, or by knowing _HIGH_WEIGHT_CHECKS by heart. Both
+    # belong on the row.
+    for check in checks:
+        check["weight"] = check_weight(check)
+    layers = {
+        "historical_fraud_layer": historical_layer,
+        "visual_forensics_layer": visual_forensics_layer,
+        "fraud_network_layer": network_layer,
+    }
     return checks, layers
+
+
+# Damage-result keys the fraud prompt does not need, dropped before the dict is
+# stringified into it. This prompt used to receive `str(damage)` whole, which
+# was survivable until the labour engine landed: its per-operation rows carry a
+# `reasoning` and an `assumptions` sentence each, so on a 10-part claim
+# `labour_assessment` alone was 26,389 of the dict's 38,226 characters — 69% —
+# and pushed the request to 12,691 tokens against Groq's 12,000 TPM ceiling.
+# Verified live: Agent 2 died with a 413 on the first re-filed claim while every
+# other agent completed, so the investigation still produced a settlement with
+# no fraud assessment behind it.
+#
+# Nothing here is lost to the model: labour reaches it through the compact
+# `labour_evidence` block below (995 chars, with operation totals), and the
+# per-part verification detail is already summarised in the rule flags.
+_PROMPT_OMIT_FROM_DAMAGE = (
+    "labour_assessment",          # → labour_evidence, ~26x smaller
+    "claimed_part_verifications",  # per-line verdicts; the buckets below say the same
+    "undeclared_damage",           # free-text duplicate of undeclared_parts
+    "image_quality",               # authenticity reaches the model via FC-28's flag text
+)
+
+# Long lists get truncated rather than dropped — the model needs to know a part
+# was undeclared, not the full pricing record for each one.
+_PROMPT_MAX_PARTS = 12
+
+
+def _damage_for_prompt(damage: dict) -> dict:
+    """A prompt-sized view of the damage result."""
+    if not isinstance(damage, dict):
+        return {}
+    out = {k: v for k, v in damage.items() if k not in _PROMPT_OMIT_FROM_DAMAGE}
+    for key in ("damaged_parts", "undeclared_parts", "unverified_parts"):
+        parts = out.get(key)
+        if isinstance(parts, list):
+            out[key] = [
+                {k: p.get(k) for k in ("part", "severity", "repair_type", "pricing_source")
+                 if p.get(k) is not None}
+                for p in parts[:_PROMPT_MAX_PARTS] if isinstance(p, dict)
+            ]
+            if len(parts) > _PROMPT_MAX_PARTS:
+                out[f"{key}_truncated"] = f"{len(parts) - _PROMPT_MAX_PARTS} more not shown"
+    return out
 
 
 class FraudIntelligenceAgent(BaseAgent):
@@ -601,8 +998,27 @@ class FraudIntelligenceAgent(BaseAgent):
         kb_context = get_fraud_kb_context(description, age_hint)
 
         claim_details = "\n".join(f"{k}: {v}" for k, v in build_llm_safe_claim(claim).items())
-        damage_str = str(damage)
-        flags_str = "\n".join(f"- {f}" for f in flags) if flags else "None"
+        damage_str = str(_damage_for_prompt(damage))
+        # `flags` are the checks' human-readable details, several of which quote
+        # real values (FC-29 names the DL holder and the claimant) — actionable
+        # for the adjudicator who sees them in the UI, but they must not undo
+        # the masking build_llm_safe_claim just applied on the line above.
+        flags_str = (
+            "\n".join(f"- {build_llm_safe_text(f, claim, docs)}" for f in flags)
+            if flags else "None"
+        )
+
+        # Labour variance goes to the model as EVIDENCE, not as a scored check —
+        # it adds no FC row and no points to the deterministic base score. A
+        # gap between an assessed rule-based labour figure and a garage's own
+        # labour lines has too many innocent explanations to be worth points on
+        # its own; the model weighs it against the rest and the ±15 clamp caps
+        # how far it can move the result either way.
+        from services.labour_engine import fraud_evidence as _labour_evidence
+        labour_layer = _labour_evidence(damage.get("labour_assessment"))
+        labour_str = str(labour_layer) if labour_layer else (
+            "Not assessed for this claim — no labour comparison available."
+        )
 
         prompt = BASE_PROMPT.format(
             kb_context=kb_context,
@@ -610,6 +1026,7 @@ class FraudIntelligenceAgent(BaseAgent):
             damage_findings=damage_str,
             rule_flags=flags_str,
             flag_count=len(flags),
+            labour_evidence=labour_str,
             nps_high=NPS_HIGH_DAYS,
             nps_high_1=NPS_HIGH_DAYS + 1,
             nps_medium=NPS_MEDIUM_DAYS,
@@ -617,33 +1034,13 @@ class FraudIntelligenceAgent(BaseAgent):
             nps_low=NPS_LOW_DAYS,
         )
         # ── Deterministic base score from rule flags ──────────────────────────
-        # Each CRITICAL flag contributes 35 pts; historical-archive matches (an
-        # exact prior-fraud-case hit on garage/claimant/telematics signature, or
-        # a synthetic-image detection) contribute 30 pts — strong corroborating
-        # evidence, just under CRITICAL; each regular flag contributes 8 pts;
-        # NPS flags use their tier weights. The LLM may only move the final
-        # score within ±15 of this base — preventing run-to-run variance on
-        # identical evidence.
-        _HIGH_WEIGHT_CHECKS = {"FC-25", "FC-26", "FC-27", "FC-28"}
-        base_score = 0
-        for c in checks:
-            if c["status"] != "flag":
-                continue
-            f = c["detail"]
-            fu = f.upper()
-            if "CRITICAL" in fu:
-                base_score += 35
-            elif c["id"] in _HIGH_WEIGHT_CHECKS:
-                base_score += 30
-            elif "NEW POLICY SYNDROME — HIGH" in fu:
-                base_score += 30
-            elif "NEW POLICY SYNDROME — MEDIUM" in fu:
-                base_score += 17
-            elif "NEW POLICY SYNDROME — LOW" in fu:
-                base_score += 7
-            else:
-                base_score += 8
-        base_score = min(base_score, 95)
+        # Summed from each check's own weight (see check_weight): CRITICAL 35,
+        # historical-archive / synthetic-image / network hits 30, NPS by tier,
+        # everything else that flags 8. The LLM may only move the final score
+        # within ±15 of this base — preventing run-to-run variance on identical
+        # evidence. Weights live in check_weight() so the number the UI shows
+        # next to a check is by construction the number that was scored.
+        base_score = min(sum(check_weight(c) for c in checks), 95)
 
         result = ask_json(prompt, agent_name="fraud_intelligence", claim_id=claim.get("claim_id"))
         result.setdefault("status", "completed")
@@ -652,6 +1049,17 @@ class FraudIntelligenceAgent(BaseAgent):
         llm_score = int(result.get("fraud_score") or 0)
         clamped = max(base_score - 15, min(base_score + 15, llm_score))
         clamped = max(0, min(100, clamped))
+
+        # Safety floor: any CRITICAL flag must never auto-approve. A single
+        # CRITICAL check (base 35) could otherwise clamp below 40 ("Low") and
+        # be auto-approved — force at least "Medium" (≥40 → human review).
+        has_critical = any(
+            "CRITICAL" in (c.get("detail") or "").upper()
+            for c in checks if c["status"] == "flag"
+        )
+        if has_critical:
+            clamped = max(clamped, 40)
+
         result["fraud_score"] = clamped
         result["fraud_score_base"] = base_score   # expose for transparency
 
@@ -686,18 +1094,54 @@ class FraudIntelligenceAgent(BaseAgent):
                 and "NEW POLICY" not in ind.upper()
             ]
 
-        # Expose the full 28-check list for the UI Fraud Check List panel.
+        # Expose the full 32-check list for the UI Fraud Check List panel.
         result["fraud_checks"] = checks
         flagged = sum(1 for c in checks if c["status"] == "flag")
         passed  = sum(1 for c in checks if c["status"] == "pass")
         na      = sum(1 for c in checks if c["status"] == "na")
         result["fraud_check_counts"] = {"flagged": flagged, "passed": passed, "na": na}
 
-        # Two layered outputs: image/video forensics, and historical cross-claim
+        # Three layered outputs: image/video forensics, historical cross-claim
         # fraud patterns (same garage / same claimant / same telematics signature
-        # seen in past fraud cases) — see services/historical_fraud_intel.py.
+        # seen in past fraud cases, services/historical_fraud_intel.py), and the
+        # live cross-claimant network graph (services/fraud_network.py).
         result["visual_forensics_layer"] = layers["visual_forensics_layer"]
         result["historical_fraud_layer"] = layers["historical_fraud_layer"]
+        result["fraud_network_layer"] = layers["fraud_network_layer"]
+        # Labour variance — evidence only, carries no score (see above).
+        result["labour_layer"] = labour_layer
+
+        # ── Post-validate LLM outputs against the deterministic checks ─────────
+        # The LLM sometimes matches schemes that contradict established facts
+        # (e.g. FS-001 "New Policy Pre-Existing Damage" on a 764-day-old policy).
+        # Each scheme has deterministic preconditions; drop matches failing them.
+        flagged_ids = {c["id"] for c in checks if c["status"] == "flag"}
+
+        def _scheme_valid(scheme: str) -> bool:
+            s = str(scheme).upper()
+            if "FS-001" in s:   # new-policy pre-existing damage
+                return (0 <= age_days <= NPS_LOW_DAYS) or "FC-14" in flagged_ids
+            if "FS-002" in s:   # staged collision — needs a physical/telematics/network signal
+                return bool({"FC-16", "FC-21", "FC-22", "FC-27", "FC-30"} & flagged_ids)
+            if "FS-003" in s:   # serial theft
+                return "theft" in (claim.get("claim_type") or "").lower()
+            if "FS-004" in s:   # workshop inflation
+                return bool({"FC-17", "FC-23", "FC-24", "FC-25", "FC-30"} & flagged_ids)
+            return True
+        result["matched_schemes"] = [
+            s for s in (result.get("matched_schemes") or []) if _scheme_valid(s)
+        ]
+
+        # KB references may only cite codes that this claim's own flagged checks
+        # (or surviving matched schemes) actually raised — stops the LLM from
+        # stitching unrelated indicator codes onto findings.
+        flag_text = " ".join(c["detail"] for c in checks if c["status"] == "flag").upper()
+        scheme_text = " ".join(str(s).upper() for s in result["matched_schemes"])
+        result["kb_references"] = [
+            code for code in (result.get("kb_references") or [])
+            if str(code).upper().strip() in flag_text
+            or str(code).upper().strip() in scheme_text
+        ]
 
         # Expand bare KB codes (FI-xxx / FS-xxx) into {title, description,
         # relevance} so the PDF report and frontend don't show raw codes —

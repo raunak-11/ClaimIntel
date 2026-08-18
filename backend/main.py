@@ -4,7 +4,10 @@ import os
 from datetime import datetime
 from typing import AsyncGenerator
 
-from fastapi import BackgroundTasks, FastAPI, File, Form, Header, HTTPException, Query, UploadFile
+from fastapi import (
+    BackgroundTasks, Depends, FastAPI, File, Form, Header, HTTPException, Query, Request,
+    UploadFile,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -44,13 +47,98 @@ app.mount(
     name="uploads",
 )
 
-_sse_queues: dict[str, asyncio.Queue] = {}
+# ── Investigation event streaming ─────────────────────────────────────────────
+# Events live in a per-claim REPLAY LOG, not a bare asyncio.Queue.
+#
+# The queue version lost events on any mid-run disconnect, and worse than
+# "lost": the stream's `finally` popped the queue from the registry while
+# run_pipeline held a reference to that same — now orphaned — object and kept
+# putting events into it. A reconnect called get_sse_queue(), got a brand-new
+# empty queue that nothing was writing to, and sat on keep-alive pings forever.
+# The investigation completed server-side and wrote result.json while the
+# dashboard stayed frozen on a half-finished pipeline (docs/audit.md A5).
+#
+# A log fixes both halves: nothing is consumed destructively, so a reconnect
+# replays what it missed, and the log outlives the connection.
+
+_PING_TIMEOUT = 60            # seconds of silence before a keep-alive ping
+_MAX_RETAINED_LOGS = 50       # finished logs kept around for late reconnects
 
 
-def get_sse_queue(claim_id: str) -> asyncio.Queue:
-    if claim_id not in _sse_queues:
-        _sse_queues[claim_id] = asyncio.Queue()
-    return _sse_queues[claim_id]
+class InvestigationLog:
+    """Append-only event log for one investigation, replayable per subscriber.
+
+    Exposes `put()` so this is a drop-in for the `asyncio.Queue` that
+    `orchestrator.run_pipeline` expects — the orchestrator is unchanged.
+    """
+
+    def __init__(self) -> None:
+        self.events: list[dict] = []
+        self.finished = False
+        self._waiters: set[asyncio.Event] = set()
+
+    async def put(self, event: dict) -> None:
+        self.events.append(event)
+        if event.get("type") == "done":
+            self.finished = True
+        for waiter in self._waiters:
+            waiter.set()
+
+    async def subscribe(self, start: int = 0) -> AsyncGenerator[tuple, None]:
+        """Yield `(index, event)` from `start` onward, then live events until done.
+
+        `index` is None for keep-alive pings: they are generated per-subscriber
+        and are not part of the log, so they must not advance the client's
+        Last-Event-ID cursor.
+        """
+        cursor = max(0, min(start, len(self.events)))
+        waiter = asyncio.Event()
+        self._waiters.add(waiter)
+        try:
+            while True:
+                while cursor < len(self.events):
+                    yield cursor, self.events[cursor]
+                    cursor += 1
+                if self.finished:
+                    return
+                waiter.clear()
+                # Re-check after clearing: a put() landing in between would
+                # otherwise have its signal cleared and be waited past.
+                if cursor < len(self.events) or self.finished:
+                    continue
+                try:
+                    await asyncio.wait_for(waiter.wait(), timeout=_PING_TIMEOUT)
+                except asyncio.TimeoutError:
+                    yield None, {"type": "ping"}
+        finally:
+            self._waiters.discard(waiter)
+
+
+_investigation_logs: dict[str, InvestigationLog] = {}
+
+
+def new_investigation_log(claim_id: str) -> InvestigationLog:
+    """Start a fresh log — a re-investigation must not replay the previous run."""
+    _investigation_logs[claim_id] = InvestigationLog()
+    _prune_investigation_logs()
+    return _investigation_logs[claim_id]
+
+
+def get_investigation_log(claim_id: str) -> InvestigationLog:
+    if claim_id not in _investigation_logs:
+        _investigation_logs[claim_id] = InvestigationLog()
+    return _investigation_logs[claim_id]
+
+
+def _prune_investigation_logs() -> None:
+    """Bound retention so a long-lived container can't grow without limit.
+    Only FINISHED logs are eligible; a run in flight is never dropped."""
+    excess = len(_investigation_logs) - _MAX_RETAINED_LOGS
+    if excess <= 0:
+        return
+    finished = [cid for cid, log in _investigation_logs.items() if log.finished]
+    for cid in finished[:excess]:      # dict preserves insertion order → oldest first
+        _investigation_logs.pop(cid, None)
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
@@ -214,16 +302,90 @@ async def upload_files(
     claim = storage.get_claim(claim_id)
     if not claim:
         raise HTTPException(status_code=404, detail="Claim not found")
-    if doc_type not in ("images", "estimate", "fir", "dashcam", "telematics"):
+    if doc_type not in ("images", "estimate", "fir", "dashcam", "telematics", "license", "rc", "claim_form"):
         raise HTTPException(status_code=400, detail=f"Invalid doc_type '{doc_type}'")
     file_dir = "images" if doc_type == "images" else f"docs/{doc_type}"
     saved = []
     for f in files:
         content = await f.read()
         fname = f.filename or "upload"
-        path = storage.save_uploaded_file(claim_id, fname, content, file_dir)
-        saved.append({"filename": fname, "path": path})
+        try:
+            path = storage.save_uploaded_file(claim_id, fname, content, file_dir)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        saved.append({"filename": os.path.basename(fname), "path": path})
     return {"uploaded": saved}
+
+
+# ── Claim Form: blank template + pre-claim auto-fill extraction ───────────────
+
+@app.get("/api/claim-form/blank")
+def blank_claim_form():
+    """ClaimIntel's printable Motor Insurance Claim Form (services/claim_form.py).
+    The customer prints it, handwrites the details, and uploads a photo/scan to
+    /api/claims/extract-form for auto-fill."""
+    from services.claim_form import generate_blank_form
+    return Response(
+        content=generate_blank_form(),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": 'inline; filename="ClaimIntel_Claim_Form.pdf"',
+            "Cache-Control": "no-cache",
+        },
+    )
+
+
+@app.post("/api/claims/extract-form")
+async def extract_claim_form(
+    claim_form: UploadFile | None = File(None),
+    estimate: UploadFile | None = File(None),
+):
+    """Auto-fill for the New Claim screen: parse the handwritten claim form
+    (and optionally the garage estimate) BEFORE the claim exists and return the
+    extracted fields for the UI to pre-fill — the customer reviews and can
+    correct everything, and manual entry remains available throughout.
+
+    Values are returned CLEAR: this is the customer's own handwriting going back
+    to their own browser, and nothing is persisted here. The files themselves
+    are still uploaded to the claim afterwards (doc_type=claim_form/estimate)
+    exactly like every other document.
+    """
+    import tempfile
+
+    from services.gani_parser import extract_form_for_prefill
+
+    uploads = [(name, f) for name, f in (("claim_form", claim_form), ("estimate", estimate)) if f]
+    if not uploads:
+        raise HTTPException(status_code=400, detail="Upload a claim form and/or a garage estimate")
+
+    temp_paths: list[str] = []
+    try:
+        jobs = []
+        for doc_type, f in uploads:
+            suffix = os.path.splitext(f.filename or "")[-1].lower() or ".jpg"
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                tmp.write(await f.read())
+                temp_paths.append(tmp.name)
+            jobs.append((doc_type, tmp.name))
+
+        results = await asyncio.gather(
+            *(asyncio.to_thread(extract_form_for_prefill, path, doc_type)
+              for doc_type, path in jobs)
+        )
+        out = {doc_type: result for (doc_type, _), result in zip(jobs, results)}
+        if all(v is None for v in out.values()):
+            raise HTTPException(
+                status_code=422,
+                detail="Could not read the uploaded document(s) — try a sharper, "
+                       "well-lit photo, or fill the details manually.",
+            )
+        return {"claim_form": out.get("claim_form"), "estimate": out.get("estimate")}
+    finally:
+        for path in temp_paths:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
 
 
 @app.get("/api/sample-telematics/{filename}")
@@ -264,6 +426,8 @@ def get_claim_docs(claim_id: str):
     parsed = {
         "estimate": get_parsed_doc(claim_id, "estimate"),
         "fir": get_parsed_doc(claim_id, "fir"),
+        "license": get_parsed_doc(claim_id, "license"),
+        "rc": get_parsed_doc(claim_id, "rc"),
         "telematics": get_parsed_telematics(claim_id),
     }
     return {"parsed": parsed, "files": files, "dashcam_frames": dashcam_frames}
@@ -271,41 +435,86 @@ def get_claim_docs(claim_id: str):
 
 # ── Investigation ─────────────────────────────────────────────────────────────
 
-@app.post("/api/claims/{claim_id}/investigate", dependencies=[__import__('fastapi').Depends(_require_adjudicator)])
+@app.post("/api/claims/{claim_id}/investigate", dependencies=[Depends(_require_adjudicator)])
 async def investigate(claim_id: str, background_tasks: BackgroundTasks):
     claim = storage.get_claim(claim_id)
     if not claim:
         raise HTTPException(status_code=404, detail="Claim not found")
+
+    # Mandatory documents: DL + RC for every claim; garage estimate for all
+    # repair (non-theft) claims — the estimate anchors the damage assessment.
+    docs = storage.get_claim_docs(claim_id)
+    is_theft = "theft" in (claim.get("claim_type") or "").lower()
+    missing = []
+    if not is_theft and not docs.get("estimate"):
+        missing.append("garage estimate")
+    if not docs.get("license"):
+        missing.append("driving licence")
+    if not docs.get("rc"):
+        missing.append("registration certificate (RC)")
+    if missing:
+        raise HTTPException(
+            status_code=422,
+            detail="Cannot start investigation — mandatory document(s) missing: "
+                   + ", ".join(missing),
+        )
+
+    # Fresh log before the background task starts, so a re-investigation never
+    # replays the previous run's events into the new stream.
+    new_investigation_log(claim_id)
     background_tasks.add_task(_run_investigation, claim_id, claim)
     return {"message": "Investigation started", "claim_id": claim_id}
 
 
 async def _run_investigation(claim_id: str, claim: dict):
     from orchestrator import run_pipeline
-    queue = get_sse_queue(claim_id)
-    await run_pipeline(claim_id, claim, queue)
+    log = get_investigation_log(claim_id)
+    try:
+        await run_pipeline(claim_id, claim, log)
+    except Exception as exc:
+        # A crash in the pipeline ITSELF (as opposed to inside one agent, which
+        # run_one_agent already catches and reports) used to emit nothing at
+        # all: no terminal `done` ever arrived, so the stream pinged
+        # indefinitely and the UI showed a half-finished pipeline with the error
+        # recorded nowhere. Always emit a terminal event and mark the claim.
+        try:
+            storage.update_claim_field(claim_id, "status", "Investigation Error")
+        except Exception:
+            pass
+        await log.put({
+            "type": "done",
+            "error": str(exc),
+            "summary": {"decision": "Investigation Error"},
+        })
 
 
 # ── SSE Stream ────────────────────────────────────────────────────────────────
 
 @app.get("/api/claims/{claim_id}/stream")
-async def stream(claim_id: str):
-    queue = get_sse_queue(claim_id)
+async def stream(claim_id: str, request: Request):
+    log = get_investigation_log(claim_id)
+
+    # A browser reconnecting after a dropped connection sends back the id of the
+    # last event it actually received; resume from the one after it so the client
+    # sees every event exactly once rather than the whole run again. Absent or
+    # unparseable (a first connection) → replay from the start, which is what
+    # lets a stream that attaches late still catch up on a run already underway.
+    try:
+        start = int(request.headers.get("last-event-id", "")) + 1
+    except ValueError:
+        start = 0
 
     async def event_generator() -> AsyncGenerator[dict, None]:
-        try:
-            while True:
-                try:
-                    event = await asyncio.wait_for(queue.get(), timeout=60)
-                    yield {"data": json.dumps(event)}
-                    if event.get("type") == "done":
-                        break
-                except asyncio.TimeoutError:
-                    yield {"data": json.dumps({"type": "ping"})}
-        finally:
-            # Remove the queue once the stream closes to prevent memory growth.
-            _sse_queues.pop(claim_id, None)
+        async for index, event in log.subscribe(start):
+            message = {"data": json.dumps(event)}
+            if index is not None:
+                message["id"] = str(index)
+            yield message
 
+    # NOTE: the log is deliberately NOT discarded when this generator exits.
+    # Discarding it on disconnect is precisely what made a momentary network
+    # blip permanent (docs/audit.md A5); retention is bounded by
+    # _prune_investigation_logs() and reset per run by new_investigation_log().
     return EventSourceResponse(event_generator())
 
 
@@ -331,7 +540,7 @@ class AdjusterNoteIn(BaseModel):
     text: str
 
 
-@app.post("/api/claims/{claim_id}/adjuster/decision", dependencies=[__import__('fastapi').Depends(_require_adjudicator)])
+@app.post("/api/claims/{claim_id}/adjuster/decision", dependencies=[Depends(_require_adjudicator)])
 def adjuster_decision(claim_id: str, payload: AdjusterDecisionIn):
     if not storage.get_claim(claim_id):
         raise HTTPException(status_code=404, detail="Claim not found")
@@ -351,7 +560,7 @@ def adjuster_decision(claim_id: str, payload: AdjusterDecisionIn):
     return {"adjuster_decision": record, "status": _ADJUSTER_STATUS[payload.decision]}
 
 
-@app.post("/api/claims/{claim_id}/adjuster/notes", dependencies=[__import__('fastapi').Depends(_require_adjudicator)])
+@app.post("/api/claims/{claim_id}/adjuster/notes", dependencies=[Depends(_require_adjudicator)])
 def adjuster_note(claim_id: str, payload: AdjusterNoteIn):
     if not storage.get_claim(claim_id):
         raise HTTPException(status_code=404, detail="Claim not found")
@@ -433,6 +642,7 @@ def analytics():
     awaiting_review = 0        # investigated, no human decision yet
     human_reviewed = 0         # has an adjuster decision recorded
     fraud_score_sum = 0
+    fraud_scored = 0            # investigated AND actually fraud-assessed
     investigated = 0
 
     # ── #1 Financial ──────────────────────────────────────────────────────────
@@ -444,9 +654,11 @@ def analytics():
     # ── #2 Fraud & Risk ───────────────────────────────────────────────────────
     fraud_levels = {"Low": 0, "Medium": 0, "High": 0}
     scheme_counts: dict[str, int] = {}
-    fraud_exposure_stopped = 0  # ₹ of High-risk claims not paid out
+    high_risk_claims = 0        # count of High fraud-label claims ("fraud cases")
+    exposure_avoided = 0        # ₹ asked for on rejected claims — NOT realised savings
 
     # ── #4 AI ↔ Human Governance ──────────────────────────────────────────────
+    human_decisions: dict[str, int] = {}
     gov_agreed = 0
     gov_overridden = 0
     override_matrix: dict[tuple, int] = {}
@@ -474,16 +686,21 @@ def analytics():
         dec = summary.get("decision", "Unknown")
         decisions[dec] = decisions.get(dec, 0) + 1
 
-        # Fraud score timeline
-        score = summary.get("fraud_risk_score", 0)
-        fraud_score_sum += score
-        fraud_scores.append({
-            "claim_id": c["claim_id"],
-            "claimant": c.get("claimant", ""),
-            "score": score,
-            "label": summary.get("fraud_risk_label", ""),
-            "date": c.get("created_at", ""),
-        })
+        # Fraud score timeline. A claim stopped by the eligibility gate has a
+        # score of None, not 0 — Agent 2 never ran on it. Counting it as zero
+        # would drag the portfolio average down with claims that were never
+        # assessed, so it is excluded from the mean and from the chart entirely.
+        score = summary.get("fraud_risk_score")
+        if score is not None:
+            fraud_scored += 1
+            fraud_score_sum += score
+            fraud_scores.append({
+                "claim_id": c["claim_id"],
+                "claimant": c.get("claimant", ""),
+                "score": score,
+                "label": summary.get("fraud_risk_label", ""),
+                "date": c.get("created_at", ""),
+            })
 
         # Settlement — only count money a HUMAN actually approved as "settled"
         amount  = _settlement_amount(summary)
@@ -523,9 +740,20 @@ def analytics():
         disallowed = int(breakdown.get("disallowed_inflation") or 0)
 
         # ── #1 Financial ───────────────────────────────────────────────────────
+        # Leakage prevented is deliberately the NARROW, defensible definition:
+        # money trimmed off claims that were actually paid. v1 summed the full
+        # ask of every rejected claim, which counts legitimately-rejected genuine
+        # claims as "savings" — newplan.md §16 calls that "a number an actuary
+        # would refuse to sign", and it also made this figure numerically
+        # identical to fraud exposure avoided, so the dashboard printed the same
+        # rupees twice under two names.
+        leakage_prevented += disallowed
+
+        # Blocked exposure is still worth showing — but as exposure avoided, not
+        # as realised savings. Tracked separately so the two can never collapse
+        # into the same number again.
         if effective == "Reject":
-            leakage_prevented += claimed          # full ask blocked
-        leakage_prevented += disallowed           # inflation trimmed (any claim)
+            exposure_avoided += claimed
 
         if human_decision == "Approve":
             deductions_recovered += (
@@ -543,8 +771,8 @@ def analytics():
         for s in (agents.get("fraud_intelligence", {}).get("matched_schemes") or []):
             sk = s.split(":")[0].strip() if ":" in s else s[:50]
             scheme_counts[sk] = scheme_counts.get(sk, 0) + 1
-        if flabel == "High" and effective in ("Reject", "Escalate"):
-            fraud_exposure_stopped += claimed
+        if flabel == "High":
+            high_risk_claims += 1
 
         # ── #4 AI ↔ Human Governance ─────────────────────────────────────────
         conf = summary.get("overall_confidence")
@@ -557,6 +785,11 @@ def analytics():
         if iq and not iq.get("gate_passed", True):
             image_gate_failed += 1
         if human_decision:
+            # The human's own decision tally. `decisions` above is the AI
+            # recommendation, so a "rejection rate" taken from it is the model's
+            # rate, not the desk's — the two are only the same while nobody
+            # overrides. Both are now available and each card says which it is.
+            human_decisions[human_decision] = human_decisions.get(human_decision, 0) + 1
             if human_decision == dec:
                 gov_agreed += 1
             else:
@@ -579,7 +812,7 @@ def analytics():
         for v, amounts in sorted(settlement_by_vehicle.items())
     ]
 
-    avg_fraud = round(fraud_score_sum / investigated, 1) if investigated else 0
+    avg_fraud = round(fraud_score_sum / fraud_scored, 1) if fraud_scored else 0
 
     # Payout size distribution (human-approved claims)
     _buckets = [
@@ -621,6 +854,11 @@ def analytics():
     except Exception:
         garage_risk = []
 
+    def _pct(n: int, d: int) -> float | None:
+        """Share as a percentage, or None when there is no denominator — so the
+        UI shows "—" rather than a misleading 0%."""
+        return round(n / d * 100, 1) if d else None
+
     return {
         "decisions": [{"name": k, "value": v} for k, v in sorted(decisions.items())],
         "claim_types": [{"name": k, "value": v} for k, v in sorted(claim_types.items(), key=lambda x: -x[1])],
@@ -630,11 +868,19 @@ def analytics():
         "totals": {
             "claims": len(claims),
             "investigated": investigated,
+            "fraud_scored": fraud_scored,            # denominator for avg_fraud_score
             "avg_fraud_score": avg_fraud,
             "total_settled": total_settled,          # human-approved payouts
             "pending_settlement": pending_settlement, # AI-approved, awaiting human
             "awaiting_review": awaiting_review,
             "human_reviewed": human_reviewed,
+            # Rates, computed here so every consumer divides by the same
+            # denominator. All are shares of INVESTIGATED claims (the AI's own
+            # recommendation), except investigated_pct which is of all claims.
+            "investigated_pct": _pct(investigated, len(claims)),
+            "approval_rate_pct": _pct(decisions.get("Approve", 0), investigated),
+            "rejection_rate_pct": _pct(decisions.get("Reject", 0), investigated),
+            "escalation_rate_pct": _pct(decisions.get("Escalate", 0), investigated),
         },
         # ── #1 Financial ────────────────────────────────────────────────────────
         "financial": {
@@ -648,7 +894,12 @@ def analytics():
         "fraud": {
             "levels": [{"name": k, "value": fraud_levels[k]} for k in ("Low", "Medium", "High")],
             "matched_schemes": matched_schemes,
-            "exposure_stopped": fraud_exposure_stopped,
+            "cases": high_risk_claims,
+            "case_rate_pct": _pct(high_risk_claims, fraud_scored),
+            # ₹ asked for on rejected claims. NOT savings: a genuine claim
+            # rejected for no coverage is money never owed, not money saved.
+            # Kept apart from financial.leakage_prevented for exactly that reason.
+            "exposure_avoided": exposure_avoided,
         },
         # ── #4 AI ↔ Human Governance ─────────────────────────────────────────────
         "governance": {
@@ -656,10 +907,21 @@ def analytics():
             "agreed": gov_agreed,
             "overridden": gov_overridden,
             "agreement_rate": agreement_rate,
+            "override_rate_pct": (round(100 - agreement_rate, 1)
+                                  if agreement_rate is not None else None),
             "override_matrix": override_out,
             "avg_confidence": avg_confidence,
             "needs_review": needs_review_count,
+            "needs_review_pct": _pct(needs_review_count, investigated),
+            "auto_decision_pct": (round(100 - _pct(needs_review_count, investigated), 1)
+                                  if investigated else None),
             "image_gate_failed": image_gate_failed,
+            "image_gate_failed_pct": _pct(image_gate_failed, investigated),
+            # The desk's own decisions, distinct from the AI recommendation above.
+            "human_decisions": [{"name": k, "value": v}
+                                for k, v in sorted(human_decisions.items())],
+            "human_rejection_rate_pct": _pct(human_decisions.get("Reject", 0), human_reviewed),
+            "human_approval_rate_pct": _pct(human_decisions.get("Approve", 0), human_reviewed),
         },
         # ── Garage Risk Intelligence ─────────────────────────────────────────────
         "garage_intel": garage_risk,
@@ -668,10 +930,71 @@ def analytics():
 
 @app.get("/api/analytics/tokens")
 def analytics_tokens(claim_id: str | None = Query(default=None)):
-    """LLM token usage observability — per-agent totals and today's call counts
-    against Groq's free-tier daily caps, so usage can be watched before it's exceeded."""
+    """LLM + OCR spend observability — per-agent/model/provider totals, cost per
+    claim, and today's call counts against Groq's free-tier daily caps."""
     from services import token_tracker
     return token_tracker.get_usage_summary(claim_id)
+
+
+# ── Fraud workspace ───────────────────────────────────────────────────────────
+
+@app.get("/api/fraud/claims", dependencies=[Depends(_require_adjudicator)])
+def fraud_claims():
+    """Every investigated claim, projected down to its fraud posture.
+
+    A list view only — the detail page reuses `GET /api/claims/{id}`, which
+    already returns the whole fraud block. Shipping all 32 detail strings per
+    claim here would make the table payload grow with the queue for no benefit.
+
+    Cost note: this is O(N) full-JSON reads, the same shape as /api/analytics
+    and garage_intel.collect_garage_records() already pay.
+    """
+    from agents.fraud_intelligence import FRAUD_CHECK_GROUPS, check_weight
+
+    out = []
+    for c in storage.get_all_claims():
+        result = storage.get_result(c["claim_id"]) or {}
+        summary = result.get("summary") or {}
+        if not summary.get("decision"):
+            continue                              # not investigated yet
+        agents = result.get("agents") or {}
+        fraud = agents.get("fraud_intelligence") or {}
+
+        # A claim stopped by the eligibility gate never reached Agent 2: it has
+        # no fraud_intelligence at all, only the 13 metadata pre-screen checks.
+        # Its score is None, not 0 — nothing was assessed.
+        gate = agents.get("eligibility_screen") or {}
+        screened_only = not fraud and bool(gate)
+        checks = fraud.get("fraud_checks") or gate.get("checks") or []
+
+        flagged = [c2 for c2 in checks if c2.get("status") == "flag"]
+        # `weight` is absent on results stored before it was emitted — recompute
+        # rather than showing a blank severity on historical claims.
+        top = sorted(flagged, key=lambda c2: -(c2.get("weight") or check_weight(c2)))[:3]
+
+        out.append({
+            "claim_id": c["claim_id"],
+            "claimant": c.get("claimant", ""),
+            "vehicle": c.get("vehicle", ""),
+            "incident_date": c.get("incident_date", ""),
+            "created_at": c.get("created_at", ""),
+            "status": c.get("status", ""),
+            "ai_decision": summary.get("decision"),
+            "human_decision": (result.get("adjuster_decision") or {}).get("decision"),
+            "fraud_score": summary.get("fraud_risk_score"),
+            "fraud_label": summary.get("fraud_risk_label") or "Unknown",
+            "screened_only": screened_only,
+            "counts": fraud.get("fraud_check_counts") or gate.get("check_counts")
+                      or {"flagged": len(flagged), "passed": 0, "na": 0},
+            "checks_total": len(checks),
+            "top_flags": [{"id": t.get("id"), "name": t.get("name"),
+                           "weight": t.get("weight") or check_weight(t)} for t in top],
+        })
+
+    # Worst first — an unscored (gate-rejected) claim sorts last rather than as 0,
+    # since "not assessed" is not the same as "clean".
+    out.sort(key=lambda r: (r["fraud_score"] is None, -(r["fraud_score"] or 0)))
+    return {"claims": out, "groups": FRAUD_CHECK_GROUPS}
 
 
 # ── PDF Report Download ───────────────────────────────────────────────────────

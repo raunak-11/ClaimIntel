@@ -50,6 +50,10 @@ def _geocode(location: str) -> dict | None:
 
 
 def _get_weather(lat: float, lon: float) -> str:
+    """Fetches CURRENT weather at the geocoded location — OpenWeatherMap's free
+    tier has no historical endpoint, so this can never reflect conditions on
+    the actual incident date. Callers must not present this as verification
+    of a weather-related claim; see `_weather_verification_note()`."""
     if not OPENWEATHERMAP_API_KEY:
         return "Weather data unavailable (no API key)"
     try:
@@ -66,6 +70,44 @@ def _get_weather(lat: float, lon: float) -> str:
         return f"{desc}, {temp}°C, Humidity: {humidity}%, Visibility: {visibility}m"
     except Exception:
         return "Weather data unavailable"
+
+
+_WEATHER_CLAIM_WORDS = (
+    "hail", "hailstorm", "flood", "flooding", "storm", "cyclone", "waterlog",
+    "heavy rain", "rainfall", "landslide", "tree fell", "fallen tree", "lightning",
+)
+
+
+def _weather_verification_note(claim: dict, incident_date: str) -> str:
+    """FS-005 (Weather Claim Fabrication) in the fraud KB assumes weather can be
+    checked AT the incident date. OpenWeatherMap's free tier only exposes
+    CURRENT conditions, so `_get_weather()` above can never corroborate or
+    contradict a backdated weather-related claim — showing today's weather next
+    to an old claim would look like verification without being any. Surface
+    that limitation explicitly instead of silently implying a check happened."""
+    try:
+        inc = datetime.strptime((incident_date or "")[:10], "%Y-%m-%d").date()
+        is_backdated = inc != datetime.now().date()
+    except Exception:
+        is_backdated = True  # unknown/unparseable date — treat conservatively
+
+    desc_lower = (claim.get("description") or "").lower()
+    claims_weather_event = any(w in desc_lower for w in _WEATHER_CLAIM_WORDS)
+
+    if not is_backdated:
+        return "Incident reported as today — current-conditions weather is contemporaneous."
+    if claims_weather_event:
+        return (
+            "NOT VERIFIED: this claim describes a weather event, but only CURRENT "
+            "conditions could be fetched (no historical weather API configured). "
+            "This does NOT corroborate or contradict the claimed weather at the "
+            "incident date — treat FS-005 (Weather Claim Fabrication) as unverifiable "
+            "from this data, not as passed."
+        )
+    return (
+        "Historical weather verification not available — this reflects conditions "
+        "at investigation time, not at the incident date."
+    )
 
 
 def _check_policy_validity(claim: dict) -> str | None:
@@ -122,9 +164,17 @@ def _check_gps_trail(telematics: dict | None, geocoded: dict | None) -> dict:
 
     # Nearest point in the trail to the claimed location — the trail may span
     # the approach to the incident, not just the impact point itself.
+    pts = [p for p in trail if "lat" in p and "lon" in p]
+    if not pts:
+        # A non-empty trail whose points are all missing coordinates (malformed
+        # telematics upload) previously fed min() an empty generator, raising
+        # ValueError — which crashed Agent 4 entirely and silently blanked
+        # policy_coverage_note downstream (see docs/audit.md A4). A parsing
+        # quirk in one optional evidence file must not take out eligibility.
+        return {"gps_trail_available": True, "gps_location_match": None, "gps_distance_km": None}
     nearest_km = min(
         _haversine_km(geocoded["lat"], geocoded["lon"], p["lat"], p["lon"])
-        for p in trail if "lat" in p and "lon" in p
+        for p in pts
     )
     return {
         "gps_trail_available": True,
@@ -176,38 +226,47 @@ class ContextVerificationAgent(BaseAgent):
         geo = _geocode(location)
         location_verified = geo is not None
 
-        # Weather
+        # Weather — current conditions only; see _weather_verification_note().
         weather = "Unknown"
         if geo:
             weather = _get_weather(geo["lat"], geo["lon"])
+        weather_note = _weather_verification_note(claim, claim.get("incident_date", ""))
 
         # Telematics GPS trail cross-check (optional evidence)
         telematics = (context.get("docs") or {}).get("telematics")
         gps_check = _check_gps_trail(telematics, geo)
 
-        # Policy context summary (trimmed for output)
+        # Policy context summary (trimmed for output). We keep a short excerpt for
+        # the collapsed view plus a longer `policy_document_full` (bounded so
+        # result.json stays small) that the UI reveals via "Show more".
         policy_summary = ""
+        policy_full = ""
         if policy_ctx:
-            # Extract first 300 chars as a summary
             raw = policy_ctx.replace("[KNOWLEDGE BASE", "").replace("[END KB CONTEXT]", "").strip()
             policy_summary = raw[:300] + ("..." if len(raw) > 300 else "")
+            policy_full = raw[:2000]
 
         return {
             "status": "completed",
             "location_verified": location_verified,
             "geocoded_location": geo.get("display", location) if geo else location,
             "coordinates": {"lat": geo["lat"], "lon": geo["lon"]} if geo else None,
-            "weather": weather,
+            # Renamed from "weather" — this is CURRENT weather at investigation
+            # time, not weather at the incident date (no historical API
+            # configured). See weather_verification_note for the disclosure.
+            "weather_at_investigation_time": weather,
+            "weather_verification_note": weather_note,
             "gps_trail_available": gps_check["gps_trail_available"],
             "gps_location_match": gps_check["gps_location_match"],
             "gps_distance_km": gps_check["gps_distance_km"],
             "policy_coverage_note": coverage_note,
             "policy_document_excerpt": policy_summary or "Policy document not indexed — run scripts/build_vectorstore.py",
+            "policy_document_full": policy_full,
             "summary": (
-                f"Weather: {weather} | "
+                f"Weather (current, not historical): {weather} | "
                 f"Location: {'Verified ✓' if location_verified else 'Unverified'} | "
                 f"Policy: {coverage_note[:60]}..."
                 if len(coverage_note) > 60 else
-                f"Weather: {weather} | Location: {'Verified ✓' if location_verified else 'Unverified'} | Policy: {coverage_note}"
+                f"Weather (current, not historical): {weather} | Location: {'Verified ✓' if location_verified else 'Unverified'} | Policy: {coverage_note}"
             ),
         }

@@ -1,19 +1,26 @@
-fastapi
-uvicorn[standard]
-python-multipart
-httpx
-groq
-pillow
-cryptography
-opencv-python-headless
-python-dotenv
-sse-starlette
+# Pinned to the known-good versions from the verified 2026-07-10 Docker image.
+# Unpinned installs let pip resolve breaking majors (and waste build time
+# backtracking — e.g. transformers 5.x was pulled then discarded). Bump
+# versions deliberately, then re-verify the pipeline.
+fastapi==0.139.0
+uvicorn[standard]==0.50.2
+python-multipart==0.0.32
+httpx==0.28.1
+groq==1.5.0
+pillow==12.3.0
+cryptography==49.0.0
+opencv-python-headless==5.0.0.93
+python-dotenv==1.2.2
+sse-starlette==3.4.5
+boto3==1.43.49  # AWS Bedrock (Amazon Nova) — bounding-box grounding, services/grounding_client.py
 
 # RAG / Knowledge Base
-chromadb
-fpdf2
-PyMuPDF
+chromadb==1.5.9
+fpdf2==2.8.7
+PyMuPDF==1.28.0
 
-# Local forensics — AI-generated image detection (ONNX, no torch required)
-transformers
-optimum[onnxruntime]
+# Local forensics — AI-generated image detection (ONNX inference; transformers/optimum
+# pull in torch as a dependency — see Dockerfile for the CPU-only install that avoids
+# downloading the ~1.5GB CUDA build)
+transformers==4.57.6
+optimum[onnxruntime]==2.1.0

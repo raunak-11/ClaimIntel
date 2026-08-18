@@ -1,17 +1,34 @@
 """Local AI-generated-image forensics detector.
 
-Runs a small ONNX vision classifier (haywoodsloan/ai-image-detector-deploy,
-served from its community ONNX port LPX55/detection-model-1-ONNX) entirely
-on-device via onnxruntime — no torch, no network call at inference time, no
-API key. This is a dedicated quantitative signal that sits alongside the
-vision LLM's own qualitative authenticity_flags and the EXIF metadata check
-in damage_assessment.py: three independent opinions are harder to fool than
-one.
+TWO independent mechanisms per image, cheapest first:
+
+1. Deterministic provenance checks (no model, always run) — the generator's
+   own default filename ("Gemini_Generated_Image_*.jpg", "ChatGPT Image ...")
+   and embedded credit/C2PA metadata markers ("Made with Google AI",
+   IPTC trainedAlgorithmicMedia, c2pa manifests). Near-conclusive when
+   present; catches the careless fraudster who uploads a generator's output
+   file unrenamed. Metadata markers survive only if the file wasn't
+   re-encoded on the way in.
+
+2. A small ONNX vision classifier (haywoodsloan/ai-image-detector-deploy via
+   its community ONNX port LPX55/detection-model-1-ONNX) entirely on-device
+   via onnxruntime — no torch, no network call at inference time, no API key.
+   KNOWN LIMITATION (verified live 2026-07-23): it labels current-generation
+   photoreal output "real" with high confidence — two Gemini-generated damage
+   photos scored real at 98.7%/99.7%. Its "real" verdict is therefore weak
+   evidence, which is exactly why the provenance checks run regardless and
+   why FC-28's wording distinguishes "scanned clean" from "classifier did not
+   run".
+
+This sits alongside the vision LLM's qualitative authenticity_flags and the
+EXIF metadata check in damage_assessment.py: independent opinions are harder
+to fool than one.
 
 Graceful fallback: if the model/libs aren't available (offline first run
-with no cached weights, optimum/transformers not installed, etc.) every
-function here returns an empty/inert result instead of raising — this signal
-is additive, never a hard dependency for the investigation pipeline to run.
+with no cached weights, optimum/transformers not installed, etc.) the
+classifier leg is skipped — provenance checks still run, and each entry
+records `classifier_available` so downstream checks can report reduced
+coverage honestly instead of claiming a clean scan.
 """
 
 import os
@@ -19,6 +36,43 @@ import threading
 from typing import Any
 
 _MODEL_ID = "LPX55/detection-model-1-ONNX"
+
+# Default save-name fragments of the major generators (lowercase substring
+# match on the uploaded filename). Deliberately conservative — every entry is
+# a name no camera or messaging app produces on its own.
+_FILENAME_MARKERS = (
+    "gemini_generated",         # Gemini: Gemini_Generated_Image_<id>.jpg
+    "chatgpt image",            # ChatGPT: "ChatGPT Image Jul 23, 2026.png"
+    "chatgpt-image",
+    "dall-e", "dall·e",         # DALL·E downloads
+    "midjourney",
+    "stable_diffusion", "stable-diffusion", "stablediffusion",
+    "comfyui",
+    "ideogram",
+    "leonardo_ai",
+    "bing image creator",
+    "imagefx", "image_fx",      # Google ImageFX
+)
+
+# Byte markers generators embed in EXIF/IPTC/XMP/C2PA segments. Case matters —
+# these are exact strings from the respective specs/products.
+_METADATA_MARKERS = (
+    b"trainedAlgorithmicMedia",             # IPTC DigitalSourceType (Gemini, others)
+    b"Made with Google AI",                 # Google credit tag
+    b"SynthID",
+    b"c2pa.org", b"urn:c2pa",               # C2PA content-credentials manifest
+    b"Adobe Firefly",
+    b"Midjourney",
+    b"DALL-E",
+    b"OpenAI API",
+    b"Stable Diffusion",
+    b"stability.ai",
+)
+
+# Provenance byte-scan ceiling — claim photos are downscaled on upload, so in
+# practice whole files are read; the cap only guards against a pathological
+# upload the image pipeline let through.
+_METADATA_SCAN_BYTES = 16 * 1024 * 1024
 
 # Top-label keywords that indicate "this looks AI-generated/synthetic", since
 # the exact label strings are read from the model's own config at load time
@@ -86,12 +140,48 @@ def _classify_one(image_path: str) -> dict:
     return entry
 
 
-def check_images(image_paths: list[str]) -> list[dict]:
-    """Run the local forensics classifier over each image.
+def _provenance_check(image_path: str) -> dict | None:
+    """Deterministic AI-generator provenance: default filename patterns and
+    embedded credit/C2PA metadata markers. Needs no model — always runs."""
+    name = os.path.basename(image_path).lower()
+    for marker in _FILENAME_MARKERS:
+        if marker in name:
+            return {"source": "filename", "marker": marker}
+    try:
+        with open(image_path, "rb") as fh:
+            data = fh.read(_METADATA_SCAN_BYTES)
+        for marker in _METADATA_MARKERS:
+            if marker in data:
+                return {"source": "metadata", "marker": marker.decode("utf-8", "replace")}
+    except OSError:
+        pass
+    return None
 
-    Returns one entry per image: {file, label, confidence, is_ai_generated_suspected, error}.
-    Returns [] (no signal, no error raised) if the model isn't available.
+
+def check_images(image_paths: list[str]) -> list[dict]:
+    """Run provenance checks + the local forensics classifier over each image.
+
+    Returns one entry per image: {file, label, confidence,
+    is_ai_generated_suspected, provenance, classifier_available, error}.
+    Provenance checks run even when the classifier model is unavailable —
+    `classifier_available` lets FC-28 report reduced coverage honestly.
     """
-    if not image_paths or not is_available():
+    if not image_paths:
         return []
-    return [_classify_one(p) for p in image_paths]
+    classifier_ok = is_available()
+    out = []
+    for path in image_paths:
+        if classifier_ok:
+            entry = _classify_one(path)
+        else:
+            entry = {"file": os.path.basename(path), "label": None, "confidence": None,
+                     "is_ai_generated_suspected": False, "error": None}
+        entry["classifier_available"] = classifier_ok
+        entry["provenance"] = _provenance_check(path)
+        if entry["provenance"]:
+            # Near-conclusive: a file that names its generator or carries the
+            # generator's own credit metadata needs no model opinion — and the
+            # classifier is known to pass current-gen photoreal output anyway.
+            entry["is_ai_generated_suspected"] = True
+        out.append(entry)
+    return out

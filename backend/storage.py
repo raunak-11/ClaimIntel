@@ -230,11 +230,20 @@ def _downscale_image(content: bytes, filename: str) -> tuple[bytes, str]:
 
 
 def save_uploaded_file(claim_id: str, filename: str, content: bytes, file_type: str = "images") -> str:
+    # Sanitise first: a client-supplied filename like "../../../evil.txt" would
+    # otherwise resolve outside the claim directory via os.path.join, letting an
+    # uploader write anywhere the server process can (see docs/audit.md A1).
+    # Mirrors the basename-only guard delete_claim_image() already applies.
+    filename = os.path.basename(filename or "upload") or "upload"
     if file_type == "images":
         content, filename = _downscale_image(content, filename)
     dest_dir = os.path.join(_claim_dir(claim_id), file_type)
     os.makedirs(dest_dir, exist_ok=True)
     dest_path = os.path.join(dest_dir, filename)
+    # Belt-and-braces: reject anything that still doesn't resolve inside dest_dir
+    # (e.g. a filename that is only drive/UNC syntax on Windows).
+    if os.path.commonpath([os.path.abspath(dest_dir), os.path.abspath(dest_path)]) != os.path.abspath(dest_dir):
+        raise ValueError(f"Unsafe upload filename: {filename!r}")
     with open(dest_path, "wb") as f:
         f.write(content)
     return dest_path
@@ -246,10 +255,10 @@ def get_docs_dir(claim_id: str) -> str:
 
 def get_claim_docs(claim_id: str) -> dict:
     """Return uploaded non-image document paths, keyed by doc_type
-    (estimate/fir PDFs, dashcam video, telematics JSON/CSV)."""
+    (estimate/fir PDFs, KYC vehicle docs, dashcam video, telematics JSON/CSV)."""
     base = get_docs_dir(claim_id)
     result: dict = {}
-    for doc_type in ("estimate", "fir", "dashcam", "telematics"):
+    for doc_type in ("estimate", "fir", "license", "rc", "dashcam", "telematics", "claim_form"):
         d = os.path.join(base, doc_type)
         if os.path.isdir(d):
             result[doc_type] = [

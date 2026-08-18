@@ -7,7 +7,12 @@ import storage
 from agents.base_agent import BaseAgent
 from services import forensics_detector
 from services.llm_client import ask_json
-from services.rag_client import get_vehicle_pricing_context
+from services.prompt_guards import IMAGE_INJECTION_DEFENSE
+from services.settlement_calc import (
+    FAIR_VALUE_MIN_COVERAGE,
+    assessed_fair_value,
+    pricing_coverage_pct,
+)
 
 
 def _extract_reg_no(vehicle_str: str) -> str:
@@ -17,30 +22,122 @@ def _extract_reg_no(vehicle_str: str) -> str:
         return re.sub(r'[\s\-]', '', m.group(1))
     return ""
 
-BASE_PROMPT = """You are an expert vehicle damage assessor and fraud detection specialist with access to OEM parts pricing data.
-Analyze ALL provided images of a vehicle (which MAY OR MAY NOT be damaged) and produce an accurate, evidence-based damage report along with visual fraud verification signals.
-
-{kb_context}
+BASE_PROMPT = """You are a motor insurance CLAIM VALIDATOR performing an estimate-driven verification.
+Your job is NOT open-ended damage detection. Your job is to verify a specific, numbered list of
+CLAIMED parts against the photographic evidence, one by one, and separately note anything else you
+see that was never claimed. Thoroughness matters as much as precision — a claimed part you fail to
+verify causes as much financial harm as a hallucinated one.
 
 Claim description: {description}
 Registered vehicle (from policy): {vehicle}
 Number of images provided: {{image_count}}
 
-━━━ #1 RULE — DO NOT HALLUCINATE DAMAGE (read first) ━━━
-- Report a part as damaged ONLY if you can CLEARLY SEE actual physical damage on it in the image.
-- An UNDAMAGED vehicle is a VALID and EXPECTED result. If the car looks intact, return an EMPTY
-  "damaged_parts" list and set "damage_present": false. That is the CORRECT answer for a clean car —
-  do NOT invent damage to fill the report.
+━━━ CLAIMED PARTS TO VERIFY — YOUR PRIMARY TASK ━━━
+The garage estimate below lists {{claimed_count}} claimed part line(s), numbered. You MUST return
+exactly one verification entry per numbered line below — no more, no fewer, in the same order — even
+when a part cannot be found in any image. "Not visible" is a valid, EXPECTED, useful answer for a
+part with no supporting photo angle; it is not a failure to report one. Do not skip a line because
+you are unsure — resolve every line to one of the four verdicts defined below.
+{estimate_items}
+- SIDE CONVENTION (critical): LEFT and RIGHT always mean the DRIVER'S seated perspective (India is
+  right-hand drive: the driver sits on the right). Garage shorthand "RH"/"LH" also means driver's
+  right/left. Work out which side a part is on FROM THE CAR'S OWN ORIENTATION, not the camera's: a
+  headlight on the LEFT of a head-on photo is the car's RIGHT headlight.
+- For each numbered line, choose exactly one verdict:
+    verified_damaged    — the part is visible AND shows concrete, describable damage
+    verified_undamaged  — the part is visible and shows NO damage (the claim may not hold up on this
+                           line — this is a useful signal, report it, do not suppress it)
+    partially_visible   — the part is partly visible / occluded / cropped — some evidence, not full
+                           certainty (this is different from Low confidence: a fully visible part can
+                           still get Low confidence if the damage itself is ambiguous; use
+                           partially_visible when the PART ITSELF isn't fully in frame)
+    not_visible          — no image angle shows this part at all
+- presence_state for each line: "present" (part is there, possibly damaged), "detached" (part is
+  hanging loose / separated but still attached to the vehicle by e.g. wiring), or "missing" (part is
+  physically absent — sheared off, fell off, not present in any image where it should be visible).
+
+━━━ MULTI-IMAGE REASONING (read before scanning) ━━━
+- All images show the SAME vehicle — treat them as one combined evidence set, not independent cases.
+- Inspect each image on its own first, then merge findings across all images into one verification pass.
+- If a claimed part's damage is visible in ANY single image, verdict it verified_damaged — even if
+  other images don't cover that angle. Absence in one image is never evidence against damage clearly
+  seen in another; only verdict not_visible when NO image covers that part at all.
+- Use whichever image shows a given part most clearly as the evidence source, and set its
+  bounding_box.image_index accordingly.
+- Do not stop after image 0 — every image must inform every line's verdict below.
+
+━━━ MANDATORY WORKFLOW (perform all passes silently, then write the JSON) ━━━
+
+PASS 1 — CLAIMED-PART VERIFICATION (the numbered list above, every line, no exceptions)
+Go through the numbered claimed parts one at a time, not by skimming. For each:
+  visible AND damaged      → verified_damaged (+ severity, evidence, confidence, bounding_box)
+  visible AND NOT damaged  → verified_undamaged (report it — do not silently drop it)
+  partly visible only      → partially_visible (+ whatever evidence is actually visible)
+  not visible anywhere     → not_visible (report it — do not silently drop it)
+FENDER vs BUMPER: in a single frontal photo, torn/crumpled metal at the corner near a wheel arch is
+the FENDER, not the bumper (the bumper is the plastic/foam moulding across the front face). Verdict
+them as separate lines if the estimate claims both and both show distinct damage.
+MANDATORY RADIATOR/CAVITY CHECK: if a claimed bumper, grille, or fender line is torn, crushed, or
+detached badly enough that the cavity BEHIND the front fascia is visibly open (wiring, hoses, coolant
+lines, the condenser, or the radiator core itself visible through the gap), and radiator is ALSO a
+claimed line, treat that exposed cavity as its own inspection zone before verdicting the radiator line
+— look specifically for bent fins, a punctured core, visible fluid leakage, or a knocked-loose mounting.
+GRILLE PRECISION: do not verdict a claimed grille line as damaged just because it sits next to severe
+damage. Look at the grille mesh/slats themselves — only verified_damaged if THEY show cracking,
+breakage, deformation, or detachment. An intact grille beside a torn fender/headlight is verified_undamaged.
+
+PASS 2 — ADJACENCY CHECK (for lines you just verdicted verified_damaged)
+Re-inspect the immediate neighbours of every claimed part you verdicted damaged — impact damage
+clusters physically:
+  front_bumper damaged →  check grille, headlamps, foglamps, bumper corners, fender edges, wheel arch liners
+  fender damaged       →  check the adjoining bumper corner, wheel arch, door edge
+  tailgate damaged      →  check taillights, rear bumper, hinges
+This informs your Pass 3 undeclared sweep below — a neighbour that's ALSO damaged but was never
+claimed is exactly what Pass 3 exists to catch.
+
+PASS 3 — UNDECLARED DAMAGE SWEEP (separate from the numbered list above — do not re-report claimed lines here)
+Now look across all images for real, describable damage on parts that are NOT among the numbered
+claimed lines above. Check every zone below — do not skip zones just because the obvious damage is
+elsewhere:
+  Front  : bumper, grille (+ grille inserts), bonnet/hood, headlamp L/R, foglamp L/R (+ housings),
+           tow hook cover, fender L/R
+  Sides  : front/rear doors, side mirrors, sills/rockers, wheel arches (+ liners), A/B/C pillars
+  Rear   : rear bumper, boot/tailgate (+ hinges), taillight L/R, reverse lights, exhaust tip
+  Glass  : windshield, side windows, rear glass, sunroof, roof panel, wiper blades
+  Wheels : all 4 tyres (bulges/flats), rims (kerb damage)
+  Small parts (frequently billed, frequently missed): trims, brackets, retainers, bezels, mouldings,
+  garnish pieces, emblems — report if visibly cracked, broken, detached, bent, torn, missing, or deformed.
+Undeclared parts do NOT get a bounding_box (only claimed, verified-damaged/partially-visible lines are
+boxed — see BOUNDING BOX RULES below) — list them in "undeclared_damage" with the same severity/
+confidence/evidence detail as a claimed line.
+
+PASS 4 — COMPLETENESS CHECK (before writing JSON)
+Confirm silently: every image reviewed · every one of the {{claimed_count}} numbered lines has exactly
+one verdict in Pass 1 · damaged lines' neighbours checked in Pass 2 · Pass 3 undeclared sweep covered
+every zone. Only then produce the JSON.
+
+━━━ ANTI-HALLUCINATION RULES (precision guardrail) ━━━
+- Verdict a line verified_damaged (or report an undeclared line) ONLY if you can point to concrete,
+  visible damage — a describable dent, crack, scrape, deformation, or missing/detached piece.
+- An UNDAMAGED vehicle is a VALID and EXPECTED result. If the car looks intact, every claimed line
+  should verdict verified_undamaged (not not_visible — you CAN see the part, it's just not damaged),
+  "undeclared_damage" should be empty, and "damage_present": false — do not invent damage to fill the report.
 - NEVER mistake any of the following for damage:
     reflections, shadows, sun glare, lens flare, dirt, dust, mud splatter, water droplets, wet/rainy
     surfaces, normal panel gaps and trim lines, rubber moulding, badges/logos, number plates, antennas,
     tinted or dark glass, the dark colour of the paint itself, or background objects mirrored on the body.
 - A part being VISIBLE is NOT the same as a part being DAMAGED. Seeing a headlight does not mean the
-  headlight is damaged. Only report it if it is cracked, broken, shattered, deformed, or detached.
-- If you are NOT sure whether something is real damage or just one of the artefacts above → do NOT report it.
-- It is far worse to invent damage that is not there than to miss a tiny scratch. WHEN IN DOUBT, LEAVE IT OUT.
+  headlight is damaged.
+- CONFIDENCE, not omission, is how you express uncertainty:
+    High   = unmistakable, clearly visible damage.
+    Medium = likely damage with visible supporting evidence (angle/lighting limits full certainty).
+    Low    = suspected damage with limited visibility but some observable evidence — not a pure guess.
+  Report a part once SOME observable evidence exists, even at Low confidence — never report on zero
+  evidence, but do not suppress a real finding just because you aren't fully certain. Low-confidence
+  findings are automatically quarantined from pricing and drawing downstream, so under-confidence
+  costs nothing; omission does.
 
-━━━ PHOTO AUTHENTICITY (read before assessing damage) ━━━
+━━━ PHOTO AUTHENTICITY ━━━
 - Before assessing damage, judge whether each image looks like a REAL photo of a physical vehicle taken
   with a camera/phone, as opposed to AI-generated, a stock/marketing photo, or a photo of a screen/printout.
 - Signs of AI-generation: unnaturally smooth or plastic-looking surfaces, inconsistent or impossible
@@ -52,61 +149,79 @@ Number of images provided: {{image_count}}
   UI elements (browser chrome, app icons) visible in frame.
 - Only raise a flag when you see a CONCRETE visual tell — do not flag an image merely for being
   well-lit or high quality. A genuine clear phone photo is not suspicious by itself.
-
+""" + IMAGE_INJECTION_DEFENSE + """
 ━━━ BOUNDING BOX RULES (read carefully) ━━━
 - Coordinates are PERCENTAGE-BASED: x,y = top-left corner (0–100%), w,h = width/height (0–100%)
 - image_index is 0-based: 0 = first image, 1 = second image, etc.
 - Each image is preceded by a text label "[Image 0]", "[Image 1]", … — set
   "image_index" to the number on the label of the image the damage appears in.
   Damage seen in the second image MUST use "image_index": 1, not 0.
-- The box MUST tightly enclose only the damaged region — NOT the whole vehicle or whole panel
+- The box MUST tightly enclose ONLY the damaged region — NOT the whole vehicle or whole panel.
+  Hug the visible edges of the dent/scratch/crack/break: the box's left/right/top/bottom edges
+  should each sit right at the outermost extent of the actual damage, with no undamaged panel,
+  glass, tyre, or background inside the box.
+- Center the box on the damage. If the damage is a thin scratch, the box is thin; a small chip
+  gets a small box. Estimate the damage's real fraction of the image and match w/h to it.
+- Do NOT pad the box "for safety". A box that is slightly too SMALL (hugging the damage) is far
+  better than one that is too large. Never round up to a comfortable rectangle around the region.
+- NO SIGNIFICANT OVERLAP BETWEEN DIFFERENT PARTS: two adjacent damaged parts (e.g. grille next to
+  headlight, bumper next to fender) each get their OWN box that stops at the physical seam/edge
+  between them — never extend one part's box into the region you're also boxing for a neighbouring
+  part. Before finalizing, check every pair of boxes on the same image: if two boxes for DIFFERENT
+  parts overlap by more than a sliver, at least one of them is wrong — shrink or reposition it so
+  each box covers only the part it is labelled for, not the neighbour's damage too.
 - x + w ≤ 100 and y + h ≤ 100 at all times; w and h must each be at least 5
 - A tight box for a bumper in the lower-left would be: {{"image_index": 0, "x": 5, "y": 62, "w": 38, "h": 22}}
 - A tight box for a headlight on the right side would be: {{"image_index": 0, "x": 68, "y": 30, "w": 20, "h": 18}}
 
-━━━ DAMAGE SCAN (inspect every zone — but report ONLY what is clearly damaged) ━━━
-Systematically inspect every visible component, then report a zone ONLY if it shows real, visible damage:
-  Front zone : front bumper, grille, hood/bonnet, headlights (L+R), foglights, tow hook cover
-  Side zone  : all doors, side mirrors, sills/rockers, fenders (front+rear), wheel arches, A/B/C pillars
-  Rear zone  : rear bumper, boot/tailgate, tail lights (L+R), reverse lights, exhaust tip
-  Glass/roof : windshield, all side windows, rear glass, sunroof panel, roof panel, wiper blades
-  Wheels     : all 4 tyres (check bulges/flats), alloy/steel rims (kerb damage), wheel arch liners
-  Underbody  : report if visible — suspension, skid plates, exhaust
-Genuine damage — when ACTUALLY VISIBLE — should be reported, including clear scratches/scuffs, paint
-transfer, misaligned panels, cracked/broken lights or glass, and dents or creases. But every part you
-report MUST have concrete, describable damage you can point to. Do not report a part just because it
-exists in the photo.
-
 ━━━ OTHER RULES ━━━
 - DO NOT estimate repair costs in rupees — a separate pricing engine computes all costs.
-  Your job is to identify each damaged part, its severity, confidence, and the correct repair_type.
-- For EACH damaged part you MUST provide:
-    "confidence": High = unmistakable, clearly visible damage; Medium = likely damage but angle/lighting
-                  limits certainty; Low = you suspect damage but cannot clearly confirm it.
-    "visible_evidence": one short phrase naming the EXACT damage and where, e.g.
-                  "deep horizontal scrape across lower front bumper, paint missing". If you cannot
-                  describe concrete visible damage here, DELETE the part — do not report it.
-- repair_type rules: "Replace" if the part is broken/shattered/crushed/torn or severely deformed;
-  "Repair" for dents/creases that can be hammered and repainted; "Paint" for scratches/scuffs only.
-  Glass, lights, mirrors and wheels that are damaged are always "Replace".
-- CONSISTENCY: If the description claims an accident/damage but you see NO damage, set
-  "consistent_with_description": "Low" and explain in notes. If you see damage matching the story, "High".
+  Your job is to verify each claimed line, classify severity/confidence/repair action, and locate it.
+- "visible_evidence": one short phrase naming the EXACT damage and where, e.g.
+                  "deep horizontal scrape across lower front bumper, paint missing". For
+                  verified_undamaged or not_visible lines, set this to null.
+- assessed_repair_type rules (your OWN independent judgment from the photo — this may differ from
+  what the estimate claims, and that difference matters, do not just copy the estimate's line type):
+  "Replace" if the part is broken/shattered/crushed/torn or severely deformed; "Repair" for
+  dents/creases that can be hammered and repainted; "Paint" for scratches/scuffs only. Glass, lights,
+  mirrors and wheels that are damaged are always "Replace".
+- CONSISTENCY: If the description claims an accident/damage but every claimed line verdicts
+  verified_undamaged/not_visible and undeclared_damage is empty, set "consistent_with_description":
+  "Low" and explain in notes. If you see damage matching the story, "High".
 - PLATE RULE: Set registration_plate_visible only if the plate text is physically legible in the image.
   Do NOT guess or copy the plate from the claim description. If unclear → false and null.
-- Return ONLY valid JSON — no markdown fences, no explanation text
+- OTHER-VEHICLE RULE: set "other_vehicle_in_contact" true ONLY if another vehicle is
+  physically involved in THIS collision — touching the claimed vehicle or showing fresh
+  corresponding damage in the same scene. Parked cars, passing traffic, or vehicles in the
+  background (garages and Indian streets are full of them) do NOT count → false.
+- Return ONLY valid JSON — no markdown fences, no explanation text, no pass-by-pass commentary
+  (the passes above are your internal process, not part of the output).
 
 Return a JSON object with exactly these fields:
 {{
   "damage_present": true,
   "no_damage_reason": null,
-  "damaged_parts": [
+  "claimed_part_verifications": [
     {{
+      "line_no": 1,
       "part": "snake_case part name e.g. front_bumper, headlight_left, door_rear_right",
+      "verdict": "verified_damaged|verified_undamaged|partially_visible|not_visible",
+      "presence_state": "present|detached|missing",
+      "severity": "Minor|Moderate|Severe or null if not verified_damaged/partially_visible",
+      "confidence": "High|Medium|Low",
+      "visible_evidence": "exact damage seen and where, or null",
+      "bounding_box": {{"image_index": 0, "x": 10, "y": 20, "w": 30, "h": 25}},
+      "assessed_repair_type": "Replace|Repair|Paint or null"
+    }}
+  ],
+  "undeclared_damage": [
+    {{
+      "part": "snake_case part name, not among the numbered claimed lines above",
       "severity": "Minor|Moderate|Severe",
+      "presence_state": "present|detached|missing",
       "confidence": "High|Medium|Low",
       "visible_evidence": "exact damage seen and where",
-      "bounding_box": {{"image_index": 0, "x": 10, "y": 20, "w": 30, "h": 25}},
-      "repair_type": "Replace|Repair|Paint"
+      "assessed_repair_type": "Replace|Repair|Paint"
     }}
   ],
   "overall_severity": "None|Minor|Moderate|Severe",
@@ -119,7 +234,7 @@ Return a JSON object with exactly these fields:
   "plate_text_in_image": null,
   "pre_existing_damage_observed": false,
   "pre_existing_damage_notes": null,
-  "multiple_vehicles_in_frame": false,
+  "other_vehicle_in_contact": false,
   "image_quality_flags": ["any of: blurry, too_dark, overexposed, too_far, partial_view, low_resolution — or 'none' if photos are clear and usable"],
   "authenticity_flags": ["any of: ai_generated_suspected, stock_photo_suspected, manipulated_suspected, screenshot_suspected — or 'none' if photos look like genuine camera photos"],
   "authenticity_notes": "brief reason for any authenticity flag raised, or null if none",
@@ -127,8 +242,12 @@ Return a JSON object with exactly these fields:
   "summary": "Severity: X | Est. Repair: ₹X–₹X | Parts: N damaged | Vehicle Match: Yes/No/Unclear"
 }}
 
-If the vehicle is undamaged: set "damage_present": false, "damaged_parts": [], "overall_severity": "None",
-"no_damage_reason" to a short explanation, and make "summary" say "No visible damage detected".
+"claimed_part_verifications" MUST have exactly {{claimed_count}} entries, one per numbered line, in
+order — line_no 1 first, line_no {{claimed_count}} last, no gaps, no duplicates, no omissions.
+
+If the vehicle is undamaged: every claimed line verdicts verified_undamaged, "undeclared_damage": [],
+"damage_present": false, "overall_severity": "None", "no_damage_reason" set to a short explanation,
+and "summary" says "No visible damage detected".
 """
 
 
@@ -138,18 +257,72 @@ class DamageAssessmentAgent(BaseAgent):
         vehicle = claim.get("vehicle", "")
         image_paths = storage.get_claim_images(claim["claim_id"])
 
-        # RAG: fetch vehicle parts pricing from knowledge base
-        kb_context = get_vehicle_pricing_context(vehicle)
+        # Garage estimate line items — the estimate-driven verification loop's
+        # anchor (newupdates.md #34 / DAMAGE_VALIDATION_ARCHITECTURE.md). Labour/
+        # Material rows aren't physical parts to visually verify, so only
+        # Replace/Repair/Paint-type lines become numbered claimed parts; the raw
+        # `line_items` (incl. labour) still feeds pricing_engine's labour-pool
+        # allocation unaffected by this filter.
+        parsed_est = (context.get("docs") or {}).get("estimate") or {}
+        line_items = parsed_est.get("line_items") or []
+        claimed_lines = [
+            it for it in line_items
+            if str(it.get("type", "")).strip().lower() not in ("labour", "material")
+        ]
+        if claimed_lines:
+            estimate_items_text = "\n".join(
+                f"  {i+1}. {it.get('part', '?')} — {it.get('type', '?')} — ₹{it.get('amount', 0):,.0f}"
+                if isinstance(it.get("amount"), (int, float))
+                else f"  {i+1}. {it.get('part', '?')} — {it.get('type', '?')}"
+                for i, it in enumerate(claimed_lines)
+            )
+        else:
+            estimate_items_text = (
+                "  (no claimed part line items available — claimed_part_verifications "
+                "must be an empty list; only the undeclared-damage sweep applies)"
+            )
 
         image_count = len(image_paths) if image_paths else 0
-        prompt = BASE_PROMPT.replace("{{image_count}}", str(image_count)).format(
-            kb_context=kb_context,
-            description=claim.get("description", ""),
-            vehicle=vehicle,
+        prompt = (
+            BASE_PROMPT
+            .replace("{{image_count}}", str(image_count))
+            .replace("{{claimed_count}}", str(len(claimed_lines)))
+            .format(
+                description=claim.get("description", ""),
+                vehicle=vehicle,
+                estimate_items=estimate_items_text,
+            )
         )
         result = ask_json(prompt, image_paths if image_paths else None,
                           agent_name="damage_assessment", claim_id=claim["claim_id"])
         result.setdefault("status", "completed")
+
+        verifications = result.get("claimed_part_verifications")
+        if not isinstance(verifications, list):
+            verifications = []
+        undeclared_raw = result.get("undeclared_damage")
+        if not isinstance(undeclared_raw, list):
+            undeclared_raw = []
+
+        # ── Severity normalization ─────────────────────────────────────────────
+        # The schema only allows Minor|Moderate|Severe, but the model sometimes
+        # drifts to a synonym (e.g. "Medium") that then fails every downstream
+        # severity-keyed lookup (pricing action, _REPLACE_ONLY checks, the
+        # frontend's Severe=red/Moderate=amber/Minor=green badge) silently
+        # falling through to a default instead of an explicit value.
+        _SEVERITY_MAP = {
+            "severe": "Severe", "major": "Severe", "critical": "Severe", "high": "Severe",
+            "moderate": "Moderate", "medium": "Moderate", "mid": "Moderate", "average": "Moderate",
+            "minor": "Minor", "light": "Minor", "low": "Minor", "small": "Minor",
+        }
+        for entry in verifications + undeclared_raw:
+            if isinstance(entry, dict) and entry.get("severity"):
+                key = str(entry["severity"]).strip().lower()
+                entry["severity"] = _SEVERITY_MAP.get(key, "Moderate")
+        if result.get("overall_severity"):
+            key = str(result["overall_severity"]).strip().lower()
+            if key != "none":
+                result["overall_severity"] = _SEVERITY_MAP.get(key, result["overall_severity"])
 
         # ── Plate verification ────────────────────────────────────────────────
         if not image_paths:
@@ -157,12 +330,40 @@ class DamageAssessmentAgent(BaseAgent):
             result["registration_plate_visible"] = False
             result["plate_text_in_image"] = None
 
+        # ── Estimate-driven merge (newupdates.md #34) ──────────────────────────
+        # Replaces the old "detect everything, then fuzzy-match against the
+        # estimate" flow. The model now returns an explicit, structurally-
+        # mandatory verdict per claimed line, so a claimed part with no
+        # supporting photo produces a real `not_visible` record here instead of
+        # silently vanishing (the #1 finding in DAMAGE_VALIDATION_ARCHITECTURE.md).
+        merged = self._merge_verifications(claimed_lines, verifications, undeclared_raw)
+        result["damaged_parts"] = merged["damaged_parts"]
+        result["undeclared_parts"] = merged["undeclared_parts"]
+        result["unverified_parts"] = merged["unverified_parts"]
+        result["claimed_but_undamaged"] = merged["claimed_but_undamaged"]
+        result["scope_mismatches"] = merged["scope_mismatches"]
+
         # ── No-damage guard + low-confidence filter (anti-hallucination) ──────
         # The vision model can invent phantom damage on a clean car (reflections,
         # shadows, dark paint). We (a) quarantine Low-confidence detections so we
         # never PRICE a guess, and (b) honour an explicit "no damage" verdict so
         # an undamaged vehicle yields a zero estimate, not a fabricated one.
+        # (unverified_parts / claimed_but_undamaged / scope_mismatches are left
+        # untouched here — those are informational regardless of whether any
+        # OTHER damage was found; e.g. "every claimed part turned out undamaged"
+        # is exactly what claimed_but_undamaged exists to report.)
         self._apply_no_damage_guard(result, bool(image_paths))
+
+        # ── Bedrock (Amazon Nova) grounding — box re-localization ──────────────
+        # See DAMAGE_VALIDATION_ARCHITECTURE.md §E: Groq/Llama-4-Scout is not
+        # purpose-built for pixel-accurate bounding boxes (verified empirically
+        # this session — #10b), whereas Nova is natively trained for bbox
+        # output. This is a pure enhancement: `locate_boxes()` returns {} for
+        # any failure (not configured, no model access, network error), and a
+        # part's ORIGINAL Groq-provided box is left untouched when Nova doesn't
+        # return one for it — no investigation ever depends on Bedrock being
+        # reachable.
+        self._apply_bedrock_grounding(result, image_paths)
 
         # ── Validate and clamp every bounding box ─────────────────────────────
         max_img_idx = max(image_count - 1, 0)
@@ -187,29 +388,42 @@ class DamageAssessmentAgent(BaseAgent):
                 h = 100 - y
             bb["x"], bb["y"], bb["w"], bb["h"] = round(x, 1), round(y, 1), round(w, 1), round(h, 1)
 
-        # ── Deterministic pricing engine ──────────────────────────────────────
+        # ── Deterministic pricing engine (API-first) ──────────────────────────
         # The vision model only classifies (part + severity + repair_type).
-        # The engine computes all rupee amounts from a segment-aware catalog,
-        # refined by live web prices when an API key is configured. This OVERRIDES
-        # any prices the LLM guessed, so estimates are reproducible and defensible.
+        # Parts are priced from live web market data only — never from the
+        # garage estimate, which is the document being audited — and labour
+        # comes from the rule-based labour engine. This OVERRIDES any prices the
+        # LLM guessed, so estimates are reproducible.
         try:
+            from config import PRICING_LIVE
             from services.pricing_engine import estimate_damage
-            pricing = estimate_damage(vehicle, result.get("damaged_parts", []), live=True)
+            pricing = estimate_damage(
+                vehicle, result.get("damaged_parts", []),
+                undeclared_parts=result.get("undeclared_parts", []),
+                unverified_parts=result.get("unverified_parts", []),
+                line_items=line_items, live=PRICING_LIVE,
+                location=claim.get("incident_location", ""),
+                workshop_name=claim.get("garage_workshop_name", ""),
+            )
             result["total_repair_estimate"] = pricing["total_repair_estimate"]
-            result["vehicle_segment"] = pricing["segment"]
             result["pricing_method"] = pricing["pricing_method"]
             result["pricing_sources"] = pricing["pricing_sources"]
+            result["fair_value_breakdown"] = pricing["fair_value_breakdown"]
+            result["labour_assessment"] = pricing["labour_assessment"]
             # Regenerate the summary string now that we have real prices.
             # The LLM's summary said ₹0–₹0 because it was told not to price.
             est   = pricing["total_repair_estimate"]
             lo, hi = est.get("min", 0), est.get("max", 0)
             n_parts = len(result.get("damaged_parts") or [])
+            n_undeclared = len(result.get("undeclared_parts") or [])
             match   = result.get("vehicle_match_in_image", "Unclear")
             sev     = result.get("overall_severity", "Unknown")
             result["summary"] = (
                 f"Severity: {sev} | Est. Repair: "
                 f"₹{lo:,}–₹{hi:,} | "
-                f"Parts: {n_parts} damaged | Vehicle Match: {match}"
+                f"Parts: {n_parts} in estimate"
+                + (f" + {n_undeclared} undeclared" if n_undeclared else "")
+                + f" | Vehicle Match: {match}"
             )
         except Exception as e:
             result["pricing_method"] = f"unavailable ({e})"
@@ -229,12 +443,21 @@ class DamageAssessmentAgent(BaseAgent):
             except (ValueError, TypeError):
                 pass
 
-        est = result.get("total_repair_estimate", {})
-        ai_min = float(est.get("min", 0) if isinstance(est, dict) else 0)
-        ai_max = float(est.get("max", 0) if isinstance(est, dict) else 0)
-        ai_mid = (ai_min + ai_max) / 2 if ai_max > 0 else 0
+        # One GST-inclusive basis for both sides of the comparison, computed by
+        # settlement_calc.assessed_fair_value() — the same function the payout
+        # math uses, so FC-17/FC-23 can never drift from the settlement bands
+        # (this arithmetic used to be duplicated here verbatim).
+        _, _, ai_mid = assessed_fair_value(result)
 
-        if garage_amount > 0 and ai_mid > 0:
+        # Whether that figure is trustworthy enough to compare against. Part
+        # prices come from live web only now; with poor coverage the assessed
+        # value is missing whole parts, and the resulting "variance" would be an
+        # artefact of the lookup, not of the garage's pricing.
+        coverage = pricing_coverage_pct(result)
+        coverage_ok = coverage is None or coverage >= FAIR_VALUE_MIN_COVERAGE
+        result["pricing_coverage_pct"] = round(coverage * 100) if coverage is not None else None
+
+        if garage_amount > 0 and ai_mid > 0 and coverage_ok:
             variance_pct = ((garage_amount - ai_mid) / ai_mid) * 100
             result["garage_estimate_provided"] = True
             result["garage_estimate_amount_inr"] = garage_amount
@@ -244,6 +467,18 @@ class DamageAssessmentAgent(BaseAgent):
             result["garage_inflation_note"] = (
                 f"Garage estimate ₹{garage_amount:,.0f} is {abs(variance_pct):.0f}% {direction} "
                 f"than AI mid-estimate ₹{ai_mid:,.0f}"
+            )
+        elif garage_amount > 0 and not coverage_ok:
+            result["garage_estimate_provided"] = True
+            result["garage_estimate_amount_inr"] = garage_amount
+            result["garage_vs_ai_variance_pct"] = None
+            result["garage_inflation_flag"] = False
+            result["garage_inflation_note"] = (
+                f"Not compared: only {coverage * 100:.0f}% of damaged parts have an "
+                f"independent live-web price (minimum "
+                f"{FAIR_VALUE_MIN_COVERAGE * 100:.0f}% required), so the AI mid-estimate "
+                f"of ₹{ai_mid:,.0f} is incomplete and any variance against it would be an "
+                f"artefact of missing prices rather than of the garage's quote."
             )
         else:
             result["garage_estimate_provided"] = garage_amount > 0
@@ -265,42 +500,219 @@ class DamageAssessmentAgent(BaseAgent):
         return result
 
     @staticmethod
-    def _apply_no_damage_guard(result: dict, has_images: bool) -> None:
-        """Reconcile the model's damage list against its own confidence + the
-        explicit no-damage flag, mutating `result` in place.
+    def _merge_verifications(claimed_lines: list[dict], verifications: list,
+                             undeclared_raw: list) -> dict[str, list[dict]]:
+        """Turn the model's structured claimed-part verdicts + undeclared-damage
+        sweep into the existing result shape, plus the new claim-validation
+        buckets (newupdates.md #34 / DAMAGE_VALIDATION_ARCHITECTURE.md). Pure
+        function — no LLM call, easy to test in isolation.
 
-        - Low-confidence parts are moved to `low_confidence_observations` (kept
-          for the adjuster, but NOT drawn or priced) so a guess never becomes a payout.
-        - If nothing confident remains (or the model said so), the vehicle is treated
-          as undamaged: empty parts, zero estimate, severity "None".
+        A claimed line resolves to exactly one of four buckets:
+          - damaged_parts        (verdict verified_damaged/partially_visible + evidence)
+          - claimed_but_undamaged (verdict verified_undamaged — claim may not hold up)
+          - unverified_parts      (verdict not_visible, or anything else unrecognized —
+                                    conservative by construction: never silently dropped)
+        scope_mismatches is derived alongside damaged_parts: the estimate's claimed
+        repair action (Replace/Repair/Paint) vs. this agent's OWN independent
+        assessed_repair_type for the same line, flagged only when the claim is
+        MORE expensive than what's visually supported.
         """
-        parts = result.get("damaged_parts")
-        if not isinstance(parts, list):
-            parts = []
+        damaged_parts: list[dict] = []
+        undeclared_parts: list[dict] = []
+        unverified_parts: list[dict] = []
+        claimed_but_undamaged: list[dict] = []
+        scope_mismatches: list[dict] = []
+        _COST_RANK = {"Paint": 1, "Repair": 2, "Replace": 3}
 
-        kept, low_conf = [], []
-        for p in parts:
+        for idx, v in enumerate(verifications):
+            if not isinstance(v, dict):
+                continue
+            line_no = v.get("line_no")
+            src_line = (
+                claimed_lines[line_no - 1]
+                if isinstance(line_no, int) and 1 <= line_no <= len(claimed_lines)
+                else (claimed_lines[idx] if idx < len(claimed_lines) else {})
+            )
+            amount = src_line.get("amount")
+            estimate_line_text = (
+                (f"{src_line.get('part', '?')} - {src_line.get('type', '?')} - INR {amount:,.0f}"
+                 if isinstance(amount, (int, float))
+                 else f"{src_line.get('part', '?')} - {src_line.get('type', '?')}")
+                if src_line else None
+            )
+            part_name = v.get("part") or src_line.get("part") or "unknown_part"
+            verdict = str(v.get("verdict", "")).strip().lower()
+
+            if verdict in ("verified_damaged", "partially_visible") and v.get("visible_evidence"):
+                assessed_action = v.get("assessed_repair_type") or "Repair"
+                damaged_parts.append({
+                    "part": part_name,
+                    "severity": v.get("severity") or "Moderate",
+                    "confidence": v.get("confidence", "Medium"),
+                    "visible_evidence": v.get("visible_evidence"),
+                    "bounding_box": v.get("bounding_box"),
+                    "repair_type": assessed_action,
+                    "presence_state": v.get("presence_state") or "present",
+                    "in_garage_estimate": True,
+                    "estimate_line_item": estimate_line_text,
+                })
+                claimed_action = str(src_line.get("type", "")).strip().capitalize()
+                if (claimed_action in _COST_RANK and assessed_action in _COST_RANK
+                        and _COST_RANK[claimed_action] > _COST_RANK[assessed_action]):
+                    scope_mismatches.append({
+                        "part": part_name, "claimed_action": claimed_action,
+                        "assessed_action": assessed_action, "claimed_amount": amount,
+                    })
+            elif verdict == "verified_undamaged":
+                claimed_but_undamaged.append({
+                    "part": part_name, "estimate_line_item": estimate_line_text,
+                    "claimed_amount": amount,
+                })
+            else:
+                # not_visible, partially_visible with no usable evidence, or an
+                # unrecognized verdict string — treat conservatively as
+                # unverified rather than silently dropping it. This IS the fix:
+                # the old PASS 3 said "not visible -> do not report it"; a
+                # claimed line with no supporting photo must now always
+                # surface somewhere, never disappear.
+                unverified_parts.append({
+                    "part": part_name, "estimate_line_item": estimate_line_text,
+                    "claimed_amount": amount, "reason": verdict or "unrecognized_verdict",
+                })
+
+        for u in undeclared_raw:
+            if not isinstance(u, dict) or not u.get("visible_evidence"):
+                continue
+            undeclared_parts.append({
+                "part": u.get("part", "unknown_part"),
+                "severity": u.get("severity") or "Moderate",
+                "confidence": u.get("confidence", "Medium"),
+                "visible_evidence": u.get("visible_evidence"),
+                "bounding_box": None,   # undeclared parts are never boxed (existing guardrail)
+                "repair_type": u.get("assessed_repair_type") or "Repair",
+                "presence_state": u.get("presence_state") or "present",
+                "in_garage_estimate": False,
+                "estimate_line_item": None,
+            })
+
+        return {
+            "damaged_parts": damaged_parts,
+            "undeclared_parts": undeclared_parts,
+            "unverified_parts": unverified_parts,
+            "claimed_but_undamaged": claimed_but_undamaged,
+            "scope_mismatches": scope_mismatches,
+        }
+
+    @staticmethod
+    def _apply_bedrock_grounding(result: dict, image_paths: list[str]) -> None:
+        """Re-localize boxes for damaged_parts via Bedrock (services/
+        grounding_client.py) where available, grouped by which image each
+        part's damage was already found in (from the Groq-provided
+        bounding_box.image_index) so each Bedrock call only sees the ONE image
+        relevant to that batch of parts. A part's original Groq box is left
+        untouched if Bedrock doesn't return one for it — this function never
+        removes a box, only potentially replaces one with a more precise one.
+        Tags each part's source (e.g. `nova_bedrock` / `qwen_bedrock`, derived
+        from BEDROCK_GROUNDING_MODEL — see grounding_client.grounding_source_tag()
+        — vs `groq_llm`) for transparency; the exact model can be swapped via
+        config (.env.example's Nova-vs-Qwen/Mumbai comparison) so this must
+        never hardcode one vendor's name."""
+        try:
+            from services import grounding_client
+        except Exception:
+            return
+        if not grounding_client.is_available():
+            for p in result.get("damaged_parts", []):
+                if isinstance(p, dict):
+                    p.setdefault("grounding_source", "groq_llm")
+            return
+
+        by_image: dict[int, list[dict]] = {}
+        for p in result.get("damaged_parts", []):
             if not isinstance(p, dict):
                 continue
-            if str(p.get("confidence", "")).strip().lower() == "low":
-                low_conf.append(p)
-            else:
-                kept.append(p)
+            bb = p.get("bounding_box") or {}
+            idx = bb.get("image_index", 0)
+            idx = idx if isinstance(idx, int) and 0 <= idx < len(image_paths) else 0
+            by_image.setdefault(idx, []).append(p)
+            p["grounding_source"] = "groq_llm"  # default; overwritten below on success
 
-        result["damaged_parts"] = kept
+        source_tag = grounding_client.grounding_source_tag()
+
+        # One Bedrock round-trip per image, ~4s each measured. Sequential, that
+        # is 4s x image count added to the critical path the SSE stream is
+        # waiting on; the calls are independent, so fan them out the same way
+        # pricing_engine already fans out its per-part price lookups.
+        def _locate(idx: int, parts: list) -> tuple[int, dict]:
+            query_parts = [
+                {"part_id": p.get("part", f"part_{i}"),
+                 "label": f"{(p.get('part') or '').replace('_', ' ')} - {p.get('visible_evidence', '')}"[:120]}
+                for i, p in enumerate(parts)
+            ]
+            try:
+                return idx, grounding_client.locate_boxes(image_paths[idx], query_parts)
+            except Exception:
+                return idx, {}
+
+        located_by_image: dict[int, dict] = {}
+        if by_image:
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=min(4, len(by_image))) as ex:
+                for idx, located in ex.map(lambda kv: _locate(*kv), by_image.items()):
+                    located_by_image[idx] = located
+
+        for idx, parts in by_image.items():
+            located = located_by_image.get(idx, {})
+            for p in parts:
+                box = located.get(p.get("part"))
+                if box:
+                    p["bounding_box"] = {"image_index": idx, **box}
+                    p["grounding_source"] = source_tag
+
+    @staticmethod
+    def _apply_no_damage_guard(result: dict, has_images: bool) -> None:
+        """Reconcile the model's damage lists against their own confidence + the
+        explicit no-damage flag, mutating `result` in place.
+
+        - Low-confidence parts (from EITHER damaged_parts or undeclared_parts)
+          are moved to `low_confidence_observations` (kept for the adjuster, but
+          NOT drawn or priced) so a guess never becomes a payout.
+        - If nothing confident remains anywhere (or the model said so), the
+          vehicle is treated as undamaged: empty parts, zero estimate, severity "None".
+        - unverified_parts / claimed_but_undamaged / scope_mismatches are left
+          untouched — informational regardless of whether other damage exists.
+        """
+        def _split_low_confidence(key: str) -> list[dict]:
+            items = result.get(key)
+            if not isinstance(items, list):
+                items = []
+            kept, low_conf = [], []
+            for p in items:
+                if not isinstance(p, dict):
+                    continue
+                if str(p.get("confidence", "")).strip().lower() == "low":
+                    low_conf.append(p)
+                else:
+                    kept.append(p)
+            result[key] = kept
+            return low_conf
+
+        low_conf = _split_low_confidence("damaged_parts") + _split_low_confidence("undeclared_parts")
         if low_conf:
             result["low_confidence_observations"] = low_conf
 
         # Reconcile the explicit flag with what actually survived filtering.
+        kept_any = bool(result.get("damaged_parts")) or bool(result.get("undeclared_parts"))
         damage_present = result.get("damage_present")
         if damage_present is None:
-            damage_present = len(kept) > 0
-        if not kept:
+            damage_present = kept_any
+        if not kept_any:
             damage_present = False
         result["damage_present"] = damage_present
 
         if not damage_present:
             result["damaged_parts"] = []
+            result["undeclared_parts"] = []
             result["overall_severity"] = "None"
             result["total_repair_estimate"] = {"min": 0, "max": 0}
             if not result.get("no_damage_reason"):
@@ -323,6 +735,16 @@ class DamageAssessmentAgent(BaseAgent):
         can also strip EXIF, so an empty result is a SOFT signal, not proof —
         it's combined with the vision model's own authenticity_flags, never
         used alone to block a claim.
+
+        Note on WhatsApp specifically (this project's assumed dominant transfer
+        channel for Indian claimants): it does NOT always strip EXIF — only its
+        default "Photo" send recompresses and strips it. "Send as Document"
+        transmits the original file byte-for-byte, EXIF fully intact (verified
+        against current WhatsApp behavior, 2026-07-17). Since this code only
+        ever sees the final uploaded file — never which send mode produced it —
+        it can't tell "innocently compressed via Photo-send" apart from
+        "already-stripped before upload," which is exactly why missing EXIF
+        stays advisory-only rather than a real signal either way.
         """
         signals = []
         for path in image_paths:
@@ -401,7 +823,9 @@ class DamageAssessmentAgent(BaseAgent):
         exif_suspect_count = sum(1 for s in exif_signals if not s.get("has_exif"))
         exif_signal_summary = (
             f"{exif_suspect_count}/{len(exif_signals)} photo(s) have no EXIF metadata "
-            f"(camera/timestamp data) — common in AI-generated or downloaded images"
+            f"(camera/timestamp data) — common when shared via WhatsApp's default Photo "
+            f"send (recompresses and strips it; \"Send as Document\" would not), or in "
+            f"AI-generated/downloaded images"
         ) if exif_signals and exif_suspect_count > 0 else None
 
         review_recommended = bool(auth_flags) or (
@@ -413,11 +837,23 @@ class DamageAssessmentAgent(BaseAgent):
         # the vision LLM's judgment and the EXIF metadata check above.
         forensics_signals = forensics_signals or []
         forensics_suspects = [s for s in forensics_signals if s.get("is_ai_generated_suspected")]
-        forensics_summary = (
-            f"Local forensics model flagged {len(forensics_suspects)}/{len(forensics_signals)} "
-            f"photo(s) as likely AI-generated (confidence "
-            f"{max((s['confidence'] for s in forensics_suspects), default=0):.0%})"
-        ) if forensics_suspects else None
+        # Provenance hits (generator filename / embedded credit metadata) are
+        # deterministic file facts; classifier hits are a model opinion with a
+        # confidence — word them separately so the adjuster sees which fired.
+        _prov_hits = [s for s in forensics_suspects if s.get("provenance")]
+        _model_hits = [s for s in forensics_suspects if not s.get("provenance")]
+        _fparts = []
+        if _model_hits:
+            _fparts.append(
+                f"Local forensics model flagged {len(_model_hits)}/{len(forensics_signals)} "
+                f"photo(s) as likely AI-generated (confidence "
+                f"{max((s['confidence'] for s in _model_hits), default=0):.0%})")
+        if _prov_hits:
+            _markers = ", ".join(sorted({s["provenance"]["marker"] for s in _prov_hits}))
+            _fparts.append(
+                f"{len(_prov_hits)} photo(s) carry AI-generator provenance — "
+                f"generator filename/embedded metadata ({_markers})")
+        forensics_summary = " · ".join(_fparts) if _fparts else None
 
         if forensics_suspects:
             review_recommended = True
@@ -427,10 +863,18 @@ class DamageAssessmentAgent(BaseAgent):
                 issues.append(_AUTH_LABELS.get(key, f"Authenticity concern: {key}"))
             blocking = True
         elif exif_signal_summary and exif_suspect_count == len(exif_signals):
-            # ALL photos missing EXIF is a stronger signal than a mix (mixed is
-            # normal — apps/messaging often strip EXIF from some transfers).
-            issues.append(exif_signal_summary)
-            blocking = True
+            # Missing EXIF alone is ADVISORY, never blocking. WhatsApp's default
+            # Photo send strips EXIF from virtually every real Indian claim
+            # photo — but "Send as Document" does NOT (verified 2026-07-17):
+            # transmits the original file, EXIF fully intact. This code never
+            # knows which send mode a photo came through, only the final file,
+            # so it can't distinguish "innocently compressed" from "already
+            # stripped before upload" — blocking on it would send almost every
+            # genuine claim to human review either way. It only hardens a
+            # POSITIVE forgery signal (vision-model authenticity flag or the
+            # local forensics detector), each of which blocks on its own
+            # above/below.
+            issues.append(exif_signal_summary + " — advisory only")
 
         if forensics_summary:
             issues.append(forensics_summary)
