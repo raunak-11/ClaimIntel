@@ -109,15 +109,10 @@ def format_context(docs: list[str], header: str) -> str:
 # ---------------------------------------------------------------------------
 # Agent-specific query helpers
 # ---------------------------------------------------------------------------
-def get_vehicle_pricing_context(vehicle: str) -> str:
-    """
-    For Agent 1 (Damage Assessment).
-    Retrieve OEM/aftermarket parts pricing for the specific vehicle.
-    """
-    if not vehicle:
-        return ""
-    docs = query_collection("vehicle_catalog", f"{vehicle} parts OEM pricing repair estimate INR", n_results=3)
-    return format_context(docs, f"Vehicle Parts Catalog — {vehicle}")
+# NOTE: `get_vehicle_pricing_context()` and its `vehicle_catalog` collection were
+# removed 2026-08-18. They had zero callers — a leftover of the static parts
+# catalog deleted in changelog #39, whose fabricated prices the live-web lookup
+# replaced. Agent 1 prices through services/price_lookup, never through RAG.
 
 
 def get_fraud_kb_context(claim_description: str, policy_age_hint: str = "") -> str:

@@ -174,25 +174,6 @@ def _colored_badge(pdf: ClaimPDF, text: str, rgb: tuple, w: float = 30):
     pdf.set_text_color(*C_DARK)
 
 
-def _check_row(pdf: ClaimPDF, label: str, value: str):
-    """Single investigation summary check row."""
-    rgb   = RISK_COLOR.get(value, C_MUTED)
-    icon  = CHECK_ICON.get(value, "—")
-    pdf.set_fill_color(*C_WHITE)
-    pdf.set_font("Helvetica", "", 8)
-    pdf.set_text_color(*C_MUTED)
-    pdf.cell(80, 6, _s(label), fill=True)
-    pdf.set_fill_color(*rgb)
-    pdf.set_text_color(*C_WHITE)
-    pdf.set_font("Helvetica", "B", 7)
-    pdf.cell(24, 6, _s(icon), fill=True, align="C")
-    pdf.set_fill_color(*C_WHITE)
-    pdf.set_font("Helvetica", "", 8)
-    pdf.set_text_color(*rgb)
-    pdf.cell(0, 6, _s(f"  {value or 'Unknown'}"), fill=True, new_x="LMARGIN", new_y="NEXT")
-    pdf.set_text_color(*C_DARK)
-
-
 def _bullet_list(pdf: ClaimPDF, items: list[str], color: tuple = C_DARK):
     """Render a list of strings as bullet points."""
     for item in items:

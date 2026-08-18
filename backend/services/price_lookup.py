@@ -423,13 +423,13 @@ def _plausible_band(part: str) -> tuple[int, int]:
     return _PART_BANDS.get(part, (300, 500000))
 
 
-def lookup_part_price(vehicle: str, part: str, base_oem: int = 0) -> Optional[int]:
+def lookup_part_price(vehicle: str, part: str) -> Optional[int]:
     """
     Return a representative current OEM price for `part` on `vehicle`, or None.
 
-    `base_oem` is accepted for backward compatibility but intentionally not used
-    to clamp the live lookup. Inflated garage estimates must not contaminate the
-    independent market benchmark.
+    Deliberately takes no garage-estimate anchor: an inflated quote must not
+    contaminate the benchmark that audits it. (A vestigial `base_oem` parameter
+    was accepted and ignored here until 2026-08-18.)
 
     A price is only returned when >= 2 INDEPENDENT DOMAINS (not just 2
     mentions on the same page) report a relevant, in-band figure that agree
@@ -544,7 +544,6 @@ def lookup_part_price(vehicle: str, part: str, base_oem: int = 0) -> Optional[in
         cache[key] = {
             "value": value,
             "ts": now,
-            "base_oem": base_oem,
             "version": _CACHE_VERSION,
             "band": [lo, hi],
             "evidence": evidence,

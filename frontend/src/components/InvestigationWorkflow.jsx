@@ -590,9 +590,36 @@ function EligibilityDetail({ data }) {
           Policy period {data.policy_start || '?'} → {data.policy_end || '?'} ·
           incident {data.incident_date || '?'}
         </p>
+        {/* Scope of cover, alongside the policy period. Both are hard stops and
+            both are decided here before any paid model call, so the adjudicator
+            should see which one applied. */}
+        <div className="flex items-center justify-between gap-2 mt-1.5">
+          <span className="text-[11px] text-muted">
+            Cover: {data.coverage_type || '—'}
+            {data.claim_kind_label ? ` · Claim: ${data.claim_kind_label}` : ''}
+          </span>
+          <Badge
+            tone={data.coverage_covered === false ? 'danger'
+              : data.coverage_covered === true ? 'success' : 'warning'}
+            size="sm"
+          >
+            {data.coverage_covered === false ? 'Not covered'
+              : data.coverage_covered === true ? 'Covered' : 'Unverified'}
+          </Badge>
+        </div>
+        {data.add_ons_applied?.length > 0 && (
+          <p className="text-[11px] text-success-700 mt-1">
+            Add-ons: {data.add_ons_applied.join(' · ')}
+          </p>
+        )}
         {data.coverage_note && (
           <p className="text-[11px] text-danger-700 mt-1.5 leading-relaxed">{data.coverage_note}</p>
         )}
+        {/* Unknown cover / unimplemented add-ons never reject, so without this
+            they would be a new invisible gap. */}
+        {(data.coverage_advisories || []).map((a, i) => (
+          <p key={i} className="text-[11px] text-warning-700 mt-1.5 leading-relaxed">{a}</p>
+        ))}
       </div>
 
       <SectionTitle>Pre-screen Checks ({checks.length})</SectionTitle>

@@ -5,7 +5,7 @@ Run before any demo:  python scripts/data_sanity.py
 Why this exists: the showcase runs live in front of judges, and its numbers come
 from FIVE places that can silently disagree — policies.csv, the generated
 test-case estimates (scripts/generate_test_cases.py), the parts catalog
-(data/kb/parts_pricing_base.json), the live-price cache
+the live-price cache
 (data/price_cache.json), and whatever stale claims/*/result.json is still on
 disk. A verified example of the failure mode this catches: the genuine Case 1
 claim showing claim_amount ₹62,000, garage estimate ₹50,386, "fair value"
@@ -157,13 +157,7 @@ def _gst_total(rows: list) -> tuple[int, int]:
 
 
 def check_estimates_and_bands(policies: dict) -> None:
-    section("2. Generated estimates vs policies + catalog matcher")
-    from services.pricing_engine import match_line_item
-    import json as _json
-    catalog = _json.load(open(os.path.join(ROOT, "data", "kb", "parts_pricing_base.json"),
-                              encoding="utf-8"))
-    catalog_parts = list(catalog["base_parts"].keys())
-
+    section("2. Generated estimates vs policies")
     estimates = _extract_case_estimates()
     if len(estimates) < 6:
         report("FAIL", f"only {len(estimates)} generate_estimate() calls extracted — "
@@ -186,16 +180,11 @@ def check_estimates_and_bands(policies: dict) -> None:
             report("FAIL", f"{name}: customer '{est['customer']}' != policies.csv "
                            f"'{pol['customer_name']}' for {est['policy_no']}")
 
-        # line items through the REAL matcher (catalog-coverage report only)
         line_items = [{"part": r[0], "type": r[1], "amount": r[4]} for r in rows]
-        all_part_rows = [li for li in line_items if li["type"].lower() not in ("labour", "material")]
-        unmatched = list(all_part_rows)
-        for pid in catalog_parts:
-            hit = match_line_item(pid, line_items)
-            if hit and hit in unmatched:
-                unmatched = [li for li in unmatched if li is not hit]
-        for li in unmatched:
-            report("WARN", f"{name}: line '{li['part']}' matched no catalog part")
+        # Physical parts only — labour and consumables/material rows are not
+        # things the pricing layer looks up.
+        all_part_rows = [li for li in line_items
+                         if li["type"].lower() not in ("labour", "material")]
 
         # ── Live-pricing coverage, not an offline band simulation ──────────────
         # This section used to simulate the fair-value band offline by pricing

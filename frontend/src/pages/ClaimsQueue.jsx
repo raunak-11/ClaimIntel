@@ -131,7 +131,16 @@ export default function ClaimsQueue() {
                           )}
                         </td>
                         <td className="px-4 py-3.5">
-                          <Badge tone={statusTone(c.status)} size="sm" dot>{c.status}</Badge>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <Badge tone={statusTone(c.status)} size="sm" dot>{c.status}</Badge>
+                            {/* An SLA breach is only actionable if it is visible
+                                on the worklist, not buried in a detail page. */}
+                            {c.sla_breaches > 0 && (
+                              <Badge tone="danger" size="sm" title="IRDAI service-standard breach">
+                                {c.sla_breaches} SLA
+                              </Badge>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-3.5 text-right">
                           <ArrowRight className="w-4 h-4 text-faint group-hover:text-brand-500 group-hover:translate-x-0.5 transition-all inline-block" />
