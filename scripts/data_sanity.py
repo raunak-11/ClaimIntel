@@ -91,8 +91,40 @@ def check_policies() -> dict[str, dict]:
                 float(row[field])
             except ValueError:
                 report("FAIL", f"{pol_no} non-numeric {field}: {row[field]!r}")
+
+    # ── Coverage / add-ons / NCB across EVERY policy, not just the demo three ──
+    from services import coverage
+    from services.settlement_calc import NCB_GRID
+    for pol_no, row in policies.items():
+        cover = coverage.classify_coverage(row)
+        if cover == coverage.COVER_UNKNOWN:
+            report("FAIL", f"{pol_no} coverage_type {row.get('coverage_type')!r} is not "
+                           f"recognised — the eligibility gate cannot verify admissibility")
+        unknown = coverage.unknown_add_ons(row)
+        if unknown:
+            report("FAIL", f"{pol_no} lists add-on(s) with no implementation: "
+                           f"{', '.join(unknown)} — the customer would be paying for nothing")
+        try:
+            ncb = int(float(row.get("ncb_pct") or 0))
+            if ncb and ncb not in NCB_GRID:
+                report("WARN", f"{pol_no} ncb_pct {ncb}% is off the IRDAI grid {NCB_GRID}")
+        except (TypeError, ValueError):
+            pass
+
+    # A demo case whose policy does not admit its own claim type would be
+    # gate-rejected on stage with no warning until it happened.
+    for pol_no, want in DEMO_POLICIES.items():
+        row = policies.get(pol_no)
+        if not row:
+            continue
+        if coverage.is_covered(coverage.classify_coverage(row),
+                               coverage.CLAIM_OWN_DAMAGE) is False:
+            report("FAIL", f"{pol_no} is {row.get('coverage_type')} — its own-damage demo "
+                           f"case will be REJECTED at the eligibility gate")
+
     if not any(l == "FAIL" for l, _ in FINDINGS):
-        print("  ok: 3 demo policies present, active, numeric")
+        print(f"  ok: {len(DEMO_POLICIES)} demo policies present, active, numeric; "
+              f"{len(policies)} policies have a recognised cover type and known add-ons")
     return policies
 
 
@@ -165,7 +197,7 @@ def check_estimates_and_bands(policies: dict) -> None:
 
     section("3. Estimate internal consistency + live-pricing coverage")
     from services.pricing_engine import estimate_damage
-    from services import settlement_calc
+    from services import coverage, settlement_calc
 
     for est in estimates:
         name = est["file"] or "?"
@@ -210,9 +242,22 @@ def check_estimates_and_bands(policies: dict) -> None:
         cov_pct = cov.get("coverage_pct", 0)
         min_pct = settlement_calc.FAIR_VALUE_MIN_COVERAGE * 100
 
-        if subtotal + 2 * round(subtotal * 0.09) != total:
-            report("FAIL", f"{name}: GST-inclusive total {total:,} does not reconcile "
-                           f"with the line subtotal {subtotal:,}")
+        # NOTE: the check that used to sit here compared
+        # `subtotal + 2*round(subtotal*0.09)` against `total` — but `total` was
+        # produced by _gst_total() from exactly that expression, so it was a
+        # tautology that could never fail. Replaced by three checks against
+        # genuinely independent sources, in check_cross_module_invariants().
+
+        # Consumables must be TYPED as such, or settlement_calc's exclusion
+        # silently finds Rs.0 and the customer is paid for items the policy
+        # does not cover.
+        for li in line_items:
+            typed_material = str(li["type"]).strip().lower() == "material"
+            looks_consumable = coverage.is_consumable_line(
+                {"part": li["part"], "type": "Part"})
+            if looks_consumable and not typed_material:
+                report("WARN", f"{name}: line '{li['part']}' reads as a consumable but is "
+                               f"typed '{li['type']}' — the exclusion will not see it")
 
         line = (f"{name}: garage ₹{total:,} | {len(all_part_rows)} part lines | "
                 f"live-pricing coverage {cov_pct}%")
@@ -339,12 +384,95 @@ def check_claims_on_disk() -> None:
                                f"decision was made on incomplete evidence; re-investigate")
 
 
+def check_schema_integrity() -> None:
+    """Three files declare the same column lists. Drift corrupts data silently."""
+    section("0. schema integrity")
+    import csv as _csv
+    import importlib.util as _il
+
+    import storage
+    from services import token_tracker
+
+    spec = _il.spec_from_file_location("reset_claims", os.path.join(ROOT, "scripts",
+                                                                   "reset_claims.py"))
+    reset = _il.module_from_spec(spec)
+    spec.loader.exec_module(reset)
+
+    if reset.CLAIMS_FIELDS != storage.CSV_FIELDS:
+        report("FAIL", "reset_claims.CLAIMS_FIELDS != storage.CSV_FIELDS — a reset would "
+                       "write the wrong header and corrupt every claim saved afterwards")
+    if reset.TOKEN_USAGE_FIELDS != token_tracker.FIELDS:
+        report("FAIL", "reset_claims.TOKEN_USAGE_FIELDS != token_tracker.FIELDS")
+
+    for path, fields, label in (
+        (os.path.join(ROOT, "data", "policies.csv"), storage.POLICY_FIELDS, "policies.csv"),
+        (os.path.join(ROOT, "data", "claims.csv"), storage.CSV_FIELDS, "claims.csv"),
+    ):
+        if not os.path.exists(path):
+            continue
+        with open(path, newline="", encoding="utf-8") as fh:
+            header = next(_csv.reader(fh), [])
+        if header != fields:
+            report("FAIL", f"{label} header does not match its field list "
+                           f"({len(header)} cols vs {len(fields)})")
+    if not FINDINGS or all(l != "FAIL" for l, _ in FINDINGS):
+        report("ok", "CSV_FIELDS / POLICY_FIELDS / reset_claims / headers all agree")
+
+
+def check_cross_module_invariants() -> None:
+    """Facts two independent modules must agree on. Cannot be tautological."""
+    section("6. cross-module invariants")
+    import importlib.util as _il
+
+    from services.settlement_calc import GST_RATE, NCB_GRID
+
+    spec = _il.spec_from_file_location("gen", os.path.join(ROOT, "scripts",
+                                                           "generate_test_cases.py"))
+    gen = _il.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(gen)
+    except Exception as exc:                       # noqa: BLE001
+        report("WARN", f"could not import the generator to cross-check GST: {exc}")
+        gen = None
+
+    if gen is not None:
+        gen_rate = getattr(gen, "CGST_RATE", None), getattr(gen, "SGST_RATE", None)
+        if None in gen_rate:
+            report("WARN", "generate_test_cases has no CGST_RATE/SGST_RATE constants — "
+                           "the GST cross-check cannot run")
+        elif abs(sum(gen_rate) - GST_RATE) > 1e-9:
+            report("FAIL", f"generator GST {sum(gen_rate):.2%} != settlement_calc.GST_RATE "
+                           f"{GST_RATE:.2%} — the fixtures and the payout math disagree")
+        else:
+            report("ok", f"generator GST == settlement_calc.GST_RATE ({GST_RATE:.0%})")
+
+    # The archive linkage that makes Case 2's 30-point FC-25 fire. Renaming the
+    # workshop without renaming the archive entry silently kills the signal.
+    import json as _json
+    arch_path = os.path.join(ROOT, "data", "kb", "historical_fraud_cases.json")
+    if os.path.exists(arch_path) and gen is not None:
+        with open(arch_path, encoding="utf-8") as fh:
+            archive = _json.load(fh)
+        archive_shops = {str(c.get("garage_workshop_name", "")).strip().lower()
+                         for c in archive.get("cases", [])}
+        shops = {(e.get("file") or "", str(e.get("workshop") or "").strip().lower())
+                 for e in _extract_case_estimates()}
+        inflated = [s for f, s in shops if "inflated" in f.lower() and s]
+        if inflated and not any(s in archive_shops for s in inflated):
+            report("FAIL", "no inflated-case workshop appears in historical_fraud_cases.json "
+                           "— FC-25 (30 points) will not fire on the fraud demo")
+        else:
+            report("ok", "inflated-case workshop is present in the fraud archive")
+
+
 def main() -> int:
     print("ClaimIntel demo-data sanity check")
+    check_schema_integrity()
     policies = check_policies()
     check_estimates_and_bands(policies)
     check_price_cache()
     check_claims_on_disk()
+    check_cross_module_invariants()
 
     fails = [m for l, m in FINDINGS if l == "FAIL"]
     warns = [m for l, m in FINDINGS if l == "WARN"]

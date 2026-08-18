@@ -51,6 +51,14 @@ def _fmt_reg(reg: str) -> str:
         i = j
     return "-".join(groups)
 
+# GST on an Indian repair invoice, split into its two intra-state halves.
+# GST 2.0 (22-Sep-2025) collapsed the slabs to 5/18/40; auto parts (HSN 8708)
+# and repair labour are BOTH 18%, so one flat rate across parts and labour is
+# correct. data_sanity cross-checks this against settlement_calc.GST_RATE —
+# fixtures that tax differently from the payout engine are a silent trap.
+CGST_RATE = 0.09
+SGST_RATE = 0.09
+
 DARK_GREEN = (27, 94, 58)
 LIGHT_GREEN_BG = (235, 245, 238)
 DARK_BLUE = (17, 62, 110)
@@ -226,8 +234,8 @@ def generate_estimate(out_path: Path, *, workshop_name: str, workshop_address: s
     pdf.ln(2)
 
     subtotal = sum(r[4] for r in rows)
-    cgst = round(subtotal * 0.09)
-    sgst = round(subtotal * 0.09)
+    cgst = round(subtotal * CGST_RATE)
+    sgst = round(subtotal * SGST_RATE)
     grand_total = subtotal + cgst + sgst
 
     with pdf.table(
@@ -732,9 +740,9 @@ def case_aditya(ref: date):
                             colour="Sunset Orange", body_type="SUV", blood_group="B+")
 
     fair_subtotal = sum(r[4] for r in rows)
-    fair_total = fair_subtotal + 2 * round(fair_subtotal * 0.09)
+    fair_total = fair_subtotal + (round(fair_subtotal * CGST_RATE) + round(fair_subtotal * SGST_RATE))
     inflated_subtotal = sum(r[4] for r in rows_inflated)
-    inflated_total = inflated_subtotal + 2 * round(inflated_subtotal * 0.09)
+    inflated_total = inflated_subtotal + (round(inflated_subtotal * CGST_RATE) + round(inflated_subtotal * SGST_RATE))
 
     print("\n--- Case 1 (Vijay M) - type these into the New Claim form ---")
     print("Claim type:        Motor - Own Damage")
@@ -864,9 +872,9 @@ def case_meera(ref: date):
                             financer="HDFC Bank Ltd")
 
     fair_subtotal = sum(r[4] for r in rows_fair)
-    fair_total = fair_subtotal + 2 * round(fair_subtotal * 0.09)
+    fair_total = fair_subtotal + (round(fair_subtotal * CGST_RATE) + round(fair_subtotal * SGST_RATE))
     inflated_subtotal = sum(r[4] for r in rows)
-    inflated_total = inflated_subtotal + 2 * round(inflated_subtotal * 0.09)
+    inflated_total = inflated_subtotal + (round(inflated_subtotal * CGST_RATE) + round(inflated_subtotal * SGST_RATE))
 
     print("\n--- Case 2 (Rohit Madeshiya) - type these into the New Claim form ---")
     print("Claim type:        Motor - Own Damage")
@@ -990,9 +998,9 @@ def case_arjun(ref: date):
                             colour="Polar White", body_type="SUV", blood_group="A+")
 
     fair_subtotal = sum(r[4] for r in rows)
-    fair_total = fair_subtotal + 2 * round(fair_subtotal * 0.09)
+    fair_total = fair_subtotal + (round(fair_subtotal * CGST_RATE) + round(fair_subtotal * SGST_RATE))
     low_subtotal = sum(r[4] for r in rows_low)
-    low_total = low_subtotal + 2 * round(low_subtotal * 0.09)
+    low_total = low_subtotal + (round(low_subtotal * CGST_RATE) + round(low_subtotal * SGST_RATE))
 
     print("\n--- Case 3 (Arjun Mehta) - type these into the New Claim form ---")
     print("Claim type:        Motor - Own Damage")
