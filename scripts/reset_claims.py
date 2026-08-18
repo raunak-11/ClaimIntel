@@ -30,12 +30,15 @@ TOKEN_USAGE_CSV = os.path.join(DATA_DIR, "token_usage.csv")
 CLAIMS_DIR = os.path.join(DATA_DIR, "claims")
 
 # Mirrors backend/storage.py CSV_FIELDS and backend/services/token_tracker.py FIELDS.
-# Keep in sync if those change.
+# This is ENFORCED, not conventional: tests/test_storage_schema.py imports both
+# and fails if they drift, because a reset that writes the wrong header silently
+# corrupts every claim written afterwards.
 CLAIMS_FIELDS = [
     "claim_id", "policy_no", "claimant", "phone", "vehicle",
     "claim_type", "incident_date", "incident_location", "claim_amount",
     "description", "status", "created_at",
     "garage_estimate_amount", "garage_workshop_name", "fir_number",
+    "intimation_at", "surveyor_appointed_at", "survey_report_at", "decision_at",
 ]
 TOKEN_USAGE_FIELDS = [
     "timestamp", "claim_id", "agent", "model",

@@ -20,13 +20,28 @@ _MAX_IMAGE_BYTES = 2 * 1024 * 1024
 _MAX_IMAGE_DIM = 1600
 
 # File-level lock — prevents concurrent investigations clobbering the same CSV row.
-_csv_lock = threading.Lock()
+#
+# REENTRANT on purpose. `_ensure_csv()` runs the header migration below and is
+# itself called from inside `save_claim`/`update_claim_field`, both of which
+# already hold this lock. With a plain Lock that nesting is a hard deadlock
+# (threading.Lock is not reentrant), so the migration could never take the lock
+# it needs to rewrite the file safely.
+_csv_lock = threading.RLock()
 
 CSV_FIELDS = [
     "claim_id", "policy_no", "claimant", "phone", "vehicle",
     "claim_type", "incident_date", "incident_location", "claim_amount",
     "description", "status", "created_at",
     "garage_estimate_amount", "garage_workshop_name", "fir_number",
+    # ── IRDAI service-standard timestamps (see services/claim_timeline.py) ────
+    # Hour-precision, ISO-8601. `created_at` is deliberately NOT reused: it is
+    # date-only and is parsed as such by FC-05's reporting-delay check
+    # (fraud_intelligence) and printed by the PDF report. `intimation_at` is its
+    # hour-precision sibling, not its replacement.
+    "intimation_at",           # claim intimated (created)
+    "surveyor_appointed_at",   # investigation started — first run only
+    "survey_report_at",        # investigation completed — every run
+    "decision_at",             # human adjuster decision recorded
 ]
 
 POLICY_FIELDS = [
@@ -34,10 +49,54 @@ POLICY_FIELDS = [
     "vehicle_year", "vehicle_reg_no", "coverage_type", "sum_insured",
     "policy_start", "policy_end", "annual_premium",
     "engine_cc", "voluntary_deductible", "ncb_pct",
+    # Semicolon-delimited add-on tokens; see services/coverage.py for the
+    # vocabulary. Empty means a plain policy with no add-ons.
+    "add_ons",
 ]
 
 
 # ── CSV helpers ───────────────────────────────────────────────────────────────
+
+def _migrate_csv_header() -> bool:
+    """Widen an older claims.csv to the current CSV_FIELDS. Returns True if it moved.
+
+    Without this, adding a column silently corrupts the file: `_ensure_csv` only
+    writes a header when the file is ABSENT, so an existing narrow file would
+    keep its old header while `save_claim` appended full-width rows through
+    `DictWriter(fieldnames=CSV_FIELDS)`. `csv.DictReader` then files every
+    surplus value under the `None` key and each row's real fields shift — every
+    read after that point is wrong, with no error raised anywhere.
+
+    PII cells are copied VERBATIM. `claimant` and `phone` are Fernet-encrypted
+    at rest, so this must not go through `get_all_claims()` (which decrypts):
+    a decrypt/re-encrypt round-trip would rewrite ciphertext for no reason and
+    would destroy the column outright if ENCRYPTION_KEY were absent or rotated.
+    """
+    with _csv_lock:
+        with open(CLAIMS_CSV, "r", newline="", encoding="utf-8") as f:
+            reader = csv.reader(f)
+            try:
+                header = next(reader)
+            except StopIteration:
+                header = []
+        if header == CSV_FIELDS:
+            return False                      # fast path — the common case
+
+        with open(CLAIMS_CSV, "r", newline="", encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))    # raw cells, still encrypted
+
+        tmp = CLAIMS_CSV + ".migrating"
+        with open(tmp, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=CSV_FIELDS, restval="",
+                                    extrasaction="ignore")
+            writer.writeheader()
+            for row in rows:
+                row.pop(None, None)           # drop any prior overflow
+                writer.writerow(row)
+        os.replace(tmp, CLAIMS_CSV)           # atomic swap
+        print(f"[storage] claims.csv migrated: {len(header)} -> {len(CSV_FIELDS)} columns")
+        return True
+
 
 def _ensure_csv():
     os.makedirs(DATA_DIR, exist_ok=True)
@@ -45,6 +104,8 @@ def _ensure_csv():
         with open(CLAIMS_CSV, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
             writer.writeheader()
+        return
+    _migrate_csv_header()
 
 
 def get_all_claims() -> list[dict]:

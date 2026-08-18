@@ -1,1 +1,1 @@
-claim_id,policy_no,claimant,phone,vehicle,claim_type,incident_date,incident_location,claim_amount,description,status,created_at,garage_estimate_amount,garage_workshop_name,fir_number
+claim_id,policy_no,claimant,phone,vehicle,claim_type,incident_date,incident_location,claim_amount,description,status,created_at,garage_estimate_amount,garage_workshop_name,fir_number,intimation_at,surveyor_appointed_at,survey_report_at,decision_at
