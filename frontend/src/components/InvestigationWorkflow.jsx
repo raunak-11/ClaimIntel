@@ -654,7 +654,7 @@ function EligibilityDetail({ data }) {
 }
 
 // ── Agent detail router ───────────────────────────────────────────────────────
-function AgentDetailPanel({ agentKey, data, agents }) {
+export function AgentDetailPanel({ agentKey, data, agents }) {
   if (!data) return <p className="text-xs text-faint italic mt-2">No data available yet.</p>
   const map = {
     eligibility_screen: <EligibilityDetail data={data} />,
@@ -668,8 +668,8 @@ function AgentDetailPanel({ agentKey, data, agents }) {
 }
 
 // ── Agent step ────────────────────────────────────────────────────────────────
-function AgentStep({ agent, status, summary, data, agents, isLast, skipReason, errorReason }) {
-  const [open, setOpen] = useState(false)
+function AgentStep({ agent, status, summary, isLast, skipReason, errorReason,
+                    open, onToggle }) {
   const isDone = status === 'done'
   const isRunning = status === 'running'
   const isError = status === 'error'
@@ -681,7 +681,7 @@ function AgentStep({ agent, status, summary, data, agents, isLast, skipReason, e
     : isError ? 'bg-danger-500'
     : 'bg-gray-300'
   const cardCls = isDone
-    ? open ? 'border-success-200 bg-success-50/40' : 'border-line hover:bg-surface-muted'
+    ? open ? 'border-brand-300 bg-brand-50/50 ring-1 ring-brand-200' : 'border-line hover:bg-surface-muted'
     : isRunning ? 'border-brand-200 bg-brand-50/50'
     : isError ? 'border-danger-200 bg-danger-50/40'
     : isSkipped ? 'border-line bg-surface-muted/60'
@@ -696,7 +696,7 @@ function AgentStep({ agent, status, summary, data, agents, isLast, skipReason, e
       <div className={cx('flex-1 rounded-xl border mb-3 transition-colors', cardCls)}>
         <div
           className={cx('flex items-center justify-between px-3.5 py-3 gap-2', isDone && 'cursor-pointer select-none')}
-          onClick={() => isDone && setOpen((o) => !o)}
+          onClick={() => isDone && onToggle?.()}
         >
           <span className={cx('flex items-center gap-2 text-sm font-medium min-w-0',
             isSkipped ? 'text-faint' : 'text-ink')}>
@@ -725,11 +725,6 @@ function AgentStep({ agent, status, summary, data, agents, isLast, skipReason, e
         {summary && !open && !isSkipped && !isError && (
           <p className="text-xs text-muted px-3.5 pb-3 -mt-1 leading-relaxed">{asText(summary)}</p>
         )}
-        {open && isDone && (
-          <div className="px-3.5 pb-3.5">
-            <AgentDetailPanel agentKey={agent.key} data={data} agents={agents} />
-          </div>
-        )}
       </div>
     </div>
   )
@@ -738,6 +733,7 @@ function AgentStep({ agent, status, summary, data, agents, isLast, skipReason, e
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function InvestigationWorkflow({
   agentStatuses, liveAgents, skippedAgents, onStart, investigating, hasResult, streamLost,
+  expandedAgent, onToggleAgent,
 }) {
   // A gate-rejected claim reloaded from disk has no live SSE events, so derive
   // "skipped" from the stored eligibility result too — otherwise those five
@@ -776,11 +772,11 @@ export default function InvestigationWorkflow({
             agent={agent}
             status={statusFor(agent.key)}
             summary={liveAgents[agent.key]?.summary}
-            data={liveAgents[agent.key]}
-            agents={liveAgents}
             skipReason={skips[agent.key]}
             errorReason={liveAgents[agent.key]?.error}
             isLast={i === AGENTS.length - 1}
+            open={expandedAgent === agent.key}
+            onToggle={() => onToggleAgent?.(agent.key)}
           />
         ))}
       </div>

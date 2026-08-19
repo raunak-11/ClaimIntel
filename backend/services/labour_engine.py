@@ -467,28 +467,53 @@ def compare_to_garage(assessed_labour: float, garage_labour: float,
     amount = round(float(garage_labour) - float(assessed_labour))
     pct = round((float(garage_labour) - float(assessed_labour)) / float(assessed_labour) * 100, 2)
 
-    abs_pct = abs(pct)
-    status = "HIGH_VARIANCE"
-    for name in _VARIANCE_ORDER:
-        limit = thresholds.get(name)
-        if limit is not None and abs_pct <= float(limit):
-            status = name
-            break
+    # DIRECTION MATTERS. The bands used to run on abs(pct), so a garage asking
+    # 50% LESS labour than we independently assessed was reported
+    # HIGH_VARIANCE — the same red as one asking 50% MORE. Those are opposite
+    # situations: only the over-charge is claims leakage. A garage at or below
+    # the assessment costs the insurer nothing, and painting it red both cried
+    # wolf and diluted the signal the layer exists to raise.
+    #
+    # Bands therefore apply to the OVER-charge side only. Being below the
+    # assessment is NORMAL, with an informational note when the gap is large —
+    # it can mean the estimate under-itemises labour, which is worth an
+    # adjuster's eye but is not a risk flag and is not coloured like one.
+    if pct <= 0:
+        status = "NORMAL"
+    else:
+        status = "HIGH_VARIANCE"
+        for name in _VARIANCE_ORDER:
+            limit = thresholds.get(name)
+            if limit is not None and pct <= float(limit):
+                status = name
+                break
 
     reasons: list[str] = []
     if status in ("REVIEW", "HIGH_VARIANCE"):
-        direction = "above" if amount > 0 else "below"
         reasons.append(
-            f"Garage labour ₹{garage_labour:,.0f} is {abs_pct:.0f}% {direction} the "
+            f"Garage labour ₹{garage_labour:,.0f} is {pct:.0f}% above the "
             f"independently assessed ₹{assessed_labour:,.0f} — line-item review recommended. "
             f"This is a review threshold, not evidence of fraud."
         )
+
+    # Reported separately from review_reasons so the UI can render it neutrally
+    # rather than as a warning.
+    below_note = None
+    review_limit = float(thresholds.get("REVIEW") or 40)
+    if pct < 0 and abs(pct) > review_limit:
+        below_note = (
+            f"Garage labour ₹{garage_labour:,.0f} is {abs(pct):.0f}% below the independently "
+            f"assessed ₹{assessed_labour:,.0f}. No over-charge exposure — noted only because a "
+            f"gap this size can mean the estimate under-itemises labour."
+        )
+
     return {
         "garage_labour": _r(garage_labour),
         "variance_amount": amount,
         "variance_percent": pct,
         "variance_status": status,
         "review_reasons": reasons,
+        "below_assessed_note": below_note,
     }
 
 
@@ -535,6 +560,7 @@ def fraud_evidence(labour_assessment: dict | None) -> Optional[dict]:
         "complexity_applied": la.get("vehicle_traits"),
         "confidence": la.get("confidence"),
         "review_reasons": la.get("review_reasons") or [],
+        "below_assessed_note": la.get("below_assessed_note"),
         "caveat": (
             "Labour hours are ClaimIntel rule-based estimates, not OEM standard times. "
             "A variance is a review signal only — do NOT treat it as proof of fraud."

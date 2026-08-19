@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Download, ShieldQuestion, Camera, SearchX } from 'lucide-react'
+import { ArrowLeft, Download, ShieldQuestion, Camera, SearchX, X } from 'lucide-react'
 import api from '../utils/api'
 import { useInvestigationSSE } from '../hooks/useInvestigationSSE'
 import ClaimOverview from '../components/ClaimOverview'
-import InvestigationWorkflow from '../components/InvestigationWorkflow'
+import InvestigationWorkflow, { AgentDetailPanel } from '../components/InvestigationWorkflow'
 import RiskAndSettlement from '../components/RiskAndSettlement'
 import StoryboardPanel from '../components/StoryboardPanel'
 import ClaimDecision from '../components/ClaimDecision'
@@ -13,7 +13,7 @@ import AdjusterPanel from '../components/AdjusterPanel'
 import DecisionLetter from '../components/DecisionLetter'
 import { SkeletonDashboard } from '../components/Skeleton'
 import { Button, Badge, Card } from '../ui'
-import { statusTone } from '../ui/tokens'
+import { statusTone, AGENTS } from '../ui/tokens'
 
 function DownloadReportButton({ claimId, hasResult }) {
   const [loading, setLoading] = useState(false)
@@ -90,6 +90,9 @@ function ReviewBanner({ summary }) {
 export default function Dashboard() {
   const { claimId } = useParams()
   const [claim, setClaim] = useState(null)
+  // Which agent's detail is open, rendered full-width below row 1 rather
+  // than inside the one-third-width pipeline card.
+  const [expandedAgent, setExpandedAgent] = useState(null)
   const [policy, setPolicy] = useState(null)
   const [timeline, setTimeline] = useState(null)
   const [result, setResult] = useState(null)
@@ -201,9 +204,38 @@ export default function Dashboard() {
           investigating={investigating}
           streamLost={streamLost}
           hasResult={hasResult}
+          expandedAgent={expandedAgent}
+          onToggleAgent={(key) => setExpandedAgent((cur) => (cur === key ? null : key))}
         />
         <RiskAndSettlement summary={summary} settlement={settlement} timeline={timeline} />
       </div>
+
+      {/* Expanded agent detail, at FULL PAGE WIDTH.
+          It used to render inline inside the pipeline card, which is one third
+          of the row — so opening an agent produced a very tall, very narrow
+          column with large empty areas beside it in the other two, and content
+          like the 32-check fraud grid had nowhere to go. Lifting it here keeps
+          the pipeline list compact and gives the detail the whole width. */}
+      {expandedAgent && agents[expandedAgent] && (
+        <Card className="p-5">
+          <div className="flex items-center justify-between gap-3 mb-1">
+            <h3 className="text-[13px] font-semibold uppercase tracking-wide text-muted">
+              {(AGENTS.find((a) => a.key === expandedAgent) || {}).label || 'Agent detail'}
+            </h3>
+            <button
+              onClick={() => setExpandedAgent(null)}
+              className="text-xs text-muted hover:text-ink inline-flex items-center gap-1"
+            >
+              Close <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <AgentDetailPanel
+            agentKey={expandedAgent}
+            data={agents[expandedAgent]}
+            agents={agents}
+          />
+        </Card>
+      )}
 
       {/* Storyboard */}
       {agents.incident_reconstruction?.storyboard_panels?.length > 0 && (

@@ -254,11 +254,46 @@ def test_every_operation_declares_its_source_and_reasoning():
     (14000, "REVIEW"),             # +40%  — boundary, inclusive
     (14001, "HIGH_VARIANCE"),      # just over 40%
     (18000, "HIGH_VARIANCE"),      # +80%
-    (5000,  "HIGH_VARIANCE"),      # -50% — under-billing is a signal too
+    # Below the assessment is NOT a risk band. These used to report
+    # HIGH_VARIANCE because the bands ran on abs(pct), so a garage asking for
+    # HALF the assessed labour was coloured identically to one asking for 50%
+    # more. Only the over-charge side is claims leakage.
+    (9000,  "NORMAL"),             # -10%
+    (5000,  "NORMAL"),             # -50%
+    (1,     "NORMAL"),             # -100%, near enough
 ])
 def test_variance_thresholds_at_their_boundaries(garage, expected):
     out = le.compare_to_garage(10000, garage, CFG)
     assert out["variance_status"] == expected
+
+
+def test_below_assessment_never_raises_a_review_reason():
+    """A cheaper garage costs the insurer nothing — it must not read as a flag."""
+    out = le.compare_to_garage(10000, 5000, CFG)
+    assert out["variance_status"] == "NORMAL"
+    assert out["review_reasons"] == []
+    assert out["variance_percent"] == -50.0
+
+
+def test_a_large_shortfall_is_still_reported_but_neutrally():
+    """Information is kept, just not coloured as risk: a big gap can mean the
+    estimate under-itemises labour."""
+    out = le.compare_to_garage(10000, 5000, CFG)
+    note = out["below_assessed_note"]
+    assert note and "below" in note
+    assert "No over-charge exposure" in note
+    # It must NOT travel in review_reasons, which the UI renders as a warning.
+    assert note not in out["review_reasons"]
+
+
+def test_small_shortfall_gets_no_note():
+    assert le.compare_to_garage(10000, 9000, CFG)["below_assessed_note"] is None
+
+
+def test_overcharge_reason_says_above_not_a_computed_direction():
+    out = le.compare_to_garage(10000, 18000, CFG)
+    assert "above" in out["review_reasons"][0]
+    assert "below" not in out["review_reasons"][0]
 
 
 def test_variance_amount_and_percent():

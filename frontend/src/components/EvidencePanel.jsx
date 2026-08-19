@@ -467,6 +467,12 @@ function LabourAssessment({ labour }) {
         <p key={i} className="text-[11px] text-warning-700 mt-2 leading-relaxed">{r}</p>
       ))}
 
+      {/* A garage BELOW the assessment is not a risk flag — no over-charge
+          exposure — so this is faint, never warning-toned. */}
+      {labour.below_assessed_note && (
+        <p className="text-[11px] text-faint mt-2 leading-relaxed">{labour.below_assessed_note}</p>
+      )}
+
       <button
         onClick={() => setOpen((o) => !o)}
         className="mt-3 text-[11px] text-brand-600 hover:text-brand-700 font-medium"
