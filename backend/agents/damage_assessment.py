@@ -11,6 +11,7 @@ from services.llm_client import ask_json
 from services.prompt_guards import IMAGE_INJECTION_DEFENSE
 from services.settlement_calc import (
     FAIR_VALUE_MIN_COVERAGE,
+    GST_RATE,
     assessed_fair_value,
     pricing_coverage_pct,
 )
@@ -500,7 +501,53 @@ class DamageAssessmentAgent(BaseAgent):
         # settlement_calc.assessed_fair_value() — the same function the payout
         # math uses, so FC-17/FC-23 can never drift from the settlement bands
         # (this arithmetic used to be duplicated here verbatim).
-        _, _, ai_mid = assessed_fair_value(result)
+        fv_lo, fv_hi, ai_mid = assessed_fair_value(result)
+
+        # ── Make the assessed figure RECONCILABLE on screen ──────────────────
+        # The Evidence panel's "Assessed Fair Value - Breakdown" listed matched
+        # parts and matched labour and stopped there, with no total row. Those
+        # rows CANNOT sum to the figure the settlement ledger prints, for two
+        # reasons that were both invisible:
+        #   1. whole-vehicle labour (ADAS calibration + the once-per-claim
+        #      diagnostic scan) belongs to no single part, so it appears in
+        #      neither bucket's labour_total - but it IS inside
+        #      total_repair_estimate. Worth ~Rs 3,300 on a real claim.
+        #   2. GST. Web-retail part prices are already GST-inclusive; assessed
+        #      labour is not, so assessed_fair_value() grosses up ONLY labour.
+        # The panel also listed undeclared parts among the rows, which are
+        # deliberately NOT in the audited total (see pricing_engine's SCOPE
+        # note) - so reading down the panel and adding up gave a third number.
+        #
+        # Derived from assessed_fair_value()'s own return value, not recomputed,
+        # so this can never drift from the payout math. `labour_whole_vehicle`
+        # is a RESIDUAL, which is what guarantees the rows sum to the total.
+        _fvb = result.get("fair_value_breakdown") or {}
+        _matched = _fvb.get("matched") or {}
+        _lab_total = float((result.get("labour_assessment") or {}).get("total_labour") or 0)
+        _lab_attributed = float(_matched.get("labour_total") or 0)
+        _parts = _matched.get("parts_value") or {}
+        _fvb["assessed_total"] = {
+            "parts_min": round(float(_parts.get("min") or 0)),
+            "parts_max": round(float(_parts.get("max") or 0)),
+            "parts_gst_note": "live-web retail prices are already GST-inclusive",
+            "labour_attributed": round(_lab_attributed),
+            # ADAS calibration + diagnostic scan: real assessed labour that
+            # belongs to no single part, hence absent from every part row.
+            "labour_whole_vehicle": round(max(_lab_total - _lab_attributed, 0)),
+            "labour_total": round(_lab_total),
+            "gst_on_labour": round(_lab_total * GST_RATE),
+            "gst_rate_pct": round(GST_RATE * 100),
+            # These two ARE settlement_breakdown.assessed_fair_value's band.
+            "total_min": round(fv_lo),
+            "total_max": round(fv_hi),
+            "total_mid": round(ai_mid),
+            "note": (
+                "Parts (matched only) + assessed labour + GST on labour. "
+                "Undeclared parts are reported separately and are NOT in this "
+                "total - the benchmark must describe the same repair as the "
+                "quote it audits."
+            ),
+        }
 
         # Whether that figure is trustworthy enough to compare against. Part
         # prices come from live web only now; with poor coverage the assessed

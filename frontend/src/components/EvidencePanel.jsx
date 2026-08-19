@@ -265,17 +265,30 @@ function FairValueBreakdown({ fv, undeclaredParts, unverifiedParts, scopeMismatc
   const uv = fv.unverified || {}
   const cov = fv.pricing_coverage
   const band = (b) => (b && (b.min || b.max) ? `${fmtINR(b.min)} – ${fmtINR(b.max)}` : '—')
+  // The rows that ACTUALLY sum to the assessed fair value in the settlement
+  // ledger. Previously this panel listed matched parts + matched labour and
+  // stopped, so it silently disagreed with the ledger by whole-vehicle labour
+  // (ADAS calibration + diagnostic scan, ~Rs 3,300) plus 18% GST on labour —
+  // and it mixed undeclared parts into the same list even though those are
+  // deliberately outside the audited total. Three numbers, one label.
+  const at = fv.assessed_total
   const rows = [
-    { label: `Parts in garage estimate (${m.count || 0} detected)`, value: band(m.parts_value) },
+    { label: `Parts in garage estimate (${m.count || 0} detected)`, value: band(m.parts_value),
+      hint: at?.parts_gst_note },
     { label: 'Labour — estimate-listed parts', value: fmtINR(m.labour_total) },
-    { label: `Parts detected but NOT in estimate (${u.count || 0})`, value: band(u.parts_value), warn: (u.count || 0) > 0 },
-    { label: 'Labour — undeclared parts', value: fmtINR(u.labour_total) },
   ]
-  if ((uv.count || 0) > 0) {
+  if (at && at.labour_whole_vehicle > 0) {
     rows.push({
-      label: `Claimed but unverified — no photo evidence (${uv.count})`,
-      value: `${fmtINR(uv.claimed_amount_total)} claimed, not priced`,
-      warn: true,
+      label: 'Labour — whole vehicle (ADAS calibration, diagnostic scan)',
+      value: fmtINR(at.labour_whole_vehicle),
+      hint: 'assessed once per claim — belongs to no single part',
+    })
+  }
+  if (at && at.gst_on_labour > 0) {
+    rows.push({
+      label: `GST on labour @ ${at.gst_rate_pct}%`,
+      value: fmtINR(at.gst_on_labour),
+      hint: 'part prices are already GST-inclusive, so only labour is grossed up',
     })
   }
   return (
@@ -283,12 +296,54 @@ function FairValueBreakdown({ fv, undeclaredParts, unverifiedParts, scopeMismatc
       <p className="text-[11px] text-faint uppercase tracking-wider mb-3 font-semibold">Assessed Fair Value — Breakdown</p>
       <div className="space-y-2">
         {rows.map((r) => (
-          <div key={r.label} className="flex items-center justify-between text-sm gap-3">
-            <span className={r.warn ? 'text-warning-700' : 'text-muted'}>{r.label}</span>
-            <span className={cx('font-mono tabular-nums shrink-0', r.warn ? 'text-warning-700' : 'text-ink')}>{r.value}</span>
+          <div key={r.label}>
+            <div className="flex items-center justify-between text-sm gap-3">
+              <span className={r.warn ? 'text-warning-700' : 'text-muted'}>{r.label}</span>
+              <span className={cx('font-mono tabular-nums shrink-0', r.warn ? 'text-warning-700' : 'text-ink')}>{r.value}</span>
+            </div>
+            {r.hint && <p className="text-[10px] text-faint mt-0.5 leading-snug">{r.hint}</p>}
           </div>
         ))}
       </div>
+
+      {/* The reconciling total. This is the SAME number the settlement ledger
+          prints as "AI assessed fair value" — both now come from
+          settlement_calc.assessed_fair_value(), so they cannot disagree. */}
+      {at && (
+        <div className="mt-3 pt-2.5 border-t-2 border-line flex items-center justify-between text-sm gap-3">
+          <span className="font-semibold text-ink">Assessed fair value</span>
+          <span className="font-mono tabular-nums font-semibold text-ink shrink-0">
+            {at.total_min === at.total_max
+              ? fmtINR(at.total_mid)
+              : `${fmtINR(at.total_min)} – ${fmtINR(at.total_max)}`}
+          </span>
+        </div>
+      )}
+
+      {/* Priced and reported, but deliberately OUTSIDE the total above — the
+          benchmark must describe the same repair as the quote it audits. Kept
+          below the total line so it can no longer be read as part of the sum. */}
+      {((u.count || 0) > 0 || (uv.count || 0) > 0) && (
+        <div className="mt-3 pt-2.5 border-t border-line space-y-2">
+          <p className="text-[10px] text-faint uppercase tracking-wider font-semibold">
+            Reported separately — not in the assessed total
+          </p>
+          {(u.count || 0) > 0 && (
+            <div className="flex items-center justify-between text-sm gap-3">
+              <span className="text-warning-700">Parts detected but NOT in estimate ({u.count})</span>
+              <span className="font-mono tabular-nums text-warning-700 shrink-0">{band(u.parts_value)}</span>
+            </div>
+          )}
+          {(uv.count || 0) > 0 && (
+            <div className="flex items-center justify-between text-sm gap-3">
+              <span className="text-warning-700">Claimed but unverified — no photo evidence ({uv.count})</span>
+              <span className="font-mono tabular-nums text-warning-700 shrink-0">
+                {fmtINR(uv.claimed_amount_total)} claimed, not priced
+              </span>
+            </div>
+          )}
+        </div>
+      )}
       {(u.count || 0) > 0 && (
         <p className="text-[11px] text-warning-700 mt-3">
           Undeclared: {(undeclaredParts || []).map((p) => (p.part || '').replace(/_/g, ' ')).join(', ')} — visible damage the garage estimate omits (not annotated on photos; flagged for the adjuster).
