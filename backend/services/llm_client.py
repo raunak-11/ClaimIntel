@@ -1,8 +1,15 @@
 """
 LLM client for ClaimIntel — powered by Groq (free, fast, open-source models).
 
-Text agent calls  → llama-3.3-70b-versatile  (6,000 req/day free)
-Vision agent calls → meta-llama/llama-4-scout-17b-16e-instruct (1,000 req/day free)
+Model IDs live in config.py and are env-overridable — do NOT hardcode them here
+again. Groq has decommissioned two models this project depended on
+(meta-llama/llama-4-scout-17b, vision, Jul 2026; llama-3.3-70b-versatile, text,
+Aug 2026) and each time the hardcoded constant meant a source edit and an image
+rebuild to recover, after a live investigation had already failed halfway.
+
+Text agent calls   → GROQ_TEXT_MODEL, then GROQ_TEXT_FALLBACKS on a 404 only
+Vision agent calls → Bedrock (primary, see VISION_PROVIDER); GROQ_VISION_MODEL is
+                     the fallback behind it
 
 Public API (kept stable across the original Gemini → Groq migration):
   ask_text(prompt) -> str
@@ -18,12 +25,19 @@ import time
 
 from groq import Groq
 
-from config import GROQ_API_KEY
+from config import (
+    GROQ_API_KEY, GROQ_TEXT_MODEL, GROQ_TEXT_FALLBACKS, GROQ_VISION_MODEL,
+)
 from services import token_tracker
 
 _client = Groq(api_key=GROQ_API_KEY)
 
-TEXT_MODEL   = "llama-3.3-70b-versatile"    # text-only agents
+# Both model IDs now come from config (env-overridable). They were hardcoded
+# here and Groq has decommissioned two of them mid-project — see config.py.
+# TEXT_MODEL is the FIRST choice; _TEXT_FALLBACKS is tried only when a model is
+# reported missing, so a delisting degrades the model instead of the pipeline.
+TEXT_MODEL     = GROQ_TEXT_MODEL            # text-only agents (A2, A4, A5)
+_TEXT_FALLBACKS = GROQ_TEXT_FALLBACKS
 # Vision agents (A1 damage assessment, A3 incident reconstruction) and the
 # document-authenticity check.
 #
@@ -37,7 +51,7 @@ TEXT_MODEL   = "llama-3.3-70b-versatile"    # text-only agents
 #
 # It is a reasoning model and wraps its answer in <think> — see _clean_raw,
 # which must strip that before ask_json's brace extraction runs.
-VISION_MODEL = "qwen/qwen3.6-27b"
+VISION_MODEL = GROQ_VISION_MODEL
 
 _TEXT_MAX_TOKENS   = 4096
 # MUST stay well under the vision model's free-tier limit of 8,000 tokens per
@@ -96,9 +110,60 @@ def _b64_image(path: str) -> tuple[str, str]:
 
 # ── Core LLM call with retry ──────────────────────────────────────────────────
 
+def _is_model_unavailable(err: Exception) -> bool:
+    """True when Groq says this model ID is not servable for this key.
+
+    Groq answers a decommissioned or unentitled model with
+    `404 {"code": "model_not_found"}`. That is PERMANENT for the life of the
+    process: retrying it is guaranteed to fail and only delays the real error
+    (three attempts against a dead model cost ~10s per agent and produced the
+    misleading message "LLM call failed after 3 attempts", which reads like
+    flakiness rather than a delisting).
+
+    Deliberately narrow. A 429/413 must NOT match — falling back to a smaller
+    model on a rate limit would silently downgrade every answer for the rest of
+    the day, which is far worse than waiting out the window.
+    """
+    text = str(err).lower()
+    return "model_not_found" in text or (
+        "404" in text and "does not exist" in text
+    )
+
+
 def _call(messages: list[dict], model: str, agent_name: str | None = None,
-          claim_id: str | None = None) -> str:
-    """Call Groq with retry on transient errors. Logs token usage (observability)."""
+          claim_id: str | None = None, fallbacks: tuple[str, ...] = ()) -> str:
+    """Call Groq with retry on transient errors. Logs token usage (observability).
+
+    `fallbacks` are consulted ONLY when the current model is reported missing
+    (see _is_model_unavailable), never on a transient or rate-limit error.
+    """
+    candidates = [model, *(m for m in fallbacks if m and m != model)]
+    last_err: Exception | None = None
+    for idx, candidate in enumerate(candidates):
+        try:
+            return _call_one(messages, candidate, agent_name, claim_id)
+        except _ModelUnavailable as e:
+            last_err = e.__cause__ or e
+            if idx + 1 < len(candidates):
+                print(f"[llm_client] model '{candidate}' unavailable "
+                      f"({type(last_err).__name__}); falling back to "
+                      f"'{candidates[idx + 1]}'")
+                continue
+            raise RuntimeError(
+                f"No usable Groq text model. Tried {candidates!r}; last error: "
+                f"{last_err}. Set GROQ_TEXT_MODEL to a model this key can serve "
+                f"(GET https://api.groq.com/openai/v1/models lists them)."
+            ) from last_err
+    raise RuntimeError(f"LLM call failed: {last_err}")
+
+
+class _ModelUnavailable(Exception):
+    """Internal marker: this model ID is not servable, try the next candidate."""
+
+
+def _call_one(messages: list[dict], model: str, agent_name: str | None = None,
+              claim_id: str | None = None) -> str:
+    """One model, with the transient-error retry loop."""
     max_tokens = _VISION_MAX_TOKENS if model == VISION_MODEL else _TEXT_MAX_TOKENS
     last_err = None
     for attempt in range(_MAX_RETRIES + 1):
@@ -127,13 +192,19 @@ def _call(messages: list[dict], model: str, agent_name: str | None = None,
             return resp.choices[0].message.content.strip()
         except Exception as e:
             last_err = e
+            # A delisted/unentitled model never recovers by waiting — hand it
+            # straight to the fallback chain instead of burning retries.
+            if _is_model_unavailable(e):
+                raise _ModelUnavailable(str(e)) from e
             delay = _retry_delay_for(e, attempt)
             if delay is None:
                 # Unretryable within this request's lifetime — stop immediately.
                 break
             if attempt < _MAX_RETRIES:
                 time.sleep(delay)
-    raise RuntimeError(f"LLM call failed after {_MAX_RETRIES + 1} attempts: {last_err}")
+    raise RuntimeError(
+        f"LLM call failed after {_MAX_RETRIES + 1} attempts on '{model}': {last_err}"
+    )
 
 
 def _retry_delay_for(err: Exception, attempt: int) -> float | None:
@@ -177,7 +248,8 @@ def _retry_delay_for(err: Exception, attempt: int) -> float | None:
 
 def ask_text(prompt: str, agent_name: str | None = None, claim_id: str | None = None) -> str:
     messages = [{"role": "user", "content": prompt}]
-    return _call(messages, TEXT_MODEL, agent_name, claim_id)
+    return _call(messages, TEXT_MODEL, agent_name, claim_id,
+                 fallbacks=_TEXT_FALLBACKS)
 
 
 def ask_with_images(prompt: str, image_paths: list[str], agent_name: str | None = None,
@@ -352,3 +424,53 @@ def ask_json(prompt: str, image_paths: list[str] | None = None,
     raise ValueError(
         f"ask_json: could not parse response after 4 repair passes.\nRaw start: {raw[:300]}"
     )
+
+
+# ── Model preflight ───────────────────────────────────────────────────────────
+# Groq has decommissioned two models used by this project mid-flight. Both times
+# the first sign was a customer-facing investigation dying halfway, with agents
+# on other providers completing normally around it — so the run still produced a
+# settlement. A delisting is cheap to detect (one unauthenticated-cost GET) and
+# expensive to discover during a demo, so it gets its own check rather than
+# being inferred from a failed claim.
+
+def available_models() -> list[str]:
+    """Model IDs this API key can actually serve, newest listing from Groq."""
+    return sorted(m.id for m in _client.models.list().data)
+
+
+def preflight() -> dict:
+    """Compare the configured model IDs against what Groq will serve.
+
+    Returns a dict rather than raising: the caller decides whether a missing
+    model is fatal. `reachable` is False when the check itself could not run
+    (offline, blocked, bad key) — which must NOT be reported as "models
+    missing", because that would send an operator chasing a model change when
+    the real problem is the network or the key.
+    """
+    text_chain = [TEXT_MODEL, *_TEXT_FALLBACKS]
+    out: dict = {
+        "reachable": False,
+        "text_model": TEXT_MODEL,
+        "text_fallbacks": list(_TEXT_FALLBACKS),
+        "vision_model": VISION_MODEL,
+        "missing": [],
+        "usable_text_models": [],
+        "ok": False,
+        "error": None,
+    }
+    try:
+        served = set(available_models())
+    except Exception as e:                      # offline / bad key / blocked
+        out["error"] = f"{type(e).__name__}: {e}"
+        return out
+
+    out["reachable"] = True
+    out["available_count"] = len(served)
+    out["missing"] = [m for m in (*text_chain, VISION_MODEL) if m not in served]
+    out["usable_text_models"] = [m for m in text_chain if m in served]
+    # Usable means at least one TEXT model survives — the text chain is what
+    # carries A2/A4/A5. Groq vision is only the fallback behind Bedrock, so its
+    # absence is reported but is not on its own a failure.
+    out["ok"] = bool(out["usable_text_models"])
+    return out

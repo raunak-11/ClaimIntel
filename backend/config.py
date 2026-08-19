@@ -48,6 +48,27 @@ VISION_PROVIDER = (os.getenv("VISION_PROVIDER", "") or "bedrock").strip().lower(
 # ap-south-1 — Nova (any size), Pixtral and Llama-3.2-Vision all fail there.
 BEDROCK_VISION_MODEL = os.getenv("BEDROCK_VISION_MODEL", "") or "qwen.qwen3-vl-235b-a22b"
 
+# ── Groq model IDs — CONFIGURABLE ON PURPOSE ─────────────────────────────────
+# These were hardcoded in llm_client.py and Groq has now decommissioned two of
+# them mid-project: meta-llama/llama-4-scout-17b (vision, Jul 2026) and
+# llama-3.3-70b-versatile (text, Aug 2026). Each retirement returns
+# 404 model_not_found and took out every agent on that path until someone
+# edited source and rebuilt the image. A vendor delisting a model is routine
+# and must be answerable with an env var, not a code change.
+#
+# GROQ_TEXT_FALLBACKS is an ordered chain tried on 404/400 ONLY (never on a
+# rate limit — falling back on a 429 would silently downgrade model quality
+# for the rest of the day). Verified present on this account 2026-08-19:
+# openai/gpt-oss-120b, openai/gpt-oss-20b, qwen/qwen3.6-27b.
+GROQ_TEXT_MODEL = os.getenv("GROQ_TEXT_MODEL", "") or "openai/gpt-oss-120b"
+GROQ_TEXT_FALLBACKS = tuple(
+    m.strip() for m in (
+        os.getenv("GROQ_TEXT_FALLBACKS", "") or "openai/gpt-oss-20b,qwen/qwen3.6-27b"
+    ).split(",") if m.strip()
+)
+# Groq vision is the FALLBACK path only (Bedrock is primary — see VISION_PROVIDER).
+GROQ_VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "") or "qwen/qwen3.6-27b"
+
 # Whether the fair-value benchmark may consult live web prices (Serper/Tavily).
 #
 # KEEP THIS TRUE unless you understand what you lose: the live lookup is THE

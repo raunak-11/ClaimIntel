@@ -663,7 +663,7 @@ function AgentDetailPanel({ agentKey, data, agents }) {
 }
 
 // ── Agent step ────────────────────────────────────────────────────────────────
-function AgentStep({ agent, status, summary, data, agents, isLast, skipReason }) {
+function AgentStep({ agent, status, summary, data, agents, isLast, skipReason, errorReason }) {
   const [open, setOpen] = useState(false)
   const isDone = status === 'done'
   const isRunning = status === 'running'
@@ -712,7 +712,12 @@ function AgentStep({ agent, status, summary, data, agents, isLast, skipReason })
             Not run — {asText(skipReason)}
           </p>
         )}
-        {summary && !open && !isSkipped && (
+        {isError && errorReason && (
+          <p className="text-[11px] text-danger-700 px-3.5 pb-3 -mt-1 leading-relaxed break-words">
+            Did not complete — {asText(errorReason)}
+          </p>
+        )}
+        {summary && !open && !isSkipped && !isError && (
           <p className="text-xs text-muted px-3.5 pb-3 -mt-1 leading-relaxed">{asText(summary)}</p>
         )}
         {open && isDone && (
@@ -738,9 +743,16 @@ export default function InvestigationWorkflow({
     : {}
   const skips = { ...storedSkips, ...(skippedAgents || {}) }
 
+  // Same reasoning as the skip derivation above, applied to failures: an agent
+  // that errored DOES have a stored node ({status:'error', error:'…'}), so the
+  // `liveAgents[key] ? 'done'` fallback below reported it as a green "Done"
+  // the moment the SSE state was gone — i.e. on every page revisit. The live
+  // run showed the error correctly and the reload silently contradicted it.
+  // Stored status is checked before that fallback, so the two agree.
   const statusFor = (key) => (
     agentStatuses[key]
     || (skips[key] ? 'skipped' : null)
+    || (liveAgents[key]?.status === 'error' ? 'error' : null)
     || (liveAgents[key] ? 'done' : 'pending')
   )
 
@@ -761,6 +773,7 @@ export default function InvestigationWorkflow({
             data={liveAgents[agent.key]}
             agents={liveAgents}
             skipReason={skips[agent.key]}
+            errorReason={liveAgents[agent.key]?.error}
             isLast={i === AGENTS.length - 1}
           />
         ))}

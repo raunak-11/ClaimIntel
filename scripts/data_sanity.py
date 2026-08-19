@@ -465,6 +465,46 @@ def check_cross_module_invariants() -> None:
             report("ok", "inflated-case workshop is present in the fraud archive")
 
 
+
+# ── 7. LLM model availability ─────────────────────────────────────────────────
+
+def check_models() -> None:
+    """The configured Groq model IDs must be servable by the configured key.
+
+    Groq decommissioned llama-4-scout (vision, Jul 2026) and
+    llama-3.3-70b-versatile (text, Aug 2026) while this project depended on
+    them. Both times it was found by a live investigation dying mid-run. It is
+    a network check, so an unreachable API is a WARN (offline is a legitimate
+    state for this script) while a reachable API missing every text model is a
+    FAIL — that is the condition that silently guts A2/A4/A5.
+    """
+    section("7. LLM model availability")
+    try:
+        sys.path.insert(0, os.path.join(ROOT, "backend"))
+        from services import llm_client
+    except Exception as e:
+        report("WARN", f"could not import llm_client ({e}) - model check skipped")
+        return
+
+    pf = llm_client.preflight()
+    if not pf["reachable"]:
+        report("WARN", f"Groq model list unreachable ({pf['error']}) - "
+                       "cannot verify model IDs offline")
+        return
+
+    report("OK", f"Groq reachable, {pf['available_count']} models served to this key")
+    if pf["missing"]:
+        for m in pf["missing"]:
+            lvl = "WARN" if m == pf["vision_model"] else "FAIL"
+            report(lvl, f"configured model '{m}' is NOT served by this key")
+    if not pf["ok"]:
+        report("FAIL", "NO configured text model is available - A2/A4/A5 will all "
+                       "fail. Set GROQ_TEXT_MODEL to one of: "
+                       + ", ".join(llm_client.available_models()[:6]))
+    else:
+        report("OK", f"text chain usable: {', '.join(pf['usable_text_models'])}")
+
+
 def main() -> int:
     print("ClaimIntel demo-data sanity check")
     check_schema_integrity()
@@ -473,6 +513,7 @@ def main() -> int:
     check_price_cache()
     check_claims_on_disk()
     check_cross_module_invariants()
+    check_models()
 
     fails = [m for l, m in FINDINGS if l == "FAIL"]
     warns = [m for l, m in FINDINGS if l == "WARN"]

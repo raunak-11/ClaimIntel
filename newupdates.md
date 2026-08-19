@@ -79,6 +79,7 @@ metadata:
 | 58 | PDF report 500'd on every gate-rejected claim (em-dash through fpdf2's Latin-1 core font); report had no eligibility section at all | ✅ Fixed 2026-08-18 |
 | 59 | `build_vectorstore.py` + `generate_policy_pdfs.py` written — both were referenced by code/docs and absent. Policy PDFs had drifted from policies.csv on the two demo policies (item #3) | ✅ Fixed 2026-08-19 |
 | 60 | Fixtures repriced to real market values, brands made fictional + specimen-marked, labour as hours × rate | ✅ Fixed 2026-08-19 |
+| 61 | **Groq retired `llama-3.3-70b-versatile` — A2 + A5 died mid-run and the claim stored `fraud_risk_score: 0` for an agent that never ran** (0 reads as "assessed, clean" to the donut, the portfolio mean and the fraud queue). Now: model IDs env-overridable, 404 treated as permanent + fallback chain (never on a 429), `preflight()` at `/api/health/models` + `data_sanity` §7, gpt-oss rates added, and the UI no longer paints an errored agent green "Done" on reload | ✅ Fixed 2026-08-19 |
 
 ## [P0 — Real-world correctness](docs/changelog.md) (settlement math & policy handling)
 

@@ -235,6 +235,12 @@ export default function FraudDetail() {
   // pre-screen checks. Showing an empty 32-row grid there would imply the
   // checks ran and passed.
   const screenedOnly = !fraud.fraud_checks && !!gate.checks
+  // Two very different reasons produce a pre-screen-only view, and telling the
+  // adjuster the wrong one sends them to the wrong fix. Gate-rejected: the
+  // inputs never existed. Agent errored: the inputs DID exist (damage
+  // assessment, parsed documents) and Agent 2 crashed on them — which is a
+  // re-runnable fault, not a property of the claim.
+  const fraudErrored = fraud.status === 'error'
   const checks = fraud.fraud_checks || gate.checks || []
   const byId = Object.fromEntries(checks.map((c) => [c.id, c]))
   const score = summary.fraud_risk_score
@@ -347,10 +353,27 @@ export default function FraudDetail() {
 
       {screenedOnly ? (
         <Card className="p-5">
-          <p className="text-xs text-muted mb-3 leading-relaxed">
-            Only the metadata pre-screen ran on this claim. The remaining checks need a damage
-            assessment, parsed documents or telematics, none of which were produced.
-          </p>
+          {fraudErrored ? (
+            <div className="mb-3 rounded-lg border border-danger-200 bg-danger-50/60 px-3 py-2.5">
+              <p className="text-xs font-medium text-danger-700 leading-relaxed">
+                Fraud Intelligence did not complete — the remaining 19 checks were never run.
+              </p>
+              <p className="text-[11px] text-danger-700/80 mt-1 leading-relaxed break-words">
+                {(typeof fraud.error === 'string' ? fraud.error : '')
+                  || 'The agent failed during the investigation.'}
+              </p>
+              <p className="text-[11px] text-muted mt-1.5 leading-relaxed">
+                The 13 checks below are the eligibility pre-screen, which runs before Agent 2 and
+                is unaffected. There is no fraud score for this claim — re-investigate once the
+                underlying fault is resolved.
+              </p>
+            </div>
+          ) : (
+            <p className="text-xs text-muted mb-3 leading-relaxed">
+              Only the metadata pre-screen ran on this claim. The remaining checks need a damage
+              assessment, parsed documents or telematics, none of which were produced.
+            </p>
+          )}
           <ul>{visible(checks).map((c) => <CheckRow key={c.id} check={c} />)}</ul>
         </Card>
       ) : (

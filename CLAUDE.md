@@ -161,12 +161,33 @@ Deterministic guards + IRDAI settlement math (+ inflation cap) → SSE stream �
 
 ### LLM Client (`backend/services/llm_client.py`)
 > **Text runs on Groq; every image call runs on AWS Bedrock.**
+**Model IDs live in `config.py` and are env-overridable — never hardcode them in
+`llm_client.py` again** (see below).
 ```python
-TEXT_MODEL           = "llama-3.3-70b-versatile"    # Groq — A2, A4, A5
+GROQ_TEXT_MODEL      = "openai/gpt-oss-120b"        # Groq — A2, A4, A5
+GROQ_TEXT_FALLBACKS  = "openai/gpt-oss-20b,qwen/qwen3.6-27b"   # tried on 404 ONLY
 BEDROCK_VISION_MODEL = "qwen.qwen3-vl-235b-a22b"    # Bedrock ap-south-1 — A1, A3, doc authenticity
-VISION_MODEL         = "qwen/qwen3.6-27b"           # Groq — fallback only, if Bedrock fails
+GROQ_VISION_MODEL    = "qwen/qwen3.6-27b"           # Groq — fallback only, if Bedrock fails
 ```
-**Why vision moved off Groq (2026-07):** Groq retired
+**Why text moved off llama-3.3 (2026-08-19):** Groq decommissioned
+`llama-3.3-70b-versatile`; it returns `404 model_not_found`. A2 and A5 both died
+mid-investigation while the Bedrock vision agents completed normally around them —
+so the run still produced a settlement, and the orchestrator stored
+`fraud_risk_score: 0` for an agent that never ran. **This was the second such
+retirement** (llama-4-scout, vision, Jul 2026), and the first fix hardcoded a new
+constant, which is why the second one hurt just as much. Now:
+- Model IDs are config + env (`GROQ_TEXT_MODEL`), so a delisting is a `.env` edit,
+  not a source change and image rebuild.
+- `_is_model_unavailable()` treats a 404 as **permanent** — no retries — and walks
+  `GROQ_TEXT_FALLBACKS`. Deliberately narrow: a **429 never triggers fallback**,
+  because silently downgrading the model for the rest of the day is worse than
+  waiting out a rate-limit window.
+- `llm_client.preflight()` compares configured IDs against what the key actually
+  serves. Exposed at **`GET /api/health/models`** and as **`data_sanity` section 7**.
+  Run one of them before a demo.
+- Every configured model must carry a `token_tracker.MODEL_RATES` row — a test
+  enforces it, so a swap can't silently bill at the previous model's price.
+**Why vision moved off Groq (2026-07) — the first retirement:** Groq retired
 `meta-llama/llama-4-scout-17b-16e-instruct` on 17 July with 30 days' notice, breaking A1 and A3
 outright — while the text agents kept running, so investigations still "completed" and still
 emitted a settlement with no damage assessment behind it. Its only remaining vision model is

@@ -148,6 +148,20 @@ def health():
     return {"status": "ok", "service": "ClaimIntel"}
 
 
+@app.get("/api/health/models")
+def health_models():
+    """Are the configured Groq model IDs actually servable by this key?
+
+    Groq has decommissioned two models this project depended on mid-project;
+    each time the first symptom was a live investigation failing halfway. This
+    turns that into a check an operator can run before a demo instead of
+    discovering it during one. Never raises — an unreachable API reports
+    `reachable: false`, which is a different problem from a missing model.
+    """
+    from services import llm_client
+    return llm_client.preflight()
+
+
 # ── KB Status ─────────────────────────────────────────────────────────────────
 
 @app.get("/api/kb/status")

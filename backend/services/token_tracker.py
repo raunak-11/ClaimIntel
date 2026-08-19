@@ -48,13 +48,28 @@ DAILY_VISION_REQUEST_CAP = 1000
 #
 # `kind` drives the free-tier cap split, so it must track llm_client.py /
 # config.py rather than being guessed from the name.
-RATES_VERIFIED_ON = "2026-08-13"
+RATES_VERIFIED_ON = "2026-08-19"
 
 MODEL_RATES: dict[str, dict] = {
     # Groq — text agents (A2 fraud, A4 context, A5 settlement) and document
     # field extraction under DOC_INFERENCE_PROVIDER=groq.
+    #
+    # gpt-oss-120b is the current GROQ_TEXT_MODEL; -20b is its first fallback.
+    # Verified 2026-08-19 against Groq's published on-demand rates (two
+    # independent sources). NOT the batch or cached-input rates — this codebase
+    # makes plain synchronous calls, so quoting the discounted figure would
+    # understate real spend.
+    "openai/gpt-oss-120b": {
+        "provider": "groq", "kind": "text", "input": 0.15, "output": 0.60},
+    "openai/gpt-oss-20b": {
+        "provider": "groq", "kind": "text", "input": 0.075, "output": 0.30},
+    # RETIRED by Groq 2026-08 (404 model_not_found). Kept deliberately: cost is
+    # recomputed on read, so historical token_usage.csv rows still price
+    # correctly against the rate that applied when they were logged. Do not
+    # delete while any row references it.
     "llama-3.3-70b-versatile": {
-        "provider": "groq", "kind": "text", "input": 0.59, "output": 0.79},
+        "provider": "groq", "kind": "text", "input": 0.59, "output": 0.79,
+        "retired": True},
     # Groq — vision fallback only; fires when a Bedrock vision call fails.
     "qwen/qwen3.6-27b": {
         "provider": "groq", "kind": "vision", "input": 0.30, "output": 0.50},

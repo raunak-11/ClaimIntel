@@ -19,6 +19,35 @@ def _mark_survey_report(claim_id: str) -> None:
         pass          # a clock stamp must never fail an investigation
 
 
+def _fraud_incomplete(fraud: dict) -> bool:
+    """Did Agent 2 fail to produce a score?
+
+    Two distinct failures, same consequence: the agent raised (`status:
+    "error"`), or it returned a payload with no `fraud_score` in it. Both mean
+    no fraud assessment exists for this claim.
+    """
+    return fraud.get("status") == "error" or "fraud_score" not in fraud
+
+
+def _reported_fraud_score(fraud: dict) -> int | None:
+    """The fraud score to PUBLISH — None when Agent 2 did not complete.
+
+    Never 0. Zero is a real, meaningful score ("no indicators found") and every
+    consumer reads it that way: the risk donut paints a confident green 0%,
+    /api/analytics folds it into the portfolio mean, and the fraud queue ranks
+    the claim as the safest in the book. Publishing 0 for an agent that never
+    ran is the difference between "we checked and it's clean" and "we never
+    checked" — on the exact claim a human most needs to look at.
+
+    The eligibility gate already established None as this project's
+    "not assessed" value and every reader was built for it (analytics skips
+    None explicitly, the donut renders an em-dash, the PDF omits the line).
+    """
+    if _fraud_incomplete(fraud):
+        return None
+    return fraud.get("fraud_score", 0)
+
+
 async def run_pipeline(claim_id: str, claim: dict, queue: asyncio.Queue):
     """
     Sequences all 5 agents, emits SSE events per agent, writes result.json.
@@ -356,7 +385,7 @@ async def run_pipeline(claim_id: str, claim: dict, queue: asyncio.Queue):
     # its own guard, separate from the band guard below, so its reason text
     # doesn't get overwritten by a band message that would misleadingly cite a
     # fraud score that was never actually computed.
-    fraud_errored = fraud.get("status") == "error" or "fraud_score" not in fraud
+    fraud_errored = _fraud_incomplete(fraud)
     fraud_score = fraud.get("fraud_score", 0) or 0
     if fraud_errored and decision == "Approve":
         decision = "Escalate"
@@ -488,7 +517,17 @@ async def run_pipeline(claim_id: str, claim: dict, queue: asyncio.Queue):
     needs_human_review = bool(routing_reasons)
 
     summary = {
-        "fraud_risk_score":    fraud.get("fraud_score", 0),
+        # None, never 0, when Agent 2 did not complete. 0 is a REAL score
+        # meaning "no fraud indicators found", and every consumer reads it that
+        # way — the risk donut would show a confident green 0%, the portfolio
+        # average in /api/analytics would be dragged down by claims that were
+        # never assessed, and the fraud queue would rank an unassessed claim as
+        # the safest in the book. The eligibility gate already established this
+        # convention (eligibility_gate.py: "fraud_risk_score": None) and every
+        # reader was built for it: analytics skips None explicitly, the donut
+        # renders an em-dash, and the PDF omits the line. This one line was
+        # writing 0 against the grain of all of it.
+        "fraud_risk_score":    _reported_fraud_score(fraud),
         "fraud_risk_label":    fraud_label,
         "damage_consistency":  damage.get("consistent_with_description", "Unknown"),
         "incident_consistency": incident_consistency,
