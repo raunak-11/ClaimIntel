@@ -28,8 +28,8 @@ Always copy the incident date/time the script prints (values written here go sta
 ## Upload (Supporting Evidence tabs)
 - **Damage Photos:** `Vijay_M_Damage_Photo_1.jpg` (real photo — plate reads TN12AJ1603, matches the policy)
 - **Garage Estimate tab — PICK ONE:**
-  - **Option A (genuine → Approve):** upload `Vijay_M_Garage_Estimate_Fair.pdf`, amount `54280` *(recalibrated 2026-07-23 after the double-GST comparison fix, centred at ~-14.5% vs the AI's live assessed value of ₹63,494 for this photo — copy the exact amount the script prints, it can drift if the live price cache turns over)*, workshop `Kia Authorised Service Centre - Chennai`
-  - **Option B (inflated → Escalate):** upload `Vijay_M_Garage_Estimate_Inflated.pdf`, amount `214288`, workshop `Sri Balaji Auto Body Works`
+  - **Option A (genuine → Approve):** upload `Vijay_M_Garage_Estimate_Fair.pdf`, amount `90884` *(repriced 2026-08-19 to genuine Indian market values; measured live at +10.3% against the AI assessed value of ₹82,408 with 83% pricing coverage → "consistent" band. Copy the exact amount the script prints — it can drift if the live price cache turns over)*, workshop `Sundaram Auto Care - Authorised Service Partner`
+  - **Option B (inflated → Escalate):** upload `Vijay_M_Garage_Estimate_Inflated.pdf`, amount `290634`, workshop `Sri Balaji Auto Body Works`
 - **DL & RC tab (mandatory):** `Vijay_M_Driving_License.pdf` + `Vijay_M_Vehicle_RC.pdf` (name/reg match the policy → FC-29 passes)
 - **FIR Report tab:** FIR number `0512/2026` (optional), upload `Vijay_M_FIR.pdf`
 - **Dash Cam / Telematics tabs:** leave empty — not part of this story

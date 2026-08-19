@@ -40,8 +40,8 @@ python scripts/generate_test_cases.py
 - **Damage Photos:** the two photos shipped in this folder (`2.jpg` + `3.jpg`) — front-end
   collision, deployed airbags visible through the windscreen, plate matches the policy
 - **Garage Estimate tab — PICK ONE:**
-  - **Option A (fair, authorised):** upload `Arjun_Mehta_Garage_Estimate_Fair.pdf`, amount `116584`, workshop `Hyundai Exclusive Service - Perungudi` — includes the mandatory airbag/pretensioner replacement
-  - **Option B (under-declared → FC-23):** upload `Arjun_Mehta_Garage_Estimate_Underdeclared.pdf`, amount `18880`, workshop `Roadside QuickFix Garage` — a lowball cash-job quote that skips the deployed airbags entirely
+  - **Option A (fair, authorised):** upload `Arjun_Mehta_Garage_Estimate_Fair.pdf`, amount `165602`, workshop `Marina Motors - Authorised Service Centre, Perungudi` — includes the mandatory airbag/pretensioner replacement
+  - **Option B (under-declared → FC-23):** upload `Arjun_Mehta_Garage_Estimate_Underdeclared.pdf`, amount `26550`, workshop `Roadside QuickFix Garage` — a lowball cash-job quote that skips the deployed airbags entirely
 - **DL & RC tab (mandatory):** `Arjun_Mehta_Driving_License.pdf` + `Arjun_Mehta_Vehicle_RC.pdf`
 - **FIR Report tab:** upload `Arjun_Mehta_FIR.pdf`
 - **Telematics tab:** upload `sample_fraud_mismatch.json` — logs 0.2g impact, no hard braking, no airbag, GPS trail nowhere near Chennai
@@ -54,7 +54,7 @@ python scripts/generate_test_cases.py
 - **Incident reconstruction** should report the sensor-vs-photo **airbag contradiction**
   (telematics `airbag_deployed: false` vs deployed airbags visible in the photos) as an
   inconsistency — new prompt behaviour added 2026-07-23.
-- **Option B adds FC-23** (garage under-declaration — an ₹18,880 cash quote against
+- **Option B adds FC-23** (garage under-declaration — a ₹26,550 cash quote against
   visibly airbag-deploying damage the AI will assess far higher; skipping SRS replacement
   is the tell).
 - **FC-05 and FC-20 should both PASS** (recent incident, location matches the FIR) — the

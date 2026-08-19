@@ -35,14 +35,14 @@ python scripts/generate_test_cases.py
   inflation+FIR-mismatch story without the FC-28 flag.
 - **Garage Estimate tab — PICK ONE:**
   - **Option A (fair benchmark):** upload `Rohit_Madeshiya_Garage_Estimate_Fair.pdf`, amount
-    `67732` *(copy the exact amount the script prints — scope recalibrated 2026-07-23 to the
+    `88948` *(copy the exact amount the script prints — scope recalibrated 2026-07-23 to the
     shipped photos: bumper, bonnet, windscreen, LH fender, both LH doors, LH mirror, arch
     liner + labour. Priced at honest authorised-workshop rates; NOT yet re-verified against
     a live AI run since the scope change — do one verification investigation before the demo
     and adjust if the fair-value band has drifted, newupdates.md #10c/#34)*, workshop
-    `Maruti Suzuki Arena Authorised Service - Etawah` — designed to stay inflation-clean; the
+    `Yamuna Motors - Authorised Service Centre, Etawah` — designed to stay inflation-clean; the
     case still escalates on FC-05 + FC-20 alone
-  - **Option B (inflated — the headline demo):** upload `Rohit_Madeshiya_Garage_Estimate_Inflated.pdf`, amount `129328`, workshop `Ganga Motors & Body Works` — identical scope at ~+90% prices
+  - **Option B (inflated — the headline demo):** upload `Rohit_Madeshiya_Garage_Estimate_Inflated.pdf`, amount `194228`, workshop `Ganga Motors & Body Works` — identical scope at ~+118% prices
 - **DL & RC tab (mandatory):** `Rohit_Madeshiya_Driving_License.pdf` + `Rohit_Madeshiya_Vehicle_RC.pdf`
 - **FIR Report tab:** FIR number `0145/2026` (optional), upload `Rohit_Madeshiya_FIR.pdf`
 - **Dash Cam / Telematics tabs:** leave empty
