@@ -53,6 +53,42 @@ def _write_header_only(path: str, fields: list[str]) -> None:
         f.write(buf.getvalue())
 
 
+
+def rmtree_robust(path: str, attempts: int = 5) -> None:
+    """shutil.rmtree that survives Windows/OneDrive transient locks.
+
+    A plain rmtree raises PermissionError [WinError 5] on this project's OneDrive
+    path whenever the sync client still holds a directory for a moment — it has
+    failed on data/claims/{id}/docs/claim_form more than once, leaving the CSVs
+    reset but the folders behind and needing a manual second step. Retries with a
+    short backoff and clears the read-only bit Windows sets on synced files.
+    """
+    import stat
+    import time
+
+    def _on_error(func, target, _exc):
+        try:
+            os.chmod(target, stat.S_IWRITE)
+            func(target)
+        except Exception:
+            pass
+
+    for i in range(attempts):
+        if not os.path.exists(path):
+            return
+        try:
+            shutil.rmtree(path, onexc=_on_error)
+            if not os.path.exists(path):
+                return
+        except (PermissionError, OSError):
+            pass
+        time.sleep(0.4 * (i + 1))
+    if os.path.exists(path):
+        raise PermissionError(
+            f"Could not remove {path} after {attempts} attempts - it is most likely "
+            f"held by OneDrive or a running backend. Close them and re-run.")
+
+
 def main() -> None:
     if "--yes" not in sys.argv:
         claim_count = max(0, sum(1 for _ in open(CLAIMS_CSV, encoding="utf-8")) - 1) if os.path.exists(CLAIMS_CSV) else 0
@@ -72,7 +108,7 @@ def main() -> None:
         for name in os.listdir(CLAIMS_DIR):
             path = os.path.join(CLAIMS_DIR, name)
             if os.path.isdir(path):
-                shutil.rmtree(path)
+                rmtree_robust(path)
             else:
                 os.remove(path)
 
