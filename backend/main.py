@@ -552,6 +552,37 @@ async def _run_investigation(claim_id: str, claim: dict, fresh: bool = False):
 
 # ── SSE Stream ────────────────────────────────────────────────────────────────
 
+@app.get("/api/claims/{claim_id}/investigation-status")
+def investigation_status(claim_id: str):
+    """Is an investigation for this claim in flight right now?
+
+    The pipeline runs as a server-side background task and is completely
+    independent of any browser: navigating away closes the SSE stream but the
+    run continues, and InvestigationLog.put() only appends to a list so a
+    departed client can never stall it.
+
+    The client had no way to ASK, though. On returning to a claim the hook
+    started from a blank slate and opened no stream, so a run in progress looked
+    either finished (the agents already written to result.json rendered as
+    "Done") or dead (the rest sat on "Waiting"). This is the missing question.
+
+    `running` is deliberately conservative: it is true only while a log exists
+    in this process AND has not emitted its terminal `done`. After a container
+    restart the in-memory log is gone, so this reports not-running rather than
+    claiming a run it cannot actually stream.
+    """
+    log = _investigation_logs.get(claim_id)
+    if log is None:
+        return {"running": False, "finished": False, "event_count": 0,
+                "known": False}
+    return {
+        "running": not log.finished,
+        "finished": log.finished,
+        "event_count": len(log.events),
+        "known": True,
+    }
+
+
 @app.get("/api/claims/{claim_id}/stream")
 async def stream(claim_id: str, request: Request):
     log = get_investigation_log(claim_id)

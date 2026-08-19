@@ -138,7 +138,7 @@ export default function Dashboard() {
       .finally(() => setLoading(false))
   }, [claimId])
 
-  const { agentStatuses, liveAgents, skippedAgents, investigating, streamLost, start } =
+  const { agentStatuses, liveAgents, skippedAgents, investigating, streamLost, rejoined, start } =
     useInvestigationSSE(claimId, fetchResult)
 
   const handleDeleteImage = useCallback((url) => {
@@ -200,6 +200,7 @@ export default function Dashboard() {
           onStart={start}
           investigating={investigating}
           streamLost={streamLost}
+          rejoined={rejoined}
           hasResult={hasResult}
         />
         <RiskAndSettlement summary={summary} settlement={settlement} timeline={timeline} />

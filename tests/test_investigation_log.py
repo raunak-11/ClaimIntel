@@ -191,3 +191,120 @@ def test_prune_drops_only_finished_logs():
         return "CLM-RUNNING" in main._investigation_logs
 
     assert asyncio.run(scenario()) is True
+
+
+# ── Navigating away must not affect the run ───────────────────────────────────
+# Reported: "if we start the investigation and go back, the investigation stops
+# or happened in a sec." Nothing was actually stopping — the pipeline is a
+# server-side background task and InvestigationLog.put() only appends to a list,
+# so a departed client cannot stall it. The client simply had no way to ASK
+# whether a run was in flight, so on returning it opened no stream: the agents
+# already written to result.json rendered as "Done" and the rest sat on
+# "Waiting", which reads as an investigation that died or finished instantly.
+
+import asyncio
+
+import pytest
+
+import main
+
+
+async def _drain_types(log, limit=None):
+    """Consume events, optionally leaving early to simulate navigating away."""
+    seen = []
+    async for idx, ev in log.subscribe(0):
+        if idx is None:          # keep-alive ping, not part of the log
+            continue
+        seen.append(ev["type"])
+        if limit and len(seen) >= limit:
+            break
+    return seen
+
+
+async def _emit(log):
+    for agent in ("eligibility_screen", "damage_assessment", "fraud_intelligence"):
+        await log.put({"type": "agent_start", "agent": agent})
+        await asyncio.sleep(0)
+        await log.put({"type": "agent_done", "agent": agent, "result": {"status": "completed"}})
+    await log.put({"type": "done"})
+
+
+def test_run_completes_with_no_subscriber_at_all():
+    """The whole point: nobody is watching and the pipeline still finishes."""
+    async def go():
+        log = main.new_investigation_log("CLM-NOBODY")
+        await _emit(log)
+        return log
+    log = asyncio.run(go())
+    assert log.finished is True
+    assert sum(1 for e in log.events if e["type"] == "agent_done") == 3
+
+
+def test_client_leaving_mid_run_does_not_stall_the_pipeline():
+    async def go():
+        log = main.new_investigation_log("CLM-LEAVE")
+        task = asyncio.create_task(_emit(log))
+        left_after = await _drain_types(log, limit=2)     # navigate away
+        await task                                   # run continues regardless
+        return log, left_after
+    log, left_after = asyncio.run(go())
+    assert len(left_after) == 2
+    assert log.finished is True
+    assert log.events[-1]["type"] == "done"
+
+
+def test_returning_client_replays_the_entire_run():
+    """A late attach sends no Last-Event-ID, so the backend replays from 0."""
+    async def go():
+        log = main.new_investigation_log("CLM-RETURN")
+        task = asyncio.create_task(_emit(log))
+        await _drain_types(log, limit=2)
+        await task
+        return await _drain_types(log)                      # the user comes back
+    replayed = asyncio.run(go())
+    assert replayed[-1] == "done", "the terminal event must be replayed"
+    assert replayed.count("agent_done") == 3, "every agent must be replayed"
+
+
+# ── The status endpoint the client was missing ────────────────────────────────
+
+def test_status_reports_running_while_in_flight():
+    async def go():
+        log = main.new_investigation_log("CLM-STATUS")
+        await log.put({"type": "agent_start", "agent": "damage_assessment"})
+        return main.investigation_status("CLM-STATUS")
+    st = asyncio.run(go())
+    assert st["running"] is True and st["finished"] is False
+    assert st["event_count"] == 1
+
+
+def test_status_reports_finished_after_the_terminal_event():
+    async def go():
+        log = main.new_investigation_log("CLM-FINISHED")
+        await _emit(log)
+        return main.investigation_status("CLM-FINISHED")
+    st = asyncio.run(go())
+    assert st["running"] is False and st["finished"] is True
+
+
+def test_status_for_a_claim_never_investigated_is_not_running():
+    """Critical: the hook attaches only when running is True. If an unknown
+    claim reported running, the UI would open a stream that never emits and sit
+    on 'Investigating…' forever."""
+    st = main.investigation_status("CLM-DOES-NOT-EXIST")
+    assert st["running"] is False
+    assert st["known"] is False
+    assert st["event_count"] == 0
+
+
+def test_an_in_flight_log_is_never_pruned():
+    """Retention must not drop a run that is still going."""
+    async def go():
+        live = main.new_investigation_log("CLM-KEEPME")
+        await live.put({"type": "agent_start", "agent": "damage_assessment"})
+        for i in range(main._MAX_RETAINED_LOGS + 10):
+            finished = main.new_investigation_log(f"CLM-DONE-{i}")
+            await finished.put({"type": "done"})
+        return main.investigation_status("CLM-KEEPME")
+    st = asyncio.run(go())
+    assert st["running"] is True, "an unfinished run was pruned"

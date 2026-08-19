@@ -10,34 +10,23 @@ export function useInvestigationSSE(claimId, onDone) {
   // True once the browser has given up reconnecting — the run may well have
   // finished server-side, so the UI says so instead of looking hung.
   const [streamLost, setStreamLost] = useState(false)
+  // True when we re-attached to a run that was already going (a navigate-away
+  // and back), rather than having started it from this screen.
+  const [rejoined, setRejoined] = useState(false)
   const esRef = useRef(null)
+  // onDone changes identity on every Dashboard render; keeping it in a ref lets
+  // the mount effect depend on claimId ALONE. Without this the effect re-runs
+  // constantly, tearing down and rebuilding the stream on every render.
+  const onDoneRef = useRef(onDone)
+  useEffect(() => { onDoneRef.current = onDone }, [onDone])
 
-  // Reset on claim switch (and on unmount): close any open stream and clear
-  // stale agent results so one claim's live findings never bleed into another.
-  useEffect(() => {
-    setAgentStatuses({})
-    setLiveAgents({})
-    setSkippedAgents({})
-    setInvestigating(false)
-    setStreamLost(false)
-    return () => {
-      if (esRef.current) {
-        esRef.current.close()
-        esRef.current = null
-      }
-    }
-  }, [claimId])
-
-  const start = useCallback(async () => {
+  // Open the stream and wire it up. Shared by start() and by the re-attach on
+  // mount, so a rejoined run behaves exactly like one started here.
+  const attach = useCallback(() => {
     if (esRef.current) esRef.current.close()
-    setInvestigating(true)
-    setStreamLost(false)
-    setAgentStatuses({})
-    setLiveAgents({})
-    setSkippedAgents({})
-
-    await api.post(`/claims/${claimId}/investigate`)
-
+    // No Last-Event-ID on a first connection, so the backend replays the whole
+    // log from index 0 — which is what lets a late attach catch up on a run
+    // already underway.
     const es = new EventSource(`/api/claims/${claimId}/stream`)
     esRef.current = es
 
@@ -59,9 +48,10 @@ export function useInvestigationSSE(claimId, onDone) {
       } else if (event.type === 'done') {
         setInvestigating(false)
         setStreamLost(false)
+        setRejoined(false)
         es.close()
         esRef.current = null
-        onDone?.()
+        onDoneRef.current?.()
       }
     }
     es.onerror = () => {
@@ -79,9 +69,59 @@ export function useInvestigationSSE(claimId, onDone) {
       esRef.current = null
       setInvestigating(false)
       setStreamLost(true)
-      onDone?.()
+      onDoneRef.current?.()
     }
-  }, [claimId, onDone])
+  }, [claimId])
 
-  return { agentStatuses, liveAgents, skippedAgents, investigating, streamLost, start }
+  // Reset on claim switch (and on unmount): close any open stream and clear
+  // stale agent results so one claim's live findings never bleed into another.
+  //
+  // Then ASK whether a run is already in flight and re-attach if so. The
+  // pipeline is a server-side background task that keeps going when the browser
+  // leaves, but nothing used to reconnect to it: coming back to a claim
+  // mid-investigation showed the agents already written to result.json as
+  // "Done" and the rest on "Waiting", which reads as an investigation that
+  // stopped, or ran in a second. Nothing had gone wrong on the server — the UI
+  // simply never asked.
+  useEffect(() => {
+    setAgentStatuses({})
+    setLiveAgents({})
+    setSkippedAgents({})
+    setInvestigating(false)
+    setStreamLost(false)
+    setRejoined(false)
+
+    let cancelled = false
+    api.get(`/claims/${claimId}/investigation-status`)
+      .then(({ data }) => {
+        if (cancelled || !data?.running) return
+        setInvestigating(true)
+        setRejoined(true)
+        attach()
+      })
+      .catch(() => {})   // no status endpoint / offline → behave as before
+
+    return () => {
+      cancelled = true
+      if (esRef.current) {
+        esRef.current.close()
+        esRef.current = null
+      }
+    }
+  }, [claimId, attach])
+
+  const start = useCallback(async () => {
+    if (esRef.current) esRef.current.close()
+    setInvestigating(true)
+    setStreamLost(false)
+    setRejoined(false)
+    setAgentStatuses({})
+    setLiveAgents({})
+    setSkippedAgents({})
+
+    await api.post(`/claims/${claimId}/investigate`)
+    attach()
+  }, [claimId, attach])
+
+  return { agentStatuses, liveAgents, skippedAgents, investigating, streamLost, rejoined, start }
 }

@@ -738,6 +738,7 @@ function AgentStep({ agent, status, summary, data, agents, isLast, skipReason, e
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function InvestigationWorkflow({
   agentStatuses, liveAgents, skippedAgents, onStart, investigating, hasResult, streamLost,
+  rejoined,
 }) {
   // A gate-rejected claim reloaded from disk has no live SSE events, so derive
   // "skipped" from the stored eligibility result too — otherwise those five
@@ -784,6 +785,17 @@ export default function InvestigationWorkflow({
           />
         ))}
       </div>
+
+      {/* Re-attached to a run that was already in flight — the user started it,
+          navigated away, and came back. The pipeline never stopped; the browser
+          simply had to ask to be reconnected. Saying so beats a pipeline that
+          silently springs back to life. */}
+      {rejoined && investigating && (
+        <p className="mt-2 rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-[11px] leading-relaxed text-brand-700">
+          Reconnected to an investigation already in progress — it kept running on the server
+          while you were away.
+        </p>
+      )}
 
       {/* The live stream dropped and the browser stopped retrying. The run
           itself is server-side and unaffected, so say that rather than leaving
