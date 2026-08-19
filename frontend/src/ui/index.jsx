@@ -2,7 +2,7 @@
 // One source of truth for cards, badges, buttons, KPIs, tabs, disclosures and
 // empty states so every screen reads as one product. Light, enterprise, calm.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ChevronDown, Loader2 } from 'lucide-react'
 
 const cx = (...c) => c.filter(Boolean).join(' ')
@@ -262,3 +262,72 @@ export function KeyValue({ label, value, tone, className = '' }) {
 }
 
 export { cx }
+
+
+// ── ConfirmDialog ─────────────────────────────────────────────────────────────
+// Replaces window.confirm(), which renders as a bare OS dialog titled
+// "localhost:3000 says" — it names the host instead of the product, cannot be
+// styled or branded, and reads as a browser warning rather than a deliberate
+// step in an insurance workflow. This is the in-app equivalent: same blocking
+// semantics, ClaimIntel's own surface.
+//
+// Escape and a backdrop click both cancel; the confirm button autofocuses so
+// Enter still confirms the way the native dialog did. (autoFocus rather than a
+// ref: Button is a plain function component and would drop a ref prop.)
+export function ConfirmDialog({
+  open, title, message, confirmLabel = 'Confirm', cancelLabel = 'Cancel',
+  tone = 'brand', onConfirm, onCancel,
+}) {
+  useEffect(() => {
+    if (!open) return undefined
+    const onKey = (e) => {
+      if (e.key === 'Escape') onCancel?.()
+    }
+    document.addEventListener('keydown', onKey)
+    // Defer so the node exists before focusing.
+    // The page behind must not scroll while a blocking dialog is up.
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prevOverflow
+    }
+  }, [open, onCancel])
+
+  if (!open) return null
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/40 backdrop-blur-sm"
+      onClick={onCancel}
+      role="presentation"
+    >
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-label={title}
+        className="w-full max-w-md rounded-2xl border border-line bg-surface shadow-xl ci-fade-in"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-5 pt-5 pb-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-brand-600">
+              ClaimIntel
+            </span>
+          </div>
+          <h2 className="text-base font-semibold text-ink leading-snug">{title}</h2>
+          {message && (
+            <p className="text-sm text-muted mt-2 leading-relaxed">{message}</p>
+          )}
+        </div>
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-line bg-surface-muted rounded-b-2xl">
+          <Button variant="secondary" size="sm" onClick={onCancel}>{cancelLabel}</Button>
+          <Button autoFocus variant={tone === 'danger' ? 'danger' : 'primary'}
+                  size="sm" onClick={onConfirm}>
+            {confirmLabel}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}

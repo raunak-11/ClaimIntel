@@ -388,7 +388,11 @@ export default function FraudDetail() {
                 key={g.key}
                 title={g.label}
                 subtitle={g.description}
-                defaultOpen={flagged > 0}
+                // All groups start CLOSED. Auto-opening flagged groups meant a
+                // high-risk claim opened as a wall of expanded panels with the
+                // group headers pushed off screen — the flag counts in the headers
+                // are the scan surface, so the reader should choose what to open.
+                defaultOpen={false}
                 tone={flagged > 0 ? 'danger' : 'neutral'}
                 right={
                   <span className="flex items-center gap-2 text-[11px]">

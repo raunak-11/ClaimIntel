@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
 import {
   ChevronDown, CheckCircle2, XCircle, AlertTriangle, Database, Play, RotateCcw,
-  ShieldAlert, ListChecks, ScanEye, MinusCircle,
+  ShieldAlert, ListChecks, ScanEye, MinusCircle, ArrowUpRight,
 } from 'lucide-react'
 import api from '../utils/api'
 import ExpandableText from './ExpandableText'
 import { KBPillRow } from './KBPill'
-import { Card, Badge, Button, ProgressBar, cx, toneText } from '../ui'
+import { Card, Badge, Button, ConfirmDialog, cx, toneText } from '../ui'
 import {
-  AGENTS, inr, severityTone, matchTone, checkTone, fraudTone, fraudHex,
+  AGENTS, inr, severityTone, matchTone, checkTone,
 } from '../ui/tokens'
 
 // ── Defensive coercion (never render an object as a React child) ──────────────
@@ -322,12 +323,10 @@ function VisualForensicsPanel({ fraudData, damageData }) {
 
 // ── Fraud Intelligence (hardened, primary evidence surface) ───────────────────
 function FraudDetail({ data, damageData }) {
+  const { claimId } = useParams()
   const indicators = asArray(data.indicators)
   const schemes = asArray(data.matched_schemes)
   const refs = asArray(data.kb_references)
-  const score = Number(data.fraud_score ?? 0)
-  const tone = fraudTone(score)
-  const color = fraudHex(score)
   const labour = data.labour_layer
 
   return (
@@ -359,27 +358,33 @@ function FraudDetail({ data, damageData }) {
         </>
       )}
 
-      <SectionTitle>Risk Breakdown</SectionTitle>
-      <div className="rounded-xl border border-line bg-surface-muted p-4">
-        <div className="flex items-end justify-between mb-2">
-          <div>
-            <p className="text-[11px] text-faint">Fraud Score</p>
-            <p className="text-3xl font-semibold tabular-nums leading-none mt-1" style={{ color }}>
-              {data.fraud_score ?? '—'}<span className="text-lg">%</span>
-            </p>
-          </div>
-          <div className="text-right">
-            <Badge tone={tone}>{data.fraud_label || '—'} risk</Badge>
-            <p className="text-[11px] text-faint mt-1.5">{indicators.length} indicator{indicators.length === 1 ? '' : 's'}</p>
-          </div>
-        </div>
-        <ProgressBar value={score} tone={tone} />
-        {data.fraud_score_base != null && (
-          <p className="text-[11px] text-faint mt-2">
-            Deterministic base score {data.fraud_score_base}% · LLM adjustment clamped to ±15.
-          </p>
-        )}
-      </div>
+      {/* The score itself lives on the Fraud Review page, which carries the
+          deterministic base, the ±15 model clamp, the flagged/passed/na counts
+          and all 32 checks grouped by evidence type. Repeating a bare
+          percentage here invited a decision from a number with none of that
+          behind it — so this is the route to it, not a copy of it. */}
+      {claimId && (
+        <Link
+          to={`/fraud/${claimId}`}
+          className="mt-1 flex items-center justify-between gap-3 rounded-xl border border-line
+                     bg-surface-muted px-4 py-3 hover:border-brand-200 hover:bg-brand-50/40
+                     transition-colors group"
+        >
+          <span className="min-w-0">
+            <span className="flex items-center gap-1.5 text-sm font-medium text-ink">
+              <ShieldAlert className="w-4 h-4 text-brand-600 shrink-0" />
+              Open Fraud Review
+            </span>
+            <span className="block text-[11px] text-faint mt-0.5 leading-relaxed">
+              Fraud score, all 32 checks by evidence type, matched schemes and precedents
+              {data.fraud_check_counts
+                ? ` — ${data.fraud_check_counts.flagged ?? 0} flagged`
+                : ''}
+            </span>
+          </span>
+          <ArrowUpRight className="w-4 h-4 text-faint group-hover:text-brand-600 shrink-0" />
+        </Link>
+      )}
 
       {indicators.length > 0 && (
         <>
@@ -737,6 +742,7 @@ export default function InvestigationWorkflow({
   // A gate-rejected claim reloaded from disk has no live SSE events, so derive
   // "skipped" from the stored eligibility result too — otherwise those five
   // rows would sit on "Waiting" forever after a page refresh.
+  const [confirmReinvestigate, setConfirmReinvestigate] = useState(false)
   const gate = liveAgents.eligibility_screen
   const storedSkips = gate?.eligible === false
     ? Object.fromEntries((gate.skipped_agents || []).map((k) => [k, gate.reject_reason]))
@@ -796,19 +802,24 @@ export default function InvestigationWorkflow({
       ) : (
         <Button
           variant="secondary" icon={RotateCcw} loading={investigating} size="lg" className="mt-2 w-full"
-          onClick={() => {
-            if (
-              window.confirm(
-                'Re-run the investigation? This re-parses all documents and photos fresh and will replace the ' +
-                  'current findings — any recorded adjuster decision on this claim will be cleared.',
-              )
-            )
-              onStart()
-          }}
+          onClick={() => setConfirmReinvestigate(true)}
         >
           {investigating ? 'Investigating…' : 'Re-investigate'}
         </Button>
       )}
+
+      {/* Was window.confirm(), which the browser renders as "localhost:3000
+          says" — it named the host instead of the product. */}
+      <ConfirmDialog
+        open={confirmReinvestigate}
+        title="Re-run this investigation?"
+        message={'All documents and photos are parsed fresh and the current findings are replaced. '
+                 + 'Any adjuster decision recorded on this claim will be cleared.'}
+        confirmLabel="Re-investigate"
+        cancelLabel="Keep current findings"
+        onCancel={() => setConfirmReinvestigate(false)}
+        onConfirm={() => { setConfirmReinvestigate(false); onStart() }}
+      />
     </Card>
   )
 }
