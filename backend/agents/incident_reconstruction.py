@@ -2,6 +2,7 @@ from typing import Any
 
 import storage
 from agents.base_agent import BaseAgent
+from services import assessment_cache
 from services.llm_client import ask_json
 from services.prompt_guards import IMAGE_INJECTION_DEFENSE
 from services.rag_client import get_similar_cases_context
@@ -161,8 +162,44 @@ class IncidentReconstructionAgent(BaseAgent):
             image_note=image_note,
             documents_note=documents_note,
         )
-        result = ask_json(prompt, image_paths if image_paths else None,
-                          agent_name="incident_reconstruction", claim_id=claim["claim_id"])
+        # ── Reproducibility ───────────────────────────────────────────────
+        # `damage_matches_story` is a HARD GUARD: False turns an Approve into an
+        # Escalate and zeroes the settlement (see orchestrator). It was being
+        # re-derived from a fresh vision read on every investigation, and the
+        # Bedrock model is a Mixture-of-Experts with no seed — so the same claim
+        # on the same photos flipped between "story matches" and "story does not
+        # match" between runs, and the DECISION flipped with it.
+        #
+        # Agent 1 has been replayed from an input-addressed cache since 2026-08;
+        # this is the same treatment for Agent 3. The key covers everything this
+        # agent actually reads: the images, the claim fields, Agent 1's
+        # part/severity map, the telematics summary and which documents parsed.
+        # Change any of them and the key changes, so a fresh read happens by
+        # itself — there is no stale-cache trap.
+        cache_key = assessment_cache.compute_key(
+            claim, image_paths,
+            scope="incident_reconstruction",
+            extra={
+                "damage_map": damage_map,
+                "telematics": _telematics_summary(telematics),
+                "documents": doc_lines,
+                "incident_datetime": claim.get("incident_date") or "",
+                "incident_location": claim.get("incident_location") or "",
+            },
+        )
+        force_fresh = bool(context.get("force_fresh_assessment"))
+        cached = None if force_fresh else assessment_cache.load(claim["claim_id"], cache_key)
+
+        if cached is not None:
+            result = dict(cached)
+            result["reconstruction_source"] = "cached"
+        else:
+            result = ask_json(prompt, image_paths if image_paths else None,
+                              agent_name="incident_reconstruction", claim_id=claim["claim_id"])
+            result.setdefault("status", "completed")
+            assessment_cache.save(claim["claim_id"], cache_key, result)
+            result["reconstruction_source"] = "fresh"
+        result["reconstruction_key"] = cache_key
         result.setdefault("status", "completed")
 
         # The model returns bare precedent IDs ("HIST-003"), which mean nothing

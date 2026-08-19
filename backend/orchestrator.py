@@ -48,7 +48,8 @@ def _reported_fraud_score(fraud: dict) -> int | None:
     return fraud.get("fraud_score", 0)
 
 
-async def run_pipeline(claim_id: str, claim: dict, queue: asyncio.Queue):
+async def run_pipeline(claim_id: str, claim: dict, queue: asyncio.Queue,
+                       force_fresh: bool = False):
     """
     Sequences all 5 agents, emits SSE events per agent, writes result.json.
     Agents are imported lazily so Phase 1 works without them implemented.
@@ -95,6 +96,11 @@ async def run_pipeline(claim_id: str, claim: dict, queue: asyncio.Queue):
         "claim": claim,
         "agents": {},
         "claim_type_flags": {"is_theft": is_theft, "claim_kind": claim_kind},
+        # Agents 1 and 3 replay their vision reads from an input-addressed cache
+        # so identical evidence gives an identical answer. This forces both to
+        # look again. Both agents already read the flag; until now NOTHING set
+        # it, so the documented escape hatch did not exist.
+        "force_fresh_assessment": bool(force_fresh),
     }
 
     # ── Pre-flight eligibility screen ─────────────────────────────────────────

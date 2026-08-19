@@ -358,15 +358,24 @@ def check_claims_on_disk() -> None:
         summary = result.get("summary") or {}
         breakdown = summary.get("settlement_breakdown") or {}
 
-        # claim_amount must equal the mid of the LATEST assessment
-        est = (result.get("agents", {}).get("damage_assessment", {})
-               .get("total_repair_estimate") or {})
+        # claim_amount must equal the LATEST assessed fair value.
+        #
+        # This used to take the mid of `total_repair_estimate` directly, which
+        # is GST-EXCLUSIVE on labour — so once the orchestrator was corrected to
+        # write the same figure every other surface prints, THIS CHECK became
+        # the stale one and failed a perfectly consistent claim. Route through
+        # the one helper, like everything else.
+        damage = result.get("agents", {}).get("damage_assessment", {})
+        est = damage.get("total_repair_estimate") or {}
         if isinstance(est, dict) and est.get("max"):
-            mid = int((float(est.get("min", 0)) + float(est.get("max", 0))) / 2)
+            sys.path.insert(0, os.path.join(ROOT, "backend"))
+            from services.settlement_calc import assessed_fair_value
+            _, _, _mid = assessed_fair_value(damage)
+            mid = int(round(_mid))
             csv_amt = int(float(row.get("claim_amount") or 0))
             if abs(mid - csv_amt) > 1:
                 report("FAIL", f"{cid}: claims.csv claim_amount {csv_amt:,} != latest "
-                               f"assessment mid {mid:,} — stale run on disk; "
+                               f"assessed fair value {mid:,} — stale run on disk; "
                                f"delete + re-investigate before demo")
 
         # settlement arithmetic must reconcile — but only on Approve; Escalate

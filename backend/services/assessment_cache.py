@@ -80,19 +80,41 @@ def _hash_file(path: str, h) -> None:
             h.update(chunk)
 
 
+# The scope this cache was originally built for. It contributes NOTHING to the
+# hash, so keys written before scoping existed still replay — any other scope
+# contributes its own name and therefore cannot collide with it. Two agents
+# reading the SAME photos (Agent 1 damage, Agent 3 reconstruction) would
+# otherwise compute the same key and serve each other's output.
+DEFAULT_SCOPE = "damage_assessment"
+
+
 def compute_key(claim: dict, image_paths: list[str],
-                line_items: Optional[list] = None) -> str:
-    """Fingerprint of every input Agent 1 sees.
+                line_items: Optional[list] = None,
+                scope: str = DEFAULT_SCOPE,
+                extra: Optional[dict] = None) -> str:
+    """Fingerprint of every input the scoped agent sees.
 
     Images are hashed by CONTENT, not path or mtime: re-uploading the same photo
     under a new name must hit the cache, and editing a photo in place must miss
     it. Paths are sorted so upload order cannot change the key.
+
+    `scope` namespaces the key per agent. `extra` carries inputs that are neither
+    the claim row nor the images — Agent 3 also reads Agent 1's part/severity
+    map, the telematics summary and which documents parsed, and a change in any
+    of those must invalidate its cached reconstruction.
     """
     h = hashlib.sha256()
     h.update(f"v{CACHE_VERSION}\n".encode())
+    if scope != DEFAULT_SCOPE:
+        h.update(("scope=" + scope + chr(10)).encode("utf-8", "replace"))
 
     for field in _CLAIM_FIELDS:
         h.update(f"{field}={(claim or {}).get(field) or ''}\n".encode("utf-8", "replace"))
+
+    if extra:
+        # sort_keys so dict ordering cannot change the fingerprint.
+        h.update(("extra=" + json.dumps(extra, sort_keys=True, default=str)
+                  + chr(10)).encode("utf-8", "replace"))
 
     for path in sorted(image_paths or []):
         h.update(f"img:{os.path.basename(path)}\n".encode("utf-8", "replace"))

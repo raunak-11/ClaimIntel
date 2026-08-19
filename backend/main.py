@@ -483,7 +483,11 @@ def get_claim_docs(claim_id: str):
 # ── Investigation ─────────────────────────────────────────────────────────────
 
 @app.post("/api/claims/{claim_id}/investigate", dependencies=[Depends(_require_adjudicator)])
-async def investigate(claim_id: str, background_tasks: BackgroundTasks):
+async def investigate(claim_id: str, background_tasks: BackgroundTasks,
+                      fresh: bool = Query(False, description=(
+                          'Re-read the photos with the vision model instead of '
+                          'replaying the cached assessment. Use when you want a '
+                          'second opinion on the same evidence.'))):
     claim = storage.get_claim(claim_id)
     if not claim:
         raise HTTPException(status_code=404, detail="Claim not found")
@@ -509,15 +513,15 @@ async def investigate(claim_id: str, background_tasks: BackgroundTasks):
     # Fresh log before the background task starts, so a re-investigation never
     # replays the previous run's events into the new stream.
     new_investigation_log(claim_id)
-    background_tasks.add_task(_run_investigation, claim_id, claim)
+    background_tasks.add_task(_run_investigation, claim_id, claim, fresh)
     return {"message": "Investigation started", "claim_id": claim_id}
 
 
-async def _run_investigation(claim_id: str, claim: dict):
+async def _run_investigation(claim_id: str, claim: dict, fresh: bool = False):
     from orchestrator import run_pipeline
     log = get_investigation_log(claim_id)
     try:
-        await run_pipeline(claim_id, claim, log)
+        await run_pipeline(claim_id, claim, log, force_fresh=fresh)
     except Exception as exc:
         # A crash in the pipeline ITSELF (as opposed to inside one agent, which
         # run_one_agent already catches and reports) used to emit nothing at

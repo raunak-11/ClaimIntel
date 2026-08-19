@@ -145,7 +145,10 @@ def test_no_surface_quotes_the_gst_exclusive_total_directly():
     }
 
     offenders = []
-    for dirpath, _dirs, files in os.walk(os.path.join(root, "backend")):
+    # scripts/ too — data_sanity computed its own mid from the raw dict and
+    # became the stale surface the moment the orchestrator was corrected.
+    walk_roots = [os.path.join(root, "backend"), os.path.join(root, "scripts")]
+    for dirpath, _dirs, files in (e for r in walk_roots for e in os.walk(r)):
         if "__pycache__" in dirpath:
             continue
         for name in files:

@@ -221,3 +221,79 @@ def test_different_evidence_still_gets_a_different_key(tmp_path, monkeypatch):
     k1 = ac.compute_key(claim, [], [{"part": "bumper", "amount": 11500}])
     k2 = ac.compute_key(claim, [], [{"part": "bumper", "amount": 34500}])
     assert k1 != k2
+
+
+# ── Agent 3 reproducibility: the story-match verdict must not flip ────────────
+
+def test_agent1_and_agent3_cannot_collide_on_the_same_photos():
+    """Both agents read the SAME images. Without a scope they compute the same
+    key and would serve each other's output — Agent 3 replaying a damage
+    assessment as a reconstruction."""
+    from services import assessment_cache as ac
+    claim = {"description": "front impact", "vehicle": "Kia Seltos", "claim_type": "Motor - Own Damage"}
+    k1 = ac.compute_key(claim, [], [{"part": "bumper"}])
+    k3 = ac.compute_key(claim, [], scope="incident_reconstruction")
+    assert k1 != k3
+
+
+def test_default_scope_key_is_unchanged_by_scoping():
+    """Adding scopes must not invalidate assessments already on disk."""
+    from services import assessment_cache as ac
+    claim = {"description": "d", "vehicle": "v", "claim_type": "t"}
+    assert ac.compute_key(claim, [], [{"x": 1}]) == \
+           ac.compute_key(claim, [], [{"x": 1}], scope=ac.DEFAULT_SCOPE)
+
+
+def test_reconstruction_replays_so_the_story_verdict_is_stable(tmp_path, monkeypatch):
+    """The reported symptom: "sometimes it says the stories are matching,
+    sometimes says the story is not matching".
+
+    `damage_matches_story` is a hard guard — False turns an Approve into an
+    Escalate and zeroes the settlement — and it was re-derived from a fresh
+    Mixture-of-Experts vision read every run.
+    """
+    import storage
+    from services import assessment_cache as ac
+    monkeypatch.setattr(storage, "CLAIMS_DIR", str(tmp_path / "claims"))
+
+    claim = {"description": "hit a wall", "vehicle": "Kia Seltos", "claim_type": "Motor - Own Damage"}
+    extra = {"damage_map": [{"part": "front_bumper", "severity": "Severe"}]}
+    key = ac.compute_key(claim, [], scope="incident_reconstruction", extra=extra)
+
+    ac.save("CLM-1", key, {"damage_matches_story": True, "confidence": 88})
+    replayed = ac.load("CLM-1", key)
+    assert replayed["damage_matches_story"] is True
+
+    # Same evidence recomputed -> same key -> the verdict cannot flip.
+    assert ac.compute_key(claim, [], scope="incident_reconstruction", extra=extra) == key
+
+
+def test_a_changed_damage_map_re_reads_the_reconstruction():
+    """Agent 3's verdict depends on Agent 1's parts, so a different part list
+    must NOT replay the old story verdict."""
+    from services import assessment_cache as ac
+    claim = {"description": "d", "vehicle": "v", "claim_type": "t"}
+    k_a = ac.compute_key(claim, [], scope="incident_reconstruction",
+                         extra={"damage_map": [{"part": "front_bumper"}]})
+    k_b = ac.compute_key(claim, [], scope="incident_reconstruction",
+                         extra={"damage_map": [{"part": "rear_bumper"}]})
+    assert k_a != k_b
+
+
+def test_extra_is_order_independent():
+    """Dict ordering must not change the fingerprint, or the cache would miss
+    at random."""
+    from services import assessment_cache as ac
+    claim = {"description": "d", "vehicle": "v", "claim_type": "t"}
+    assert ac.compute_key(claim, [], scope="s", extra={"a": 1, "b": 2}) == \
+           ac.compute_key(claim, [], scope="s", extra={"b": 2, "a": 1})
+
+
+def test_force_fresh_flag_is_actually_set_by_the_pipeline():
+    """Both agents read context['force_fresh_assessment'] but NOTHING set it —
+    the documented `fresh=true` escape hatch did not exist."""
+    import inspect
+    import orchestrator
+    src = inspect.getsource(orchestrator.run_pipeline)
+    assert '"force_fresh_assessment"' in src, "the flag is read but never set"
+    assert "force_fresh" in inspect.signature(orchestrator.run_pipeline).parameters
