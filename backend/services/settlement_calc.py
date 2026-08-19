@@ -14,7 +14,8 @@ reconciles with visible line items (the "real claim sheet" feel):
 This is fully deterministic (no LLM) so the numbers are always reproducible.
 """
 
-from datetime import datetime
+import re
+from datetime import date, datetime
 from typing import Optional
 
 
@@ -335,14 +336,108 @@ def _sum_insured(policy: dict) -> int:
         return 0
 
 
-def _vehicle_age_years(policy: dict, claim: dict) -> Optional[float]:
-    try:
-        year = int(str(policy.get("vehicle_year", "")).strip())
-        inc = datetime.strptime(claim.get("incident_date", "")[:10], "%Y-%m-%d").date()
-        age = (inc.year + (inc.month - 1) / 12) - year
-        return max(0.0, age)
-    except (ValueError, TypeError):
+# Where a registration date can come from, best first. The RC is a MANDATORY
+# upload on every claim and its `reg_date` is already extracted by both document
+# parsers (gani_schemas / document_parser) — it was simply never read, so the
+# authoritative date sat in `context["docs"]["rc"]` while depreciation was
+# guessed from the model year.
+_REG_DATE_FORMATS = ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%d-%b-%Y", "%d %b %Y")
+
+
+def _parse_reg_date(raw) -> Optional[date]:
+    """Parse a registration date in any of the formats an Indian RC prints."""
+    text = str(raw or "").strip()
+    if not text:
         return None
+    for fmt in _REG_DATE_FORMATS:
+        try:
+            return datetime.strptime(text[:len(datetime.now().strftime(fmt)) + 4], fmt).date()
+        except ValueError:
+            continue
+    # Last resort: a leading ISO date inside a longer string.
+    m = re.match(r"(\d{4})-(\d{2})-(\d{2})", text)
+    if m:
+        try:
+            return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        except ValueError:
+            return None
+    return None
+
+
+def resolve_vehicle_age(policy: dict, claim: dict,
+                        docs: Optional[dict] = None) -> dict:
+    """Vehicle age at the DATE OF LOSS, with the source that produced it.
+
+    Depreciation is the single largest deduction on most claims and it is driven
+    entirely by this number, so where it came from is auditable rather than
+    implicit.
+
+    Priority:
+      1. the RC's own `reg_date` — the registration document itself, mandatory
+         on every claim and already parsed;
+      2. `vehicle_registration_date` on the policy record;
+      3. the model year, as an ESTIMATE.
+
+    Why tier 3 is dated to 1 JULY and not 1 January: the old code did
+    `inc.year + (inc.month-1)/12 - vehicle_year`, which places every vehicle's
+    registration at 1 January. Registrations are spread across the year, so that
+    over-states age by ~5.5 months on average and by as much as 11 — routinely
+    enough to cross an IMT GR.9 slab boundary. Every such crossing DEDUCTS MORE
+    depreciation, i.e. short-pays the claimant, and the error only ever ran in
+    that one direction. Mid-year makes the estimator unbiased; `estimated: True`
+    tells the adjuster the figure rests on a guess and the RC should be checked.
+    """
+    out = {"age_years": None, "source": "unavailable", "estimated": True,
+           "registration_date": None}
+    try:
+        inc = datetime.strptime(str(claim.get("incident_date") or "")[:10], "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return out
+
+    # 1 ── the RC
+    rc = ((docs or {}).get("rc") or {})
+    reg = _parse_reg_date(rc.get("reg_date")) if isinstance(rc, dict) else None
+    source, estimated = "rc_document", False
+
+    # 2 ── the policy record
+    if reg is None:
+        reg = _parse_reg_date((policy or {}).get("vehicle_registration_date"))
+        source, estimated = "policy_record", False
+
+    # 3 ── model year, mid-year estimate
+    if reg is None:
+        try:
+            year = int(str((policy or {}).get("vehicle_year", "")).strip())
+        except (ValueError, TypeError):
+            return out
+        reg = date(year, 7, 1)
+        source, estimated = "model_year_estimate", True
+
+    # A registration date after the loss is not usable evidence.
+    if reg > inc:
+        if source != "model_year_estimate":
+            try:
+                year = int(str((policy or {}).get("vehicle_year", "")).strip())
+                reg = date(year, 7, 1)
+                source, estimated = "model_year_estimate", True
+            except (ValueError, TypeError):
+                return out
+        if reg > inc:
+            return {"age_years": 0.0, "source": source, "estimated": estimated,
+                    "registration_date": reg.isoformat()}
+
+    out.update({
+        "age_years": max(0.0, (inc - reg).days / 365.25),
+        "source": source,
+        "estimated": estimated,
+        "registration_date": reg.isoformat(),
+    })
+    return out
+
+
+def _vehicle_age_years(policy: dict, claim: dict,
+                       docs: Optional[dict] = None) -> Optional[float]:
+    return resolve_vehicle_age(policy, claim, docs)["age_years"]
 
 
 # ── Over-claim bands ────────────────────────────────────────────────────────────
@@ -612,6 +707,7 @@ def compute_settlement_breakdown(
     damage: dict,
     decision: str,
     salvage_retained_by: str = SALVAGE_RETAINED_BY,
+    docs: Optional[dict] = None,
 ) -> Optional[dict]:
     """Return an itemised, IRDAI-aligned settlement breakdown.
 
@@ -675,7 +771,11 @@ def compute_settlement_breakdown(
     total_ded = comp_ded + vol_ded
 
     # ── Depreciation (material-specific, per IRDAI) ─────────────────────────────
-    age     = _vehicle_age_years(policy, claim or {})
+    # Age at the date of loss. Prefers the RC's own registration date (a
+    # mandatory upload, already parsed) over a guess from the model year — see
+    # resolve_vehicle_age.
+    _age_info = resolve_vehicle_age(policy, claim or {}, docs)
+    age     = _age_info["age_years"]
     age_dep = _depreciation_pct(age) if age is not None else 0
 
     zero_dep = _cov.ADD_ON_ZERO_DEP in add_ons
@@ -859,6 +959,13 @@ def compute_settlement_breakdown(
         # disagreed with their own figure whenever a material override or the
         # parts fraction applied. The slab is still reported alongside.
         "vehicle_age_years":     round(age, 1) if age is not None else None,
+        # Depreciation is the largest deduction on most claims and rests
+        # entirely on this age, so its provenance is auditable rather than
+        # implicit. `vehicle_age_estimated` True means no registration date was
+        # available and the figure came from the model year.
+        "vehicle_age_source":    _age_info["source"],
+        "vehicle_age_estimated": _age_info["estimated"],
+        "vehicle_registration_date": _age_info["registration_date"],
         "depreciation_pct":      0 if is_total_loss else dep_effective_pct,
         "depreciation_age_slab_pct": 0 if is_total_loss else age_dep,
         "depreciation_parts_share_pct": None if is_total_loss else dep_parts_share_pct,
@@ -923,7 +1030,9 @@ def _third_party_breakdown(policy: dict, decision: str) -> dict:
         "underclaim_advisory": None, "pricing_coverage_pct": None,
         "coverage_abstained": False,
         "settlement_basis": "Third-party liability — not computed by this engine",
-        "vehicle_age_years": None, "depreciation_pct": 0,
+        "vehicle_age_years": None, "vehicle_age_source": "unavailable",
+        "vehicle_age_estimated": True, "vehicle_registration_date": None,
+        "depreciation_pct": 0,
         "depreciation_age_slab_pct": 0, "depreciation_parts_share_pct": None,
         "depreciation": 0, "depreciation_note": None,
         "add_ons": sorted(_cov.parse_add_ons(policy)),

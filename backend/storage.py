@@ -52,6 +52,13 @@ POLICY_FIELDS = [
     # Semicolon-delimited add-on tokens; see services/coverage.py for the
     # vocabulary. Empty means a plain policy with no add-ons.
     "add_ons",
+    # Actual RTO registration date (YYYY-MM-DD). Depreciation is driven by the
+    # vehicle's age at the DATE OF LOSS, and deriving that from `vehicle_year`
+    # alone placed every registration at 1 January — over-stating age by up to
+    # 11 months and routinely pushing the claim into the next IMT GR.9 slab,
+    # which short-pays the claimant. The RC's own reg_date wins over this when a
+    # parsed RC is available; this covers the paths where it is not.
+    "vehicle_registration_date",
 ]
 
 

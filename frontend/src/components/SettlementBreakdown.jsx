@@ -209,9 +209,24 @@ export default function SettlementBreakdown({ breakdown }) {
                       Zero-Dep waived
                     </span>
                   )}
+                  {/* The depreciation slab is driven entirely by vehicle age, so
+                      an age that was GUESSED from the model year rather than read
+                      off a registration date has to say so — a wrong slab is a
+                      short-paid claimant. */}
+                  {breakdown.vehicle_age_estimated && breakdown.depreciation > 0 && (
+                    <span className="ml-1.5 inline-flex items-center rounded-full border border-warning-100 bg-warning-50 px-1.5 py-0.5 text-[9px] font-semibold text-warning-700 align-middle">
+                      age estimated
+                    </span>
+                  )}
                 </>
               }
-              sub={breakdown.depreciation_note || `${breakdown.depreciation_pct}% · vehicle age ~${breakdown.vehicle_age_years} yr`}
+              sub={(breakdown.depreciation_note || `${breakdown.depreciation_pct}% · vehicle age ~${breakdown.vehicle_age_years} yr`)
+                + (breakdown.vehicle_registration_date
+                    ? ` Registered ${breakdown.vehicle_registration_date}${
+                        breakdown.vehicle_age_source === 'rc_document' ? ' (from the RC).' :
+                        breakdown.vehicle_age_source === 'policy_record' ? ' (policy record).' :
+                        ' — estimated from the model year; check the RC.'}`
+                    : '')}
               value={breakdown.depreciation}
               sign="-"
             />

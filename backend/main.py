@@ -143,6 +143,16 @@ def _prune_investigation_logs() -> None:
 
 # ── Health ────────────────────────────────────────────────────────────────────
 
+def _parsed_docs(claim_id: str) -> dict:
+    """Parsed documents for a claim, or {} — never raises. The RC inside carries
+    the registration date depreciation is aged from."""
+    try:
+        from services.document_parser import get_parsed_docs
+        return get_parsed_docs(claim_id) or {}
+    except Exception:
+        return {}
+
+
 @app.get("/api/health")
 def health():
     return {"status": "ok", "service": "ClaimIntel"}
@@ -295,7 +305,8 @@ def get_claim(claim_id: str):
         if summary.get("decision") and not gate_rejected and (needs_bd or needs_upgrade):
             from services.settlement_calc import compute_settlement_breakdown
             damage = agents.get("damage_assessment", {})
-            bd = compute_settlement_breakdown(claim, policy, damage, summary["decision"])
+            bd = compute_settlement_breakdown(claim, policy, damage, summary["decision"],
+                                              docs=_parsed_docs(claim_id))
             if bd:
                 summary["settlement_breakdown"] = bd
     except Exception:
@@ -781,7 +792,8 @@ def analytics():
                 from services.settlement_calc import compute_settlement_breakdown
                 policy_c = storage.get_policy_by_phone(c.get("phone", ""))
                 breakdown = compute_settlement_breakdown(
-                    c, policy_c, agents.get("damage_assessment", {}), dec
+                    c, policy_c, agents.get("damage_assessment", {}), dec,
+                    docs=_parsed_docs(c["claim_id"]),
                 ) or {}
             except Exception:
                 breakdown = {}

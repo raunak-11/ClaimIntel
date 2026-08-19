@@ -447,7 +447,10 @@ async def run_pipeline(claim_id: str, claim: dict, queue: asyncio.Queue,
     try:
         from services.settlement_calc import compute_settlement_breakdown
         policy = storage.get_policy_by_phone(claim.get("phone", ""))
-        breakdown = compute_settlement_breakdown(claim, policy, damage, decision)
+        # The parsed RC carries the vehicle's registration date, which is what
+        # depreciation should be aged from — see resolve_vehicle_age.
+        breakdown = compute_settlement_breakdown(
+            claim, policy, damage, decision, docs=context.get("docs"))
     except Exception:
         breakdown = None
 

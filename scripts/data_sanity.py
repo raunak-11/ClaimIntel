@@ -188,6 +188,78 @@ def _gst_total(rows: list) -> tuple[int, int]:
     return subtotal, subtotal + 2 * round(subtotal * 0.09)
 
 
+def check_registration_dates(policies: dict) -> None:
+    """policies.csv registration dates must be present, consistent with
+    vehicle_year, and agree with the RC PDF each showcase case ships.
+
+    Depreciation is aged from whichever of the two is available (the RC wins),
+    so a disagreement between them is a data-quality fault that would show up as
+    an unexplained change in the payout depending on whether the RC parsed.
+    """
+    section("8. vehicle registration dates")
+    import re as _re
+    from datetime import date as _date
+
+    missing, mismatched = [], []
+    for pno, p in policies.items():
+        raw = (p.get("vehicle_registration_date") or "").strip()
+        if not raw:
+            missing.append(pno)
+            continue
+        if not _re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw):
+            report("FAIL", f"{pno}: registration date '{raw}' is not YYYY-MM-DD")
+            continue
+        try:
+            d = _date(*(int(x) for x in raw.split("-")))
+        except ValueError:
+            report("FAIL", f"{pno}: registration date '{raw}' is not a real date")
+            continue
+        if str(d.year) != str(p.get("vehicle_year", "")).strip():
+            mismatched.append(f"{pno} ({raw} vs model year {p.get('vehicle_year')})")
+
+    if missing:
+        report("FAIL", f"{len(missing)} policy(ies) have no vehicle_registration_date "
+                       f"— depreciation falls back to a model-year estimate: "
+                       + ", ".join(missing[:5]))
+    else:
+        report("OK", f"all {len(policies)} policies carry a registration date")
+    if mismatched:
+        report("FAIL", "registration year disagrees with vehicle_year: "
+                       + "; ".join(mismatched[:5]))
+    else:
+        report("OK", "every registration date matches its vehicle_year")
+
+    # The shipped RC PDFs are the authoritative tier — they must agree.
+    import glob as _glob
+    try:
+        import fitz
+    except ImportError:
+        report("WARN", "PyMuPDF unavailable - cannot cross-check RC PDFs")
+        return
+    checked = 0
+    for path in _glob.glob(os.path.join(ROOT, "test", "*", "*RC.pdf")):
+        doc = fitz.open(path)
+        text = "".join(doc.load_page(i).get_text() for i in range(len(doc)))
+        doc.close()
+        m = _re.search(r"(\d{2})-(\d{2})-(\d{4})", text)
+        if not m:
+            continue
+        rc_iso = f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
+        reg_m = _re.search(r"([A-Z]{2})-?(\d{2})-?([A-Z]{2})-?(\d{4})", text)
+        pol = next((p for p in policies.values()
+                    if reg_m and p.get("vehicle_reg_no", "").replace("-", "")
+                    == "".join(reg_m.groups())), None)
+        if not pol:
+            continue
+        checked += 1
+        if (pol.get("vehicle_registration_date") or "") != rc_iso:
+            report("FAIL", f"{pol['policy_no']}: RC PDF says {rc_iso} but policies.csv "
+                           f"says {pol.get('vehicle_registration_date')} — the two "
+                           f"depreciation sources disagree")
+    if checked:
+        report("OK", f"{checked} RC fixture(s) agree with policies.csv")
+
+
 def check_estimates_and_bands(policies: dict) -> None:
     section("2. Generated estimates vs policies")
     estimates = _extract_case_estimates()
@@ -522,6 +594,7 @@ def main() -> int:
     check_price_cache()
     check_claims_on_disk()
     check_cross_module_invariants()
+    check_registration_dates(policies)
     check_models()
 
     fails = [m for l, m in FINDINGS if l == "FAIL"]

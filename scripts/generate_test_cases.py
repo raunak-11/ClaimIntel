@@ -648,7 +648,13 @@ def generate_ownership_docs(out_dir: Path, prefix: str, policy: dict, ref: date,
 
     issue_dt = ref - timedelta(days=365 * 4)
     valid_till_dt = issue_dt + timedelta(days=365 * 20)
-    reg_date_dt = date(int(policy["vehicle_year"]), 6, 15)
+    # Read the policy's own registration date so the RC and policies.csv can't
+    # drift — depreciation is aged from whichever of the two is available.
+    _rd = (policy.get("vehicle_registration_date") or "").strip()
+    if _rd:
+        reg_date_dt = date(*(int(x) for x in _rd.split("-")))
+    else:
+        reg_date_dt = date(int(policy["vehicle_year"]), 6, 15)
     reg_valid_dt = date(reg_date_dt.year + 15, reg_date_dt.month, reg_date_dt.day)
 
     generate_license(

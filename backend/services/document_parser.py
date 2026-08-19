@@ -302,6 +302,20 @@ def parse_document(claim_id: str, file_path: str, doc_type: str, claim: dict) ->
     return result
 
 
+def get_parsed_docs(claim_id: str) -> dict:
+    """All previously parsed documents for a claim, shaped like the
+    orchestrator's `context["docs"]`.
+
+    Used by the paths that rebuild a settlement OUTSIDE a live investigation
+    (the lazy backfill and analytics), which have no in-memory context but still
+    need the RC's registration date to age the vehicle correctly. Disk copies
+    are redacted, but `reg_date` is not a masked field — only chassis and engine
+    numbers are — so the date survives.
+    """
+    return {dt: get_parsed_doc(claim_id, dt)
+            for dt in ("estimate", "fir", "license", "rc")}
+
+
 def get_parsed_doc(claim_id: str, doc_type: str) -> Optional[dict]:
     """Load a previously parsed document. Returns None if not yet parsed."""
     path = os.path.join(storage.get_docs_dir(claim_id), f"parsed_{doc_type}.json")
