@@ -15,14 +15,17 @@ metadata:
 > deliberately parked at the bottom. Session-by-session update log also moved to
 > `docs/changelog.md` (top section) to keep this index short.
 >
-> **Audit refresh (2026-08-14):** re-verified the 2026-07-17 audit (`A1`–`A10`) against the current
-> code and read the ~10 new service files added since (OCR rewrite, eligibility gate, labour
-> engine, GaniParser). **8 of 11 findings are now fixed**, each with regression cover (suite: 103 →
-> 120 tests) — including a new high-severity finding (B1: GaniParser's PII-safe document path could
-> silently disable itself forever after one transient failure, falling back to Groq/US), the SSE
-> event-loss bug (A5) and the depreciation-basis errors (A6). Three remain open: one product
-> decision (A2) and two low-priority (A9 hygiene, A10 N+1 reads). See
-> **[docs/audit.md](docs/audit.md)** for the full detail; not folded into the numbered items below.
+> **Production remediation (2026-08-19).** A two-list audit — things present but dead, and things
+> present but not IRDAI-compliant — was worked end to end on branch `production-remediation`.
+> **Items 47-60 below.** Two carried real money: a Third Party policy could be paid an own-damage
+> settlement, and every total loss under-paid by 5% of IDV. Three further bugs surfaced during the
+> work that were on neither list (a 500 on every gate-rejected report download, an NCB figure wrong
+> by half at high slabs, and policy PDFs naming the wrong customer on both demo policies).
+> Test suite 127 → 279. Full detail: **[docs/audit.md](docs/audit.md)**.
+>
+> Still open by choice: `A2` (upload/delete endpoints unguarded — guarding them would break
+> ordinary customer claim-filing, so it needs a scoped session design), plus repo hygiene and the
+> N+1 result.json reads.
 
 **Legend:** ✅ Fixed · ◐ Partial/documented gate · 🟡 Open · ⏸ Deferred
 
@@ -42,8 +45,8 @@ metadata:
 | 26 | Hypothecation/lien modeling | ✅ Fixed 2026-07-15 |
 | 26b | DL/RC generator realistic Indian format | ✅ Fixed 2026-07-15 |
 | 26c | Document-authenticity false positive on own disclaimer | ✅ Fixed 2026-07-15 |
-| 27 | FIR parser doesn't extract statutory section | 🟡 Open |
-| 28 | DL `vehicle_classes` not cross-checked | 🟡 Open |
+| 27 | FIR parser doesn't extract statutory section | ✅ Fixed 2026-08-18 (both parsers + FC-18) |
+| 28 | DL `vehicle_classes` not cross-checked | ✅ Fixed 2026-08-18 (FC-29) |
 | 29 | Agent 3 story-match vs Agent 2 telematics not cross-validated | 🟡 Open |
 | 30 | CSV storage single-worker-safe only by accident | 🟡 Open |
 | 31 | FC-28 string-vs-list phantom-flags bug | ✅ Fixed 2026-07-15 |
@@ -67,6 +70,15 @@ metadata:
 | 49 | Depreciation depreciated labour, mixed GST bases, and computed on the AI assessment while paying the garage quote (under-deducting); now a material-weighted rate on the parts share of the approved basis | ✅ Fixed 2026-08-14 |
 | 50 | Assessed fair value read ₹1,05,008 on a genuine ₹54,280 claim (reporting it ~50% under-declared) — undeclared parts folded into the audited scope, `Replace` double-billing R&I, backwards part-count uplift, substring fallback billing `engine_mounts` as an engine-out job, ADAS calibration charged per part → ₹39,768 and correctly abstaining at 50% coverage | ✅ Fixed 2026-08-14 |
 | 51 | Assessed value made real (no anchoring): price queries carried the trim so no listing matched (all 15 policies affected), relevance filter discarded "HEAD LAMP ASSY", no side-agnostic retry, and a fabricated `0.65` aftermarket floor biased the benchmark 17.5% low. Coverage 50%→83%, assessed ₹39,768→₹81,318 — inside the researched ₹60k–1.1L authorised-workshop band. Labour left untouched (evidence says it was never the outlier). Plus: every negative variance was labelled "Consistent" — real `below_market` band added, payout unaffected | ✅ Fixed 2026-08-17 |
+| 52 | **Third Party policy could be paid an own-damage settlement** — `coverage_type` shown to the customer, gated by nothing. Scope of cover is now a hard stop at the gate | ✅ Fixed 2026-08-18 |
+| 53 | **Every total loss under-paid by 5% of IDV** — salvage always deducted, silently assuming the insured keeps the wreck | ✅ Fixed 2026-08-18 |
+| 54 | Zero-Dep + Consumables add-ons implemented (with the tyre/battery carve-out and the GST/double-deduction traps); NCB grid + corrected impact arithmetic | ✅ Added 2026-08-18 |
+| 55 | IRDAI service clock — intimation/surveyor/report/decision timestamps, elapsed vs the June-2024 limits, breach flags. No penalty money computed | ✅ Added 2026-08-18 |
+| 56 | Assessed value made reproducible — input-addressed assessment cache + alias collapsing (22 observed part names → 15) + `determinism_check.py` | ✅ Added 2026-08-18 |
+| 57 | Dead code removed: `vehicle_catalog` RAG path, `vehicle_parts.json`, `parts_pricing_base.json`, orphan KB PDFs, `base_oem`, `_check_row`; `low_confidence_observations` + `claimed_but_undamaged` wired to the UI/PDF instead | ✅ Fixed 2026-08-18 |
+| 58 | PDF report 500'd on every gate-rejected claim (em-dash through fpdf2's Latin-1 core font); report had no eligibility section at all | ✅ Fixed 2026-08-18 |
+| 59 | `build_vectorstore.py` + `generate_policy_pdfs.py` written — both were referenced by code/docs and absent. Policy PDFs had drifted from policies.csv on the two demo policies (item #3) | ✅ Fixed 2026-08-19 |
+| 60 | Fixtures repriced to real market values, brands made fictional + specimen-marked, labour as hours × rate | ✅ Fixed 2026-08-19 |
 
 ## [P0 — Real-world correctness](docs/changelog.md) (settlement math & policy handling)
 
@@ -74,7 +86,7 @@ metadata:
 |---|---|---|
 | 1 | Zero Depreciation add-on ignored in settlement math | ⏸ Deferred |
 | 2 | Policy RAG retrieval mixed pages from other customers' policies | ✅ Fixed 2026-07-10 |
-| 3 | Policy PDFs disagree with policies.csv | 🟡 Open |
+| 3 | Policy PDFs disagree with policies.csv | ✅ Fixed 2026-08-19 (`scripts/generate_policy_pdfs.py`) |
 | 4 | Stale results in stored demo claims | ✅ Resolved 2026-07-10 |
 
 ## [P1 — Fraud engine false positives](docs/changelog.md)

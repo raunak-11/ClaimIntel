@@ -136,7 +136,13 @@ Deterministic guards + IRDAI settlement math (+ inflation cap) → SSE stream �
 ## Backend — Key Decisions & Patterns
 
 ### Storage (no database)
-- `claims.csv` fields: `claim_id, policy_no, claimant, phone, vehicle, claim_type, incident_date, incident_location, claim_amount, description, status, created_at, garage_estimate_amount, garage_workshop_name, fir_number`.
+- `claims.csv` fields: `claim_id, policy_no, claimant, phone, vehicle, claim_type, incident_date, incident_location, claim_amount, description, status, created_at, garage_estimate_amount, garage_workshop_name, fir_number` + four IRDAI service timestamps `intimation_at, surveyor_appointed_at, survey_report_at, decision_at`.
+- `policies.csv` gained `add_ons` (semicolon-delimited; vocabulary in `services/coverage.py`).
+- **Schema drift is enforced against, not just documented:** `storage.CSV_FIELDS`,
+  `scripts/reset_claims.py` and both CSV headers must agree — `tests/test_storage_schema.py` and
+  `data_sanity` section 0 both check it. `_ensure_csv()` runs `_migrate_csv_header()`, which
+  widens an older file in place (encrypted PII cells copied verbatim, never re-encrypted).
+  `_csv_lock` is an **RLock** because that migration runs inside callers that already hold it.
 - `data/claims/{claim_id}/result.json` — all agent outputs + summary.
 - `save_claim()` and `update_claim_field()` both hold `_csv_lock` (concurrent-write safe — single
   worker only, see `docs/changelog.md` item #30).
@@ -213,9 +219,18 @@ doc pass, no vision agent, no LLM agent). Deterministic — no LLM, no network, 
   status `Rejected`, `fraud_risk_score: null` ("Not assessed" — A2 never ran), emits
   `agent_skipped` for all five agents, and returns. Previously this was detected by A4 and acted
   on 37 lines after A5 finished — the whole pipeline was paid for first.
+- **Hard stop #2 — scope of cover** (`services/coverage.py`). `coverage_type` was shown to the
+  customer on the New Claim screen and gated by nothing, so a Third Party-only policy could file
+  an own-damage claim and be settled against its full sum insured. Comprehensive admits every
+  claim kind; third-party admits **only liability claims** — and it genuinely does admit those, so
+  a real TP claim on a TP policy still proceeds. Unknown cover never rejects; it raises an
+  advisory. Policy period takes precedence when both fail, with the cover sentence appended so
+  neither reason is lost.
 - **Also runs** the 13 metadata-only checks (`fraud_intelligence.METADATA_CHECK_IDS`) so early
   signals surface at the top of the pipeline. A2 still recomputes the full 32 from scratch, so
   the gate changes no score.
+- `rejection_summary()` is reason-specific via `reject_code` — a cover mismatch must not tell a
+  claimant their policy had lapsed, in a document that may reach the Ombudsman.
 
 ### Orchestrator (`backend/orchestrator.py`)
 - Runs the eligibility gate first (above); on a hard fail the pipeline returns immediately.
@@ -280,8 +295,43 @@ Net Payable = Approved Repair Basis − Depreciation (material-wise) − Deducti
 - **Inflation cap:** only the **>40% (Investigate)** band changes the payout — repair basis
   becomes the **AI fair value**, the excess is `disallowed_inflation` (surfaced as *leakage
   prevented* in analytics). Consistent/Review use the garage quote.
-- Material-wise depreciation (glass 0%, tyre/rubber/battery 50%, fibre 30%, metal by age slab).
-  Total-loss path: IDV − salvage when repair ≥ 75% of sum insured. NCB advisory on Approve.
+- Material-wise depreciation (glass 0%, tyre/rubber/battery 50%, fibre 30%, metal by age slab),
+  applied as a value-weighted **effective rate** on the parts portion of the approved basis;
+  `depreciation_pct` reports that effective rate, since the UI, PDF and letter all print it beside
+  the figure it produced.
+- **Salvage — `SALVAGE_RETAINED_BY = "insurer"`.** On a total loss the insured surrenders the
+  wreck and is paid the full IDV less deductibles; the wreck's realisation is the insurer's
+  recovery, NOT a deduction. This was previously hardcoded the other way (`si * 0.05` always
+  deducted), under-paying every total loss by 5% of IDV. The `"insured"` branch stays live and
+  tested. The row renders even at ₹0 so the retention decision is never invisible.
+- **Add-ons** (`policies.csv add_ons`): **Zero-Dep** waives parts depreciation but NOT tyres,
+  tubes or batteries (the standard carve-out — "depreciation = 0" would overpay), and reports
+  `depreciation_waived_inr`. **Consumables** are excluded under a standard policy and payable
+  under the add-on; the estimate line is GST-exclusive so it is grossed up before deduction, and
+  it is only deducted when the basis IS the garage quote (under the inflation cap or on a total
+  loss the basis never contained them). **NCB Protect** retains the slab.
+- **NCB** is reported, never written back — the reset happens at renewal and is conditional on the
+  claim actually being paid. Impact is `premium × pct/(100−pct)`; the old `pct/100` understated a
+  50% bonus by half.
+- **Third-party liability claims short-circuit** to `_third_party_breakdown()`: own-damage
+  depreciation, the engine-cc excess and the IDV cap are all meaningless against a Tribunal award.
+  Same key set, so no consumer breaks.
+
+### IRDAI service clock (`backend/services/claim_timeline.py`)
+Elapsed vs the June-2024 Master Circular (surveyor 24 h, report 15 d, settle 7 d). Computed **on
+read**, never stored — a snapshot goes stale in hours. Pending milestones measure against `now`, so
+an undecided claim shows a live breach. Compliance is tri-state. **No penalty or interest is
+computed** (a test enforces that), and every surface states that the AI investigation *stands in
+for* a licensed surveyor's acts rather than being them.
+
+### Reproducibility (`backend/services/assessment_cache.py`)
+The assessed value moved between runs: one claim's price cache accumulated **22 distinct part
+names for 6 claimed parts**. `temperature=0` is set everywhere and is not enough — Bedrock's
+Converse API has no seed and the vision model is Mixture-of-Experts. So the *pipeline* is made
+reproducible instead: Agent 1's output is keyed on a hash of the image bytes, the estimate line
+items and the three claim fields in the prompt. Identical evidence replays; a changed photo
+re-reads automatically. `scripts/determinism_check.py` measures the residual and reports whether
+the **band verdict** stayed stable, which is the figure that matters.
 
 ---
 
@@ -356,7 +406,11 @@ has the exact per-case filing steps.
   at-rest encryption, token observability, 32 fraud checks, garage intelligence, live-web-only
   part pricing with coverage abstention, rule-based labour engine, settlement breakdown +
   inflation cap, telematics + dash-cam, PDF report + customer letter — all working.
+- **Coverage enforced** at the gate, salvage/zero-dep/consumables/NCB corrected, IRDAI service
+  clock tracked, reproducible assessments, and every previously-dead field either wired up or
+  deleted — see [`docs/audit.md`](docs/audit.md).
 - Two items remain **deployment/commercial decisions, not code** — see "Pre-pilot decision gates"
-  above.
+  above. `A2` (unguarded upload/delete endpoints) is a third: guarding them would break ordinary
+  customer claim-filing, so it needs a scoped session design rather than a patch.
 - Full history and every fix's live-verification detail: [`newupdates.md`](newupdates.md) (index)
   → [`docs/changelog.md`](docs/changelog.md) (full detail).

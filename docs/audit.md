@@ -3,7 +3,7 @@ title: Code Audit — Refresh & Fixes (2026-08-14)
 description: Second-pass audit re-verifying the 2026-07-17 findings against the current codebase, plus new findings from the OCR/eligibility-gate/labour-engine/GaniParser work added since. Eight of eleven findings are now fixed, each with regression cover.
 metadata:
   type: audit
-  status: 10 findings fixed; 3 remaining open (1 product decision, 2 low-priority)
+  status: production remediation complete — 10 audit findings + a further A/B remediation shipped on branch production-remediation; 3 open by choice
   related: changelog.md, ../CLAUDE.md
 ---
 
@@ -18,7 +18,7 @@ metadata:
 > one new high-severity finding (B1). **Unlike the last audit, this one fixes what it finds**
 > rather than only cataloguing it.
 >
-> **Status: 10 of 13 fixed.** Six were corrected in the initial sweep; **A5 and A6** in a follow-up
+> **Status: 10 of 13 audit findings fixed, plus the full A/B remediation below.** Six were corrected in the initial sweep; **A5 and A6** in a follow-up
 > pass; then **B2** after a live re-investigation showed a genuine ₹54,280 claim being assessed at
 > ₹1,05,008; then **B3**, which grounded that figure in researched market data instead of merely
 > making it smaller. Each fix carries regression cover: the suite went from 103 to **127 passing**
@@ -43,6 +43,44 @@ metadata:
 | A2 | 🟠 Med | Upload / delete / docs endpoints are not role-guarded | 🟡 Open — product decision, not a pure bug |
 | A9 | 🟢 Low | Repo hygiene — stray debug files, non-empty `claims.csv`, large uncommitted set | 🟡 Open |
 | A10 | 🟢 Low | N+1 `result.json` reads (now also in `/api/fraud/claims`) | 🟡 Open |
+
+---
+
+## Production remediation (2026-08-18 / 19) — branch `production-remediation`
+
+A second, larger pass followed this audit, driven by two explicit lists: things **present but
+dead**, and things **present but not IRDAI-compliant**. 17 commits, test suite **127 → 279**,
+`data_sanity` 0 FAIL, clean `vite build`.
+
+**Carried real money**
+| | |
+|---|---|
+| A **Third Party-only policy could be paid a full own-damage settlement** — `coverage_type` was rendered to the customer on the New Claim screen and gated by nothing. POL-667788 (in force) would have settled against a ₹1,85,000 sum insured. | Scope of cover is now a hard stop at the eligibility gate, before any model call. A genuine TP *liability* claim on that same policy still passes — the gate distinguishes them. |
+| **Every total loss under-paid by 5% of IDV** — `round(si * 0.05)` was always deducted as salvage, silently assuming the customer keeps the wreck. | `SALVAGE_RETAINED_BY = "insurer"`: full IDV less deductibles, no salvage deduction. On an ₹11L IDV that is ₹55,000 per claim. |
+
+**Three bugs found during the work that were on neither list**
+1. **The PDF report 500'd on every gate-rejected claim.** `CHECK_ICON`'s default was an em-dash
+   passed raw to fpdf2, whose core fonts are Latin-1 only — and "Not assessed" is exactly what a
+   gate-rejected claim reports. Found by writing the first test for 900 previously-untested lines
+   on a user-facing endpoint.
+2. **The NCB figure was wrong by half at high slabs.** `premium × pct/100` backs a discount out of
+   a *net* premium; it must be `pct/(100−pct)`.
+3. **Policy PDFs named the wrong customer on both demo policies** — "Aditya Nair" for Vijay M,
+   "Meera Iyer" for Rohit Madeshiya. Agent 4 retrieves and quotes those documents. (Open item #3.)
+
+**Also shipped:** Zero-Dep (with the tyre/battery carve-out — "depreciation = 0" would overpay)
+and Consumables (grossed up for GST, and *not* double-deducted under the inflation cap); the IRDAI
+service clock, which computes elapsed time but deliberately **no penalty money** and never implies
+a licensed surveyor was involved; reproducible assessments (the measured problem: 22 distinct part
+names for a 6-part claim across runs); schema migration with an enforced cross-file invariant; and
+every dead field either wired to the UI/PDF or deleted.
+
+**Open by choice:** `A2` — guarding the upload/delete endpoints would break ordinary customer
+claim-filing, so it needs a scoped session design rather than a patch. Plus `A9` hygiene and `A10`
+N+1 reads.
+
+**Not verifiable offline:** part prices are live-web only, so the fixture band outcomes need a live
+run. Case 1 was confirmed live at +10.3% variance / 83% coverage → `consistent` → Approve.
 
 ---
 
