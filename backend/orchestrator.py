@@ -283,11 +283,15 @@ async def run_pipeline(claim_id: str, claim: dict, queue: asyncio.Queue):
             storage.update_agent_result(claim_id, agent_name, result)
             # After damage assessment, write the AI-estimated amount back to CSV
             if agent_name == "damage_assessment":
-                est = result.get("total_repair_estimate", {})
-                # Use mid-point so downstream agents see a representative value
-                lo = float(est.get("min", 0) if isinstance(est, dict) else 0)
-                hi = float(est.get("max", 0) if isinstance(est, dict) else 0)
-                amount = int((lo + hi) / 2) if hi > 0 else int(lo)
+                # The SAME figure the settlement ledger, the Evidence panel and
+                # the agent's own summary print. This used to take the mid of
+                # `total_repair_estimate` raw, which is GST-EXCLUSIVE on labour,
+                # so the claim amount written to CSV (and shown to the adjuster)
+                # was ~4% below the assessed fair value everything else quoted —
+                # one more different number for the same quantity.
+                from services.settlement_calc import assessed_fair_value
+                _, _, _mid = assessed_fair_value(result)
+                amount = int(round(_mid))
                 storage.update_claim_field(claim_id, "claim_amount", str(amount))
                 # Also push into in-memory context so fraud flags (A2) and
                 # settlement (A5) read the real estimate, not the stale 0.

@@ -310,12 +310,22 @@ function FairValueBreakdown({ fv, undeclaredParts, unverifiedParts, scopeMismatc
           prints as "AI assessed fair value" — both now come from
           settlement_calc.assessed_fair_value(), so they cannot disagree. */}
       {at && (
-        <div className="mt-3 pt-2.5 border-t-2 border-line flex items-center justify-between text-sm gap-3">
-          <span className="font-semibold text-ink">Assessed fair value</span>
+        <div className="mt-3 pt-2.5 border-t-2 border-line flex items-start justify-between text-sm gap-3">
+          <span className="font-semibold text-ink">
+            Assessed fair value
+            {/* Lead with the MID and show the band beneath — identical to how
+                the settlement ledger prints it. This block used to headline the
+                band ("₹82,782 – ₹85,482") while the ledger headlined the mid
+                ("₹84,132"), so the same reconciled figure read as two different
+                numbers on the two halves of the screen. */}
+            {at.total_min !== at.total_max && (
+              <span className="block text-[10px] font-normal text-faint mt-0.5">
+                band {fmtINR(at.total_min)}–{fmtINR(at.total_max)}
+              </span>
+            )}
+          </span>
           <span className="font-mono tabular-nums font-semibold text-ink shrink-0">
-            {at.total_min === at.total_max
-              ? fmtINR(at.total_mid)
-              : `${fmtINR(at.total_min)} – ${fmtINR(at.total_max)}`}
+            {fmtINR(at.total_mid)}
           </span>
         </div>
       )}

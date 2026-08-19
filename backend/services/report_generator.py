@@ -705,12 +705,19 @@ def generate_claim_report(claim: dict, result: dict) -> bytes:
     _kv_row(pdf, "Vehicle Match",    vm,    alt=True)
     _kv_row(pdf, "Plate in Image",   plate, alt=False)
     _kv_row(pdf, "Pre-existing Dmg", prex,  alt=True)
-    total_est = damage.get("total_repair_estimate", {})
-    if isinstance(total_est, dict):
-        est_line = f"{_inr(total_est.get('min', 0))} — {_inr(total_est.get('max', 0))}"
+    # The assessed fair value, on the same GST-inclusive basis as the settlement
+    # section of this same PDF. It used to print `total_repair_estimate` raw,
+    # which excludes GST on labour, so page 2 and the settlement page quoted
+    # different figures for the same thing.
+    from services.settlement_calc import assessed_fair_value
+    _a_lo, _a_hi, _a_mid = assessed_fair_value(damage)
+    if _a_mid > 0:
+        est_line = _inr(round(_a_mid))
+        if round(_a_lo) != round(_a_hi):
+            est_line += f" (band {_inr(round(_a_lo))} - {_inr(round(_a_hi))})"
     else:
-        est_line = "—"
-    _kv_row(pdf, "Total Estimate",   est_line, alt=False)
+        est_line = "Not assessed"
+    _kv_row(pdf, "Assessed Fair Value", est_line, alt=False)
 
     # ── Independent pricing coverage ─────────────────────────────────────────
     # Part prices come from live web market data only; the garage-line fallback

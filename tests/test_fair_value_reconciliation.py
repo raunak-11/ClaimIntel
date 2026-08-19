@@ -110,3 +110,71 @@ def test_only_labour_is_grossed_up_for_gst():
     d2 = _damage(0, 0, 10000, 0)           # labour only
     lo2, _, _ = assessed_fair_value(d2)
     assert lo2 == pytest.approx(10000 * (1 + GST_RATE), abs=1)
+
+
+# ── One claim, one assessed value, on every surface ───────────────────────────
+
+def test_no_surface_quotes_the_gst_exclusive_total_directly():
+    """`total_repair_estimate` is GST-EXCLUSIVE on labour. Any surface that
+    prints it raw shows a figure ~4% below the assessed fair value the ledger
+    quotes, and the same claim appears to have several different values.
+
+    Four surfaces had drifted this way at once:
+      - the Damage Assessment agent's own summary line ("Est. Repair: ...")
+      - the claim_amount the orchestrator writes back to claims.csv
+      - the PDF report's damage page ("Total Estimate")
+      - the Evidence panel breakdown (fixed earlier, in the panel itself)
+
+    Everything that PRESENTS a number must route through
+    settlement_calc.assessed_fair_value(). This test fails if a raw read is
+    reintroduced into a presentation path.
+    """
+    import os
+    import re
+
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    # Files that legitimately read the raw dict: the producer, the helper that
+    # grosses it up, an emptiness check, and an LLM prompt allow-list.
+    allowed = {
+        os.path.join("backend", "services", "pricing_engine.py"),
+        os.path.join("backend", "services", "settlement_calc.py"),
+        os.path.join("backend", "agents", "fraud_intelligence.py"),
+        os.path.join("backend", "agents", "settlement_recommendation.py"),
+        os.path.join("backend", "agents", "damage_assessment.py"),   # producer
+        os.path.join("backend", "orchestrator.py"),                  # sets the empty default
+    }
+
+    offenders = []
+    for dirpath, _dirs, files in os.walk(os.path.join(root, "backend")):
+        if "__pycache__" in dirpath:
+            continue
+        for name in files:
+            if not name.endswith(".py"):
+                continue
+            full = os.path.join(dirpath, name)
+            rel = os.path.relpath(full, root)
+            if rel in allowed:
+                continue
+            with open(full, encoding="utf-8") as fh:
+                for i, line in enumerate(fh, 1):
+                    if line.lstrip().startswith("#"):
+                        continue
+                    # A read of min/max off total_repair_estimate is the smell.
+                    if re.search(r"total_repair_estimate.*\bget\(\s*[\"'](min|max)", line):
+                        offenders.append(f"{rel}:{i}")
+    assert not offenders, (
+        "these read total_repair_estimate's min/max directly instead of calling "
+        f"assessed_fair_value(): {offenders}"
+    )
+
+
+def test_agent_summary_and_ledger_would_quote_the_same_number():
+    """Both derive from assessed_fair_value(), so they cannot disagree."""
+    d = _damage(59300, 62000, 19300, 600)
+    lo, hi, mid = assessed_fair_value(d)
+    # The agent summary prints round(mid); the ledger prints assessed_fair_value.
+    assert round(mid) == round((lo + hi) / 2)
+    # And the GST-exclusive total it used to print is materially lower.
+    raw_mid = (d["total_repair_estimate"]["min"] + d["total_repair_estimate"]["max"]) / 2
+    assert mid - raw_mid == pytest.approx(19900 * GST_RATE, abs=1)
+    assert mid > raw_mid

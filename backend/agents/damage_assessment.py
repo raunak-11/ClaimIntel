@@ -489,15 +489,22 @@ class DamageAssessmentAgent(BaseAgent):
             }
             # Regenerate the summary string now that we have real prices.
             # The LLM's summary said ₹0–₹0 because it was told not to price.
-            est   = pricing["total_repair_estimate"]
-            lo, hi = est.get("min", 0), est.get("max", 0)
+            #
+            # This MUST be the same figure the settlement ledger and the Evidence
+            # panel print. It used to quote `total_repair_estimate` raw, which is
+            # GST-EXCLUSIVE on labour — so the collapsed Damage Assessment row
+            # read "Est. Repair: ₹79,200–₹81,900" while both other surfaces said
+            # ₹84,132, and the same claim appeared to have three assessed values.
+            # `total_repair_estimate` and `labour_assessment` are both on `result`
+            # by this point, so the canonical helper can run here.
+            _lo, _hi, _mid = assessed_fair_value(result)
             n_parts = len(result.get("damaged_parts") or [])
             n_undeclared = len(result.get("undeclared_parts") or [])
             match   = result.get("vehicle_match_in_image", "Unclear")
             sev     = result.get("overall_severity", "Unknown")
             result["summary"] = (
-                f"Severity: {sev} | Est. Repair: "
-                f"₹{lo:,}–₹{hi:,} | "
+                f"Severity: {sev} | Assessed: "
+                f"₹{round(_mid):,} | "
                 f"Parts: {n_parts} in estimate"
                 + (f" + {n_undeclared} undeclared" if n_undeclared else "")
                 + f" | Vehicle Match: {match}"
