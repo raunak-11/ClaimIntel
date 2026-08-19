@@ -338,7 +338,8 @@ def price_part(vehicle: str, part: str, severity: str, repair_type: str = "",
 def estimate_damage(vehicle: str, damaged_parts: list, undeclared_parts: list | None = None,
                     line_items: list | None = None, live: bool = True,
                     unverified_parts: list | None = None,
-                    location: str = "", workshop_name: str = "") -> dict:
+                    location: str = "", workshop_name: str = "",
+                    vehicle_year: int | None = None) -> dict:
     """Price estimate-matched parts and LLM-detected-but-undeclared parts IN PLACE.
 
     `damaged_parts`    — parts present in the garage estimate (get bounding boxes)
@@ -408,6 +409,8 @@ def estimate_damage(vehicle: str, damaged_parts: list, undeclared_parts: list | 
     labour = labour_engine.assess(
         vehicle, damaged_parts, garage_labour=labour_pool,
         location=location, workshop_name=workshop_name,
+        # Gates ADAS calibration on model year — see labour_engine.vehicle_traits.
+        vehicle_year=vehicle_year,
     )
     # Undeclared parts are absent from `per_part`, so _price_bucket assigns them
     # ₹0 labour without a special case.

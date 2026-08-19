@@ -63,3 +63,6 @@ Thumbs.db
 npm-debug.log*
 yarn-debug.log*
 pnpm-debug.log*
+
+# Assessment replay cache (content-addressed). Machine-local, regenerates on demand.
+data/assessment_cache/

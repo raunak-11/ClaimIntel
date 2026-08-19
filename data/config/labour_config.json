@@ -9,12 +9,17 @@
     "Every number here is intended to be replaced wholesale by insurer-supplied or",
     "OEM-supplied data — see services/labour_providers.py for the provider interface."
   ],
-
   "operations": [
-    "BODY_REPAIR", "PART_REPLACEMENT", "REMOVE_REINSTALL", "PAINTING",
-    "MECHANICAL", "ELECTRICAL", "DIAGNOSTIC", "ADAS_CALIBRATION", "OTHER"
+    "BODY_REPAIR",
+    "PART_REPLACEMENT",
+    "REMOVE_REINSTALL",
+    "PAINTING",
+    "MECHANICAL",
+    "ELECTRICAL",
+    "DIAGNOSTIC",
+    "ADAS_CALIBRATION",
+    "OTHER"
   ],
-
   "default_category": "panel_small",
   "part_categories": {
     "front_bumper": "bumper",
@@ -69,36 +74,116 @@
     "airbag": "safety",
     "seatbelt": "safety"
   },
-
   "action_operations": {
     "_note_replace": "PART_REPLACEMENT already includes removing the damaged part and fitting the new one. REMOVE_REINSTALL is for taking an ADJACENT UNDAMAGED assembly off to reach the work, and is mutually exclusive with replacing that same part — real estimating systems never bill both on one line. It used to sit here, which double-billed teardown on every replaced part (one real claim: 20.9h / Rs 15,800 of pure duplication).",
-    "Replace": ["PART_REPLACEMENT", "PAINTING"],
-    "Repair": ["BODY_REPAIR", "PAINTING"],
-    "Paint": ["PAINTING"]
+    "Replace": [
+      "PART_REPLACEMENT",
+      "PAINTING"
+    ],
+    "Repair": [
+      "BODY_REPAIR",
+      "PAINTING"
+    ],
+    "Paint": [
+      "PAINTING"
+    ]
   },
   "category_operation_overrides": {
-    "lighting": { "add": ["ELECTRICAL"], "remove": ["PAINTING", "BODY_REPAIR"] },
-    "glass": { "add": ["REMOVE_REINSTALL"], "remove": ["PAINTING", "BODY_REPAIR"] },
-    "wheel": { "add": [], "remove": ["PAINTING", "BODY_REPAIR"] },
-    "cooling": { "add": ["MECHANICAL"], "remove": ["PAINTING"] },
-    "mirror": { "add": ["ELECTRICAL"], "remove": ["BODY_REPAIR"] },
-    "trim": { "add": [], "remove": ["BODY_REPAIR"] },
-    "mechanical_assembly": { "add": ["MECHANICAL"], "remove": ["PAINTING"] },
-    "suspension": { "add": ["MECHANICAL"], "remove": ["PAINTING"] },
-    "safety": { "add": ["ELECTRICAL"], "remove": ["PAINTING", "BODY_REPAIR"] },
-    "structure": { "add": [], "remove": [] }
+    "lighting": {
+      "add": [
+        "ELECTRICAL"
+      ],
+      "remove": [
+        "PAINTING",
+        "BODY_REPAIR"
+      ]
+    },
+    "glass": {
+      "add": [
+        "REMOVE_REINSTALL"
+      ],
+      "remove": [
+        "PAINTING",
+        "BODY_REPAIR"
+      ]
+    },
+    "wheel": {
+      "add": [],
+      "remove": [
+        "PAINTING",
+        "BODY_REPAIR"
+      ]
+    },
+    "cooling": {
+      "add": [
+        "MECHANICAL"
+      ],
+      "remove": [
+        "PAINTING"
+      ]
+    },
+    "mirror": {
+      "add": [
+        "ELECTRICAL"
+      ],
+      "remove": [
+        "BODY_REPAIR"
+      ]
+    },
+    "trim": {
+      "add": [],
+      "remove": [
+        "BODY_REPAIR"
+      ]
+    },
+    "mechanical_assembly": {
+      "add": [
+        "MECHANICAL"
+      ],
+      "remove": [
+        "PAINTING"
+      ]
+    },
+    "suspension": {
+      "add": [
+        "MECHANICAL"
+      ],
+      "remove": [
+        "PAINTING"
+      ]
+    },
+    "safety": {
+      "add": [
+        "ELECTRICAL"
+      ],
+      "remove": [
+        "PAINTING",
+        "BODY_REPAIR"
+      ]
+    },
+    "structure": {
+      "add": [],
+      "remove": []
+    }
   },
-
   "adas_parts": [
-    "front_bumper", "windshield_front", "grille", "front_camera",
-    "radar_module", "side_mirror_left", "side_mirror_right"
+    "front_bumper",
+    "windshield_front",
+    "grille",
+    "front_camera",
+    "radar_module",
+    "side_mirror_left",
+    "side_mirror_right"
   ],
   "diagnostic": {
-    "trigger_operations": ["ELECTRICAL", "MECHANICAL", "ADAS_CALIBRATION"],
+    "trigger_operations": [
+      "ELECTRICAL",
+      "MECHANICAL",
+      "ADAS_CALIBRATION"
+    ],
     "hours": 0.5,
     "once_per_claim": true
   },
-
   "default_baseline_hours": {
     "BODY_REPAIR": 2.0,
     "PART_REPLACEMENT": 1.5,
@@ -111,85 +196,289 @@
     "OTHER": 0.5
   },
   "baseline_hours": {
-    "bumper": { "BODY_REPAIR": 2.5, "PART_REPLACEMENT": 1.5, "REMOVE_REINSTALL": 0.8, "PAINTING": 2.0, "ELECTRICAL": 0.5, "ADAS_CALIBRATION": 1.5 },
-    "panel_large": { "BODY_REPAIR": 3.5, "PART_REPLACEMENT": 2.0, "REMOVE_REINSTALL": 1.0, "PAINTING": 3.0 },
-    "panel_small": { "BODY_REPAIR": 2.5, "PART_REPLACEMENT": 1.5, "REMOVE_REINSTALL": 0.8, "PAINTING": 2.0 },
-    "door": { "BODY_REPAIR": 3.0, "PART_REPLACEMENT": 2.5, "REMOVE_REINSTALL": 1.2, "PAINTING": 2.5, "ELECTRICAL": 0.8 },
-    "lighting": { "PART_REPLACEMENT": 0.8, "REMOVE_REINSTALL": 0.5, "ELECTRICAL": 0.5, "ADAS_CALIBRATION": 1.0 },
-    "glass": { "PART_REPLACEMENT": 2.0, "REMOVE_REINSTALL": 1.0, "ADAS_CALIBRATION": 1.5 },
-    "mirror": { "PART_REPLACEMENT": 0.6, "REMOVE_REINSTALL": 0.4, "ELECTRICAL": 0.4, "PAINTING": 0.6, "ADAS_CALIBRATION": 0.8 },
-    "wheel": { "PART_REPLACEMENT": 0.5, "REMOVE_REINSTALL": 0.4 },
-    "cooling": { "PART_REPLACEMENT": 2.0, "REMOVE_REINSTALL": 1.5, "MECHANICAL": 1.5 },
-    "mechanical_assembly": { "PART_REPLACEMENT": 6.0, "REMOVE_REINSTALL": 4.0, "MECHANICAL": 5.0 },
-    "suspension": { "PART_REPLACEMENT": 2.0, "REMOVE_REINSTALL": 1.2, "MECHANICAL": 2.0 },
-    "trim": { "BODY_REPAIR": 1.0, "PART_REPLACEMENT": 0.6, "REMOVE_REINSTALL": 0.4, "PAINTING": 0.8 },
-    "structure": { "BODY_REPAIR": 5.0, "PART_REPLACEMENT": 4.0, "REMOVE_REINSTALL": 2.5, "PAINTING": 2.5 },
-    "safety": { "PART_REPLACEMENT": 1.5, "REMOVE_REINSTALL": 1.0, "ELECTRICAL": 1.0, "DIAGNOSTIC": 0.5 }
+    "bumper": {
+      "BODY_REPAIR": 2.5,
+      "PART_REPLACEMENT": 1.5,
+      "REMOVE_REINSTALL": 0.8,
+      "PAINTING": 2.0,
+      "ELECTRICAL": 0.5,
+      "ADAS_CALIBRATION": 1.5
+    },
+    "panel_large": {
+      "BODY_REPAIR": 3.5,
+      "PART_REPLACEMENT": 2.0,
+      "REMOVE_REINSTALL": 1.0,
+      "PAINTING": 3.0
+    },
+    "panel_small": {
+      "BODY_REPAIR": 2.5,
+      "PART_REPLACEMENT": 1.5,
+      "REMOVE_REINSTALL": 0.8,
+      "PAINTING": 2.0
+    },
+    "door": {
+      "BODY_REPAIR": 3.0,
+      "PART_REPLACEMENT": 2.5,
+      "REMOVE_REINSTALL": 1.2,
+      "PAINTING": 2.5,
+      "ELECTRICAL": 0.8
+    },
+    "lighting": {
+      "PART_REPLACEMENT": 0.8,
+      "REMOVE_REINSTALL": 0.5,
+      "ELECTRICAL": 0.5,
+      "ADAS_CALIBRATION": 1.0
+    },
+    "glass": {
+      "PART_REPLACEMENT": 2.0,
+      "REMOVE_REINSTALL": 1.0,
+      "ADAS_CALIBRATION": 1.5
+    },
+    "mirror": {
+      "PART_REPLACEMENT": 0.6,
+      "REMOVE_REINSTALL": 0.4,
+      "ELECTRICAL": 0.4,
+      "PAINTING": 0.6,
+      "ADAS_CALIBRATION": 0.8
+    },
+    "wheel": {
+      "PART_REPLACEMENT": 0.5,
+      "REMOVE_REINSTALL": 0.4
+    },
+    "cooling": {
+      "PART_REPLACEMENT": 2.0,
+      "REMOVE_REINSTALL": 1.5,
+      "MECHANICAL": 1.5
+    },
+    "mechanical_assembly": {
+      "PART_REPLACEMENT": 6.0,
+      "REMOVE_REINSTALL": 4.0,
+      "MECHANICAL": 5.0
+    },
+    "suspension": {
+      "PART_REPLACEMENT": 2.0,
+      "REMOVE_REINSTALL": 1.2,
+      "MECHANICAL": 2.0
+    },
+    "trim": {
+      "BODY_REPAIR": 1.0,
+      "PART_REPLACEMENT": 0.6,
+      "REMOVE_REINSTALL": 0.4,
+      "PAINTING": 0.8
+    },
+    "structure": {
+      "BODY_REPAIR": 5.0,
+      "PART_REPLACEMENT": 4.0,
+      "REMOVE_REINSTALL": 2.5,
+      "PAINTING": 2.5
+    },
+    "safety": {
+      "PART_REPLACEMENT": 1.5,
+      "REMOVE_REINSTALL": 1.0,
+      "ELECTRICAL": 1.0,
+      "DIAGNOSTIC": 0.5
+    }
   },
-
   "complexity_adjustments": {
     "_note": "Each factor is a fraction of the baseline, applied additively and reported as its own hours delta. Nothing here is folded into baseline_hours.",
-    "severity": { "Minor": -0.15, "Moderate": 0.0, "Severe": 0.25 },
-    "presence_state": { "present": 0.0, "detached": 0.10, "missing": 0.15 },
+    "severity": {
+      "Minor": -0.15,
+      "Moderate": 0.0,
+      "Severe": 0.25
+    },
+    "presence_state": {
+      "present": 0.0,
+      "detached": 0.1,
+      "missing": 0.15
+    },
     "structural_involvement": 0.35,
-    "difficult_access": 0.20,
-    "aluminium_or_hss": 0.30,
+    "difficult_access": 0.2,
+    "aluminium_or_hss": 0.3,
     "ev_high_voltage": 0.25,
     "adas_equipped": 0.15,
     "_note_adjacent": "DISABLED (was threshold 3 / +0.05 per extra part / max +0.20). This had the sign backwards: it made EVERY part dearer as the part count rose, when parts in one repair area SHARE teardown and the marginal labour per part should fall. It also handed the vision model a cost multiplier — 11 detected parts put +20% on all 35 operations, and any over-detection inflated every other line with it. Modelling shared teardown properly (one front-end R&I billed once, not per part) is the real fix and is not implemented; zero is the honest placeholder until it is.",
-    "adjacent_components": { "threshold": 0, "per_extra_part": 0.0, "max": 0.0 },
+    "adjacent_components": {
+      "threshold": 0,
+      "per_extra_part": 0.0,
+      "max": 0.0
+    },
     "total_cap": 0.75
   },
   "_note_inference_blocked": "Categories that may only be reached by an EXPLICIT part_categories entry, never by the substring fallback in labour_engine.part_category(). These carry the highest baseline hours, so a wrong guess is expensive: 'engine_mounts' is unmapped, matched the substring 'engine', and was billed as mechanical_assembly (15 baseline hours, Rs 16,700). Map such parts by name if you want them costed that way.",
-  "inference_blocked_categories": ["mechanical_assembly", "structure", "suspension"],
-
-  "structural_parts": ["chassis", "apron", "pillar_left", "pillar_right", "bumper_reinforcer", "roof"],
-  "difficult_access_parts": ["radiator", "condenser", "engine", "gearbox", "apron", "airbag"],
-
+  "inference_blocked_categories": [
+    "mechanical_assembly",
+    "structure",
+    "suspension"
+  ],
+  "structural_parts": [
+    "chassis",
+    "apron",
+    "pillar_left",
+    "pillar_right",
+    "bumper_reinforcer",
+    "roof"
+  ],
+  "difficult_access_parts": [
+    "radiator",
+    "condenser",
+    "engine",
+    "gearbox",
+    "apron",
+    "airbag"
+  ],
   "vehicle_traits": {
     "_note": "Substring match against the claim's vehicle string, lower-cased. Absent trait = not assumed.",
-    "ev_keywords": ["nexon ev", "tiago ev", "xuv400", "kona", "zs ev", "comet", "e-verito", " ev "],
-    "aluminium_keywords": ["bmw", "audi", "jaguar", "land rover", "volvo", "mercedes"],
-    "adas_keywords": ["safety shield", "adas", "level 2", "xuv700", "harrier", "safari", "hector", "astor", "creta", "seltos"]
+    "ev_keywords": [
+      "nexon ev",
+      "tiago ev",
+      "xuv400",
+      "kona",
+      "zs ev",
+      "comet",
+      "e-verito",
+      " ev "
+    ],
+    "aluminium_keywords": [
+      "bmw",
+      "audi",
+      "jaguar",
+      "land rover",
+      "volvo",
+      "mercedes"
+    ],
+    "_note_adas": "ADAS calibration is real, mandatory and safety-critical WHEN THE CAR HAS ADAS — replacing a front bumper, windshield, grille or door mirror moves the camera/radar and the OEM requires recalibration. But it was gated on a bare model-name substring, so EVERY Seltos/Creta/Harrier got a calibration line and a +15% complexity uplift regardless of model year — including pre-facelift cars with no ADAS hardware at all. A 2022 Seltos was billed ~Rs 2,700 to calibrate sensors it does not have. adas_from_year gates on the first model year that shipped ADAS on ANY trim.",
+    "adas_from_year": {
+      "seltos": 2023,
+      "creta": 2024,
+      "harrier": 2023,
+      "safari": 2023,
+      "hector": 2023,
+      "astor": 2021,
+      "xuv700": 2021
+    },
+    "adas_explicit_keywords": [
+      "safety shield",
+      "adas",
+      "level 2"
+    ]
   },
-
   "rates": {
     "_note": "₹ per hour, by region → garage category → operation. Placeholder defaults, not surveyed market rates.",
     "default_region": "tier_2",
     "default_garage_category": "standard",
     "regions": {
       "metro": {
-        "standard": { "BODY_REPAIR": 650, "PART_REPLACEMENT": 650, "REMOVE_REINSTALL": 600, "PAINTING": 700, "MECHANICAL": 750, "ELECTRICAL": 800, "DIAGNOSTIC": 900, "ADAS_CALIBRATION": 1400, "OTHER": 600 },
-        "network": { "BODY_REPAIR": 750, "PART_REPLACEMENT": 750, "REMOVE_REINSTALL": 700, "PAINTING": 800, "MECHANICAL": 850, "ELECTRICAL": 900, "DIAGNOSTIC": 1000, "ADAS_CALIBRATION": 1600, "OTHER": 700 },
-        "authorised": { "BODY_REPAIR": 950, "PART_REPLACEMENT": 950, "REMOVE_REINSTALL": 900, "PAINTING": 1000, "MECHANICAL": 1100, "ELECTRICAL": 1150, "DIAGNOSTIC": 1300, "ADAS_CALIBRATION": 2000, "OTHER": 900 }
+        "standard": {
+          "BODY_REPAIR": 650,
+          "PART_REPLACEMENT": 650,
+          "REMOVE_REINSTALL": 600,
+          "PAINTING": 700,
+          "MECHANICAL": 750,
+          "ELECTRICAL": 800,
+          "DIAGNOSTIC": 900,
+          "ADAS_CALIBRATION": 1400,
+          "OTHER": 600
+        },
+        "network": {
+          "BODY_REPAIR": 750,
+          "PART_REPLACEMENT": 750,
+          "REMOVE_REINSTALL": 700,
+          "PAINTING": 800,
+          "MECHANICAL": 850,
+          "ELECTRICAL": 900,
+          "DIAGNOSTIC": 1000,
+          "ADAS_CALIBRATION": 1600,
+          "OTHER": 700
+        },
+        "authorised": {
+          "BODY_REPAIR": 950,
+          "PART_REPLACEMENT": 950,
+          "REMOVE_REINSTALL": 900,
+          "PAINTING": 1000,
+          "MECHANICAL": 1100,
+          "ELECTRICAL": 1150,
+          "DIAGNOSTIC": 1300,
+          "ADAS_CALIBRATION": 2000,
+          "OTHER": 900
+        }
       },
       "tier_2": {
-        "standard": { "BODY_REPAIR": 500, "PART_REPLACEMENT": 500, "REMOVE_REINSTALL": 450, "PAINTING": 550, "MECHANICAL": 600, "ELECTRICAL": 650, "DIAGNOSTIC": 750, "ADAS_CALIBRATION": 1200, "OTHER": 450 },
-        "network": { "BODY_REPAIR": 600, "PART_REPLACEMENT": 600, "REMOVE_REINSTALL": 550, "PAINTING": 650, "MECHANICAL": 700, "ELECTRICAL": 750, "DIAGNOSTIC": 850, "ADAS_CALIBRATION": 1400, "OTHER": 550 },
-        "authorised": { "BODY_REPAIR": 800, "PART_REPLACEMENT": 800, "REMOVE_REINSTALL": 750, "PAINTING": 850, "MECHANICAL": 900, "ELECTRICAL": 950, "DIAGNOSTIC": 1100, "ADAS_CALIBRATION": 1800, "OTHER": 750 }
+        "standard": {
+          "BODY_REPAIR": 500,
+          "PART_REPLACEMENT": 500,
+          "REMOVE_REINSTALL": 450,
+          "PAINTING": 550,
+          "MECHANICAL": 600,
+          "ELECTRICAL": 650,
+          "DIAGNOSTIC": 750,
+          "ADAS_CALIBRATION": 1200,
+          "OTHER": 450
+        },
+        "network": {
+          "BODY_REPAIR": 600,
+          "PART_REPLACEMENT": 600,
+          "REMOVE_REINSTALL": 550,
+          "PAINTING": 650,
+          "MECHANICAL": 700,
+          "ELECTRICAL": 750,
+          "DIAGNOSTIC": 850,
+          "ADAS_CALIBRATION": 1400,
+          "OTHER": 550
+        },
+        "authorised": {
+          "BODY_REPAIR": 800,
+          "PART_REPLACEMENT": 800,
+          "REMOVE_REINSTALL": 750,
+          "PAINTING": 850,
+          "MECHANICAL": 900,
+          "ELECTRICAL": 950,
+          "DIAGNOSTIC": 1100,
+          "ADAS_CALIBRATION": 1800,
+          "OTHER": 750
+        }
       }
     },
     "metro_keywords": [
-      "mumbai", "navi mumbai", "thane", "delhi", "new delhi", "gurgaon", "gurugram",
-      "noida", "bengaluru", "bangalore", "chennai", "hyderabad", "kolkata", "pune",
+      "mumbai",
+      "navi mumbai",
+      "thane",
+      "delhi",
+      "new delhi",
+      "gurgaon",
+      "gurugram",
+      "noida",
+      "bengaluru",
+      "bangalore",
+      "chennai",
+      "hyderabad",
+      "kolkata",
+      "pune",
       "ahmedabad"
     ],
-    "authorised_garage_keywords": ["authorised", "authorized", " asc", "service centre", "service center"],
-    "network_garage_keywords": ["network", "preferred", "cashless"]
+    "authorised_garage_keywords": [
+      "authorised",
+      "authorized",
+      " asc",
+      "service centre",
+      "service center"
+    ],
+    "network_garage_keywords": [
+      "network",
+      "preferred",
+      "cashless"
+    ]
   },
-
   "variance_thresholds": {
     "_note": "Review thresholds on (garage labour − assessed labour) / assessed labour. Risk-review bands, NOT proof of fraud.",
     "NORMAL": 10,
     "SLIGHTLY_ELEVATED": 20,
     "REVIEW": 40
   },
-
   "confidence": {
-    "base": 0.80,
-    "penalty_unmapped_part": 0.10,
+    "base": 0.8,
+    "penalty_unmapped_part": 0.1,
     "penalty_default_baseline": 0.05,
     "penalty_no_vehicle_traits": 0.05,
-    "floor": 0.30
+    "floor": 0.3
   }
 }

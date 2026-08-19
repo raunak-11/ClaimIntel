@@ -17,6 +17,24 @@ from services.settlement_calc import (
 )
 
 
+def _policy_vehicle_year(claim: dict) -> int | None:
+    """Model year from the claim's policy record, or None if unavailable.
+
+    None is a meaningful answer here: `vehicle_traits` treats an unknown year as
+    "not ADAS-equipped" rather than guessing, because billing a claimant to
+    calibrate hardware their car may not have is the worse error.
+    """
+    try:
+        from services import storage as _st
+    except Exception:
+        import storage as _st
+    try:
+        policy = _st.get_policy_by_phone(claim.get("phone", "")) or {}
+        return int(str(policy.get("vehicle_year", "")).strip())
+    except Exception:
+        return None
+
+
 def _extract_reg_no(vehicle_str: str) -> str:
     """Pull the registration number out of 'Make Model (REG123)' format."""
     m = re.search(r'\(([A-Z0-9 \-]+)\)', vehicle_str.upper())
@@ -449,6 +467,11 @@ class DamageAssessmentAgent(BaseAgent):
                 line_items=line_items, live=PRICING_LIVE,
                 location=claim.get("incident_location", ""),
                 workshop_name=claim.get("garage_workshop_name", ""),
+                # ADAS calibration is gated on the vehicle's MODEL YEAR, not its
+                # model name — a pre-facelift Seltos/Creta has no ADAS hardware
+                # and must not be billed to calibrate it. The year lives on the
+                # policy, not on the claim row.
+                vehicle_year=_policy_vehicle_year(claim),
             )
             result["total_repair_estimate"] = pricing["total_repair_estimate"]
             result["pricing_method"] = pricing["pricing_method"]

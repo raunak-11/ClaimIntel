@@ -118,10 +118,23 @@ def is_part_mapped(part: str, cfg: dict) -> bool:
 
 # ── Vehicle traits (only what can be evidenced; never assumed) ─────────────────
 
-def vehicle_traits(vehicle: str, cfg: dict) -> dict:
+def vehicle_traits(vehicle: str, cfg: dict, vehicle_year: Optional[int] = None) -> dict:
     """Traits inferable from the vehicle string. Absent evidence = False, not a
     guess — an unrecognised vehicle simply gets no complexity uplift, and the
-    confidence score records that we knew less about it."""
+    confidence score records that we knew less about it.
+
+    ADAS is gated on MODEL YEAR, not just the model name. It used to be a bare
+    substring match, so every Seltos/Creta/Harrier was treated as ADAS-equipped
+    whatever its year — a 2022 Seltos (pre-facelift, no ADAS hardware of any
+    kind) collected a 1.5 h calibration line worth ~₹2,700 plus a +15%
+    complexity uplift on every other operation. The calibration itself is real
+    and mandatory on cars that HAVE ADAS; the defect was billing it to cars
+    that do not.
+
+    An unknown year yields False, consistent with this function's own rule that
+    absent evidence is not a guess: over-charging a claimant for hardware their
+    car may not have is the worse error.
+    """
     v = (vehicle or "").lower()
     tr = cfg.get("vehicle_traits") or {}
 
@@ -130,11 +143,34 @@ def vehicle_traits(vehicle: str, cfg: dict) -> dict:
 
     ev = _any("ev_keywords")
     alu = _any("aluminium_keywords")
-    adas = _any("adas_keywords")
+
+    # An explicit marker in the record ("ADAS", "Level 2") stands on its own.
+    adas = _any("adas_explicit_keywords")
+    adas_reason = "explicit ADAS marker in vehicle record" if adas else None
+
+    if not adas:
+        from_year = tr.get("adas_from_year") or {}
+        for model, first_year in from_year.items():
+            if str(model).strip().lower() not in v:
+                continue
+            if vehicle_year is None:
+                adas_reason = (f"{model} is an ADAS-era model but the vehicle year is "
+                               f"unknown — not assumed")
+            elif int(vehicle_year) >= int(first_year):
+                adas = True
+                adas_reason = (f"{model} model year {vehicle_year} >= {first_year}, "
+                               f"the first year ADAS shipped on this model")
+            else:
+                adas_reason = (f"{model} model year {vehicle_year} predates ADAS on this "
+                               f"model (from {first_year}) — no calibration billed")
+            break
+
     return {
         "ev_high_voltage": ev,
         "aluminium_or_hss": alu,
         "adas_equipped": adas,
+        "adas_reason": adas_reason,
+        "vehicle_year": vehicle_year,
         "recognised": bool(ev or alu or adas),
     }
 
@@ -233,7 +269,8 @@ def assess(vehicle: str,
            location: str = "",
            workshop_name: str = "",
            provider: Optional[LabourDataProvider] = None,
-           config: Optional[dict] = None) -> dict:
+           config: Optional[dict] = None,
+           vehicle_year: Optional[int] = None) -> dict:
     """Assess labour for every damaged part and compare against the garage's own
     labour total.
 
@@ -256,7 +293,7 @@ def assess(vehicle: str,
             garage_labour, cfg,
         )
 
-    traits = vehicle_traits(vehicle, cfg)
+    traits = vehicle_traits(vehicle, cfg, vehicle_year)
     region = resolve_region(location, cfg)
     garage_category = resolve_garage_category(workshop_name, cfg)
     part_count = len(parts)

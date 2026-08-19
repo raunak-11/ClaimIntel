@@ -82,9 +82,9 @@ def test_adas_calibration_is_billed_once_per_vehicle_not_per_part():
     ADAS_CALIBRATION twice at ₹1,800/h — the dearest rate on the card. DIAGNOSTIC
     already had the once-per-claim treatment; this now matches it.
     """
-    out = le.assess("Kia Seltos HTX Plus",                     # matches adas_keywords
+    out = le.assess("Kia Seltos HTX Plus",
                     [_part("front_bumper"), _part("grille"), _part("bonnet")],
-                    config=CFG)
+                    config=CFG, vehicle_year=2023)   # 2023+ Seltos actually has ADAS
     calibrations = [o for o in out["operations"] if o["operation"] == "ADAS_CALIBRATION"]
     assert len(calibrations) == 1
     assert calibrations[0]["component"] == "vehicle"
@@ -177,8 +177,53 @@ def test_adjacent_components_uplift_is_disabled():
 
 def test_unrecognised_vehicle_gets_no_trait_uplift():
     traits = le.vehicle_traits("Some Unknown Car 2019", CFG)
-    assert traits == {"ev_high_voltage": False, "aluminium_or_hss": False,
-                      "adas_equipped": False, "recognised": False}
+    assert traits["ev_high_voltage"] is False
+    assert traits["aluminium_or_hss"] is False
+    assert traits["adas_equipped"] is False
+    assert traits["recognised"] is False
+
+
+# ── ADAS is gated on model YEAR, not model name ───────────────────────────────
+
+def test_adas_not_billed_to_a_pre_facelift_car():
+    """The defect: a bare "seltos" substring match billed a 2022 Seltos ~₹2,700
+    to calibrate ADAS hardware it does not have, plus a +15% uplift on every
+    other operation. ADAS reached the Seltos with the Jul-2023 facelift."""
+    traits = le.vehicle_traits("Kia Seltos HTX Plus", CFG, vehicle_year=2022)
+    assert traits["adas_equipped"] is False
+    assert "predates ADAS" in traits["adas_reason"]
+
+    out = le.assess("Kia Seltos HTX Plus", [_part("front_bumper")],
+                    config=CFG, vehicle_year=2022)
+    assert not [o for o in out["operations"] if o["operation"] == "ADAS_CALIBRATION"]
+
+
+def test_adas_is_billed_from_the_first_year_the_model_had_it():
+    traits = le.vehicle_traits("Kia Seltos HTX Plus", CFG, vehicle_year=2023)
+    assert traits["adas_equipped"] is True
+
+    out = le.assess("Kia Seltos HTX Plus", [_part("front_bumper")],
+                    config=CFG, vehicle_year=2023)
+    assert len([o for o in out["operations"] if o["operation"] == "ADAS_CALIBRATION"]) == 1
+
+
+def test_unknown_year_does_not_assume_adas():
+    """Absent evidence is not a guess — and over-charging a claimant for
+    hardware their car may not have is the worse error."""
+    traits = le.vehicle_traits("Kia Seltos HTX Plus", CFG, vehicle_year=None)
+    assert traits["adas_equipped"] is False
+    assert "unknown" in traits["adas_reason"]
+
+
+def test_explicit_adas_marker_wins_regardless_of_year():
+    traits = le.vehicle_traits("Some Car with ADAS Level 2", CFG, vehicle_year=2015)
+    assert traits["adas_equipped"] is True
+    assert "explicit" in traits["adas_reason"]
+
+
+def test_a_non_adas_era_model_never_gets_calibration():
+    for yr in (2015, 2020, 2026):
+        assert le.vehicle_traits("Maruti Alto 800", CFG, vehicle_year=yr)["adas_equipped"] is False
 
 
 # ── Rates ──────────────────────────────────────────────────────────────────────

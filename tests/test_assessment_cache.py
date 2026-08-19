@@ -121,7 +121,8 @@ def test_a_corrupt_cache_file_degrades_to_a_live_call(images):
     """Must never raise — a bad cache file cannot be allowed to fail a claim."""
     key = ac.compute_key(CLAIM, images, ITEMS)
     ac.save(CLAIM["claim_id"], key, {"ok": True})
-    path = os.path.join(storage.CLAIMS_DIR, CLAIM["claim_id"], "assessments", f"{key}.json")
+    # The store is global now — corrupt the file where save() actually wrote it.
+    path = os.path.join(ac._global_dir(), f"{key}.json")
     with open(path, "w", encoding="utf-8") as fh:
         fh.write("{not valid json")
     assert ac.load(CLAIM["claim_id"], key) is None
@@ -129,7 +130,7 @@ def test_a_corrupt_cache_file_degrades_to_a_live_call(images):
 
 def test_a_stale_cache_version_is_ignored(images):
     key = ac.compute_key(CLAIM, images, ITEMS)
-    path = os.path.join(storage.CLAIMS_DIR, CLAIM["claim_id"], "assessments")
+    path = ac._global_dir()
     os.makedirs(path, exist_ok=True)
     with open(os.path.join(path, f"{key}.json"), "w", encoding="utf-8") as fh:
         json.dump({"cache_version": ac.CACHE_VERSION + 99, "result": {"old": True}}, fh)
@@ -163,3 +164,60 @@ def test_canonicalisation_does_not_merge_genuinely_different_parts():
     assert _canon("headlight_left") != _canon("headlight_right")
     assert _canon("front_bumper") != _canon("rear_bumper")
     assert _canon("bonnet") != _canon("boot")
+
+
+# ── The store is GLOBAL, not per-claim ────────────────────────────────────────
+
+def test_identical_evidence_replays_under_a_different_claim_id(tmp_path, monkeypatch):
+    """The reported symptom: "the same claim with the same details you ran before
+    has a different amount now."
+
+    The key already identifies the evidence completely, but the store lived at
+    data/claims/{claim_id}/, so deleting a claim destroyed its cache and
+    re-filing the same photos drew a fresh vision read from a Mixture-of-Experts
+    model — a different answer for the same input, which is precisely what this
+    cache exists to prevent.
+    """
+    import storage
+    from services import assessment_cache as ac
+
+    monkeypatch.setattr(storage, "CLAIMS_DIR", str(tmp_path / "claims"))
+
+    assessment = {"damaged_parts": [{"part": "front_bumper"}], "total_repair_estimate": {"min": 5, "max": 5}}
+    ac.save("CLM-2026-08-000001", "abc123", assessment)
+
+    # Same evidence, filed again after a reset -> a brand new claim id.
+    assert ac.load("CLM-2026-08-000099", "abc123") == assessment
+
+
+def test_legacy_per_claim_entries_still_replay(tmp_path, monkeypatch):
+    """Claims investigated before the store moved must not silently re-read."""
+    import json as _json
+    import os as _os
+    import storage
+    from services import assessment_cache as ac
+
+    monkeypatch.setattr(storage, "CLAIMS_DIR", str(tmp_path / "claims"))
+
+    legacy_dir = ac._claim_dir("CLM-OLD")
+    _os.makedirs(legacy_dir, exist_ok=True)
+    with open(_os.path.join(legacy_dir, "legacykey.json"), "w", encoding="utf-8") as fh:
+        _json.dump({"cache_version": ac.CACHE_VERSION, "key": "legacykey",
+                    "result": {"damaged_parts": []}}, fh)
+
+    assert ac.load("CLM-OLD", "legacykey") == {"damaged_parts": []}
+    # ...but not for an unrelated claim, since that entry was never global.
+    assert ac.load("CLM-OTHER", "legacykey") is None
+
+
+def test_different_evidence_still_gets_a_different_key(tmp_path, monkeypatch):
+    """Going global must not make the cache stale-prone: a changed estimate is a
+    changed key, so it re-reads automatically."""
+    import storage
+    from services import assessment_cache as ac
+    monkeypatch.setattr(storage, "CLAIMS_DIR", str(tmp_path / "claims"))
+
+    claim = {"description": "front impact", "vehicle": "Kia Seltos", "claim_type": "Motor - Own Damage"}
+    k1 = ac.compute_key(claim, [], [{"part": "bumper", "amount": 11500}])
+    k2 = ac.compute_key(claim, [], [{"part": "bumper", "amount": 34500}])
+    assert k1 != k2

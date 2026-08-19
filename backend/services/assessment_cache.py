@@ -29,6 +29,15 @@ again.
 
 Only the ASSESSMENT is cached. Pricing still runs on every investigation, so a
 refreshed part price still flows through to the settlement.
+
+SCOPE: the store is GLOBAL, not per-claim. The key already identifies the
+evidence completely (image bytes + estimate line items + the prompt's claim
+fields), so filing the same photos and estimate under a new claim id is the same
+input and must give the same answer. It was originally written under
+data/claims/{claim_id}/, which meant deleting a claim destroyed its cache and
+re-filing it drew a fresh vision read — the exact "same claim, different amount"
+the cache exists to prevent. Per-claim entries are still READ so existing claims
+keep replaying.
 """
 
 from __future__ import annotations
@@ -47,6 +56,9 @@ CACHE_VERSION = 1
 
 _DIR_NAME = "assessments"
 
+# Global store, sibling to the claims tree.
+_GLOBAL_DIR_NAME = "assessment_cache"
+
 # Claim fields Agent 1 puts in its prompt. An allow-list, not a deny-list: a new
 # column added to claims.csv must not silently change the hash and invalidate
 # every stored assessment.
@@ -54,7 +66,12 @@ _CLAIM_FIELDS = ("description", "vehicle", "claim_type")
 
 
 def _claim_dir(claim_id: str) -> str:
+    """Legacy per-claim location. Read-only now — see SCOPE in the module docstring."""
     return os.path.join(storage.CLAIMS_DIR, claim_id, _DIR_NAME)
+
+
+def _global_dir() -> str:
+    return os.path.join(os.path.dirname(storage.CLAIMS_DIR.rstrip("/\\")), _GLOBAL_DIR_NAME)
 
 
 def _hash_file(path: str, h) -> None:
@@ -99,25 +116,32 @@ def compute_key(claim: dict, image_paths: list[str],
 
 
 def load(claim_id: str, key: str) -> Optional[dict]:
-    """Stored assessment for this key, or None. Never raises."""
-    path = os.path.join(_claim_dir(claim_id), f"{key}.json")
-    try:
-        with open(path, "r", encoding="utf-8") as fh:
-            payload = json.load(fh)
-    except (OSError, json.JSONDecodeError):
-        # A corrupt or missing file must degrade to a live call, never break the
-        # investigation.
-        return None
-    if payload.get("cache_version") != CACHE_VERSION:
-        return None
-    result = payload.get("result")
-    return result if isinstance(result, dict) else None
+    """Stored assessment for this key, or None. Never raises.
+
+    Global store first, then the legacy per-claim location so assessments written
+    before the store moved still replay.
+    """
+    for path in (os.path.join(_global_dir(), f"{key}.json"),
+                 os.path.join(_claim_dir(claim_id), f"{key}.json")):
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                payload = json.load(fh)
+        except (OSError, json.JSONDecodeError):
+            # A corrupt or missing file must degrade to a live call, never break
+            # the investigation.
+            continue
+        if payload.get("cache_version") != CACHE_VERSION:
+            continue
+        result = payload.get("result")
+        if isinstance(result, dict):
+            return result
+    return None
 
 
 def save(claim_id: str, key: str, result: dict) -> None:
     """Persist an assessment. Best-effort — a cache write must never fail a run."""
     try:
-        directory = _claim_dir(claim_id)
+        directory = _global_dir()
         os.makedirs(directory, exist_ok=True)
         tmp = os.path.join(directory, f"{key}.json.tmp")
         with open(tmp, "w", encoding="utf-8") as fh:
