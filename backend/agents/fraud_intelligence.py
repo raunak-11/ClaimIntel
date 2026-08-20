@@ -70,7 +70,7 @@ Return a JSON object with exactly these fields:
 def _policy_age_days(claim: dict) -> int:
     """Days between policy start and incident date."""
     try:
-        policy = storage.get_policy_by_phone(claim.get("phone", ""))
+        policy = storage.get_policy_for_claim(claim)
         if not policy:
             return -1
         start_str = policy.get("policy_start", "")
@@ -240,7 +240,7 @@ def _run_fraud_checks(claim: dict, damage: dict, docs: dict | None = None) -> tu
     desc_lower = (claim.get("description") or "").lower()
     incident_date = claim.get("incident_date", "")
     created_at = claim.get("created_at", "")
-    policy = storage.get_policy_by_phone(claim.get("phone", ""))
+    policy = storage.get_policy_for_claim(claim)
     photos_present = bool(storage.get_claim_images(claim_id)) if claim_id else False
 
     all_claims = storage.get_all_claims()

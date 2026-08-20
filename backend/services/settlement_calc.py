@@ -69,14 +69,21 @@ GST_RATE         = 0.18   # 18% GST — already baked into the repair invoice to
 # parts whose depreciation is fixed regardless of vehicle age.
 # Key = canonical part name fragment;  value = fixed depreciation %
 MATERIAL_DEP_OVERRIDES: dict[str, int] = {
-    # Glass — 0% depreciation (IRDAI: no depreciation on glass parts)
+    # Glass — 0% depreciation (IMT GR.9: "all parts made of glass — Nil")
     "windshield": 0, "glass": 0, "rear_glass": 0,
-    # Tyres, tubes, batteries — 50% regardless of age
+    # Tyres, tubes, batteries AND AIR BAGS — 50% regardless of age.
+    # GR.9 reads "rubber/nylon/plastic parts, tyres and tubes, batteries and air
+    # bags". Air bags were missing, so a deployed airbag module fell through to
+    # the vehicle-age slab — 35% on a 4-year car instead of the mandated 50%,
+    # and 0% under Zero-Dep, which does NOT waive this carve-out. On the ~₹48,000
+    # airbag set a real front-end claim carries, that is ₹7,200 over-paid at the
+    # age slab and ₹24,000 over-paid with the add-on.
     "tyre": 50, "tire": 50, "battery": 50, "tube": 50,
-    # Rubber/plastic — 50%
-    "rubber": 50, "plastic": 50,
+    "airbag": 50, "air_bag": 50, "srs_module": 50,
+    # Rubber/plastic/nylon — 50%
+    "rubber": 50, "plastic": 50, "nylon": 50,
     # Fibre-reinforced parts — 30%
-    "fibreglass": 30, "fibre": 30,
+    "fibreglass": 30, "fibre_glass": 30, "fibre": 30,
 }
 
 
@@ -85,13 +92,28 @@ MATERIAL_DEP_OVERRIDES: dict[str, int] = {
 # but expressly carves out tyres, tubes and batteries, which keep their 50%.
 # Zero-dep is therefore NOT "depreciation = 0" — that would overpay every claim
 # involving a tyre or a battery.
-ZERO_DEP_EXCLUDED = ("tyre", "tire", "tube", "battery")
+# Air bags sit here with tyres/tubes/batteries: GR.9 fixes them at 50% as a
+# property of the PART, and a Zero-Dep add-on does not buy that away. Omitting
+# them meant the add-on paid a ₹48,000 restraint module at 100%.
+ZERO_DEP_EXCLUDED = ("tyre", "tire", "tube", "battery", "airbag", "air_bag",
+                     "srs_module")
+
+
+# Longest fragment first. Dict insertion order put "glass" (0%) ahead of
+# "fibreglass" (30%), and "glass" is a substring of "fibreglass" — so every
+# fibreglass part matched the glass rule and was paid at FULL value. Glass gets
+# nil depreciation precisely because it is glass; fibre glass is a different
+# material at 30%. Ordering by specificity makes that structural rather than a
+# property of how the dict happens to be written.
+_DEP_FRAGMENTS: tuple[tuple[str, int], ...] = tuple(
+    sorted(MATERIAL_DEP_OVERRIDES.items(), key=lambda kv: -len(kv[0]))
+)
 
 
 def _part_dep_pct(part_name: str, age_dep_pct: int, zero_dep: bool = False) -> int:
     """Depreciation % for a part — material overrides beat the age slab."""
     key = (part_name or "").lower()
-    for fragment, fixed_pct in MATERIAL_DEP_OVERRIDES.items():
+    for fragment, fixed_pct in _DEP_FRAGMENTS:
         if fragment in key:
             if zero_dep and fragment not in ZERO_DEP_EXCLUDED:
                 return 0

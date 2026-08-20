@@ -113,7 +113,7 @@ def _weather_verification_note(claim: dict, incident_date: str) -> str:
 def _check_policy_validity(claim: dict) -> str | None:
     """Returns a critical note if the incident falls outside the policy coverage period."""
     try:
-        policy = storage.get_policy_by_phone(claim.get("phone", ""))
+        policy = storage.get_policy_for_claim(claim)
         if not policy:
             return None
         start_str = policy.get("policy_start", "")

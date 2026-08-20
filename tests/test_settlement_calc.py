@@ -529,3 +529,50 @@ def test_third_party_breakdown_carries_the_same_keys_as_the_own_damage_path():
     own = compute_settlement_breakdown(_OD_CLAIM, _TL_POLICY, _total_loss_damage(), "Approve")
     tp = compute_settlement_breakdown(_TP_CLAIM, _TL_POLICY, _total_loss_damage(), "Approve")
     assert set(tp) == set(own)
+
+
+# ── IMT GR.9 material rules that were missing or shadowed ─────────────────────
+
+def test_airbags_depreciate_at_fifty_percent():
+    """GR.9: "rubber/nylon/plastic parts, tyres and tubes, batteries AND AIR
+    BAGS - 50%". Air bags were absent from the override table, so a deployed
+    module fell through to the vehicle-age slab: 35% on a 4-year car instead of
+    50%. On the ~Rs 48,000 restraint set a front-end claim carries that is
+    Rs 7,200 over-paid."""
+    from services.settlement_calc import _part_dep_pct
+    for name in ("airbag_module", "air_bag_driver", "airbag_passenger", "srs_module"):
+        assert _part_dep_pct(name, 35) == 50, name
+
+
+def test_zero_dep_does_not_waive_the_airbag_carve_out():
+    """The add-on waives depreciation on metal/plastic/rubber/fibre/glass, not on
+    the fixed-rate carve-out. Waiving it paid a Rs 48,000 module at 100%."""
+    from services.settlement_calc import _part_dep_pct
+    assert _part_dep_pct("airbag_module", 35, True) == 50
+    assert _part_dep_pct("battery", 35, True) == 50
+    assert _part_dep_pct("front_bumper", 35, True) == 0     # ordinary part: waived
+
+
+def test_fibreglass_is_thirty_percent_not_zero():
+    """"glass" is a SUBSTRING of "fibreglass" and sat earlier in the dict, so
+    every fibreglass part matched the glass rule and was paid at full value.
+    Glass is nil precisely because it is glass; fibre glass is 30%."""
+    from services.settlement_calc import _part_dep_pct
+    assert _part_dep_pct("fibreglass_bumper", 35) == 30
+    assert _part_dep_pct("fibre_glass_panel", 35) == 30
+    assert _part_dep_pct("fibre_bumper", 35) == 30
+
+
+def test_real_glass_is_still_nil():
+    """The fix must not cost glass its own rule."""
+    from services.settlement_calc import _part_dep_pct
+    for name in ("windshield_front", "windshield_rear", "rear_glass", "window_glass_left"):
+        assert _part_dep_pct(name, 35) == 0, name
+
+
+def test_overrides_are_matched_most_specific_first():
+    """Structural, not a property of how the dict happens to be written: a
+    longer fragment must always win over a shorter one it contains."""
+    from services.settlement_calc import _DEP_FRAGMENTS
+    lengths = [len(frag) for frag, _ in _DEP_FRAGMENTS]
+    assert lengths == sorted(lengths, reverse=True)

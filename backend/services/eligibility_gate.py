@@ -45,7 +45,7 @@ def run(claim: dict) -> dict[str, Any]:
     from agents.fraud_intelligence import run_metadata_checks
     from services import coverage as cov
 
-    policy = storage.get_policy_by_phone(claim.get("phone", "")) or {}
+    policy = storage.get_policy_for_claim(claim) or {}
 
     coverage_note = None
     try:

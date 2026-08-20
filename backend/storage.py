@@ -174,11 +174,59 @@ def get_all_policies() -> list[dict]:
 
 
 def get_policy_by_phone(phone: str) -> Optional[dict]:
+    """FIRST policy registered to this phone number.
+
+    Correct for the pre-claim customer lookup (`GET /api/customers/lookup`),
+    where the phone IS the identifier the caller has. NOT correct once a claim
+    exists — use `get_policy_for_claim`, which knows the policy number.
+    """
     phone = phone.strip().replace(" ", "").replace("-", "")
     for p in get_all_policies():
         if p.get("phone", "").strip() == phone:
             return p
     return None
+
+
+def get_policy_by_no(policy_no: str) -> Optional[dict]:
+    """The policy with this exact number."""
+    policy_no = (policy_no or "").strip().upper()
+    if not policy_no:
+        return None
+    for p in get_all_policies():
+        if (p.get("policy_no") or "").strip().upper() == policy_no:
+            return p
+    return None
+
+
+def get_policy_for_claim(claim: dict) -> Optional[dict]:
+    """THE policy this claim was filed against.
+
+    Every consumer used to resolve the policy with
+    `get_policy_by_phone(claim["phone"])`, which returns the FIRST row matching
+    the number — while `claim["policy_no"]`, recorded at filing, went unread.
+
+    One household with two cars on one registered mobile is entirely ordinary in
+    India, and it made the claim on car B get adjudicated against car A's
+    policy: wrong IDV (so a wrong total-loss threshold and cap), wrong engine cc
+    (wrong compulsory deductible), wrong coverage_type (an own-damage claim
+    admitted on a Third Party policy — the hole the eligibility gate exists to
+    close, reopened underneath it), wrong add_ons, wrong policy period, wrong
+    vehicle year, wrong NCB. Silently, and with full confidence.
+
+    The phone fallback is kept for claims filed before policy_no was reliable,
+    and it records why it was reached so the mismatch is visible rather than
+    inferred.
+    """
+    claim = claim or {}
+    policy = get_policy_by_no(claim.get("policy_no", ""))
+    if policy is not None:
+        return policy
+    fallback = get_policy_by_phone(claim.get("phone", ""))
+    if fallback is not None and claim.get("policy_no"):
+        print(f"[storage] claim {claim.get('claim_id', '?')}: policy "
+              f"{claim.get('policy_no')!r} not found in policies.csv — fell back to "
+              f"the phone lookup, which returned {fallback.get('policy_no')!r}")
+    return fallback
 
 
 # ── Result JSON helpers ───────────────────────────────────────────────────────

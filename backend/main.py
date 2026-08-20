@@ -284,7 +284,7 @@ def get_claim(claim_id: str):
     if not claim:
         raise HTTPException(status_code=404, detail="Claim not found")
     result = storage.get_result(claim_id)
-    policy = storage.get_policy_by_phone(claim.get("phone", ""))
+    policy = storage.get_policy_for_claim(claim)
 
     # Lazy backfill: compute settlement breakdown for claims investigated before
     # the transparent-math feature existed, so older/seed claims still show it.
@@ -673,7 +673,7 @@ def decision_letter(claim_id: str):
     result = storage.get_result(claim_id)
     if not result or not (result.get("summary") or {}).get("decision"):
         raise HTTPException(status_code=400, detail="Investigation not complete — run investigation first")
-    policy = storage.get_policy_by_phone(claim.get("phone", ""))
+    policy = storage.get_policy_for_claim(claim)
 
     from services.letter_generator import draft_decision_letter
     letter = draft_decision_letter(claim, result, policy)
@@ -821,7 +821,7 @@ def analytics():
         if not breakdown:
             try:
                 from services.settlement_calc import compute_settlement_breakdown
-                policy_c = storage.get_policy_by_phone(c.get("phone", ""))
+                policy_c = storage.get_policy_for_claim(c)
                 breakdown = compute_settlement_breakdown(
                     c, policy_c, agents.get("damage_assessment", {}), dec,
                     docs=_parsed_docs(c["claim_id"]),

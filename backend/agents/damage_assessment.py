@@ -29,7 +29,7 @@ def _policy_vehicle_year(claim: dict) -> int | None:
     except Exception:
         import storage as _st
     try:
-        policy = _st.get_policy_by_phone(claim.get("phone", "")) or {}
+        policy = _st.get_policy_for_claim(claim) or {}
         return int(str(policy.get("vehicle_year", "")).strip())
     except Exception:
         return None

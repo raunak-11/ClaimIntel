@@ -43,12 +43,14 @@ def _claim(claim_type="Motor - Own Damage", date="2026-06-01"):
 
 def _run(policy, claim):
     import services.eligibility_gate as g
-    orig = storage.get_policy_by_phone
-    storage.get_policy_by_phone = lambda phone: policy
+    # The gate resolves the policy by the CLAIM's policy_no now, not by phone —
+    # a phone can carry more than one vehicle. See storage.get_policy_for_claim.
+    orig = storage.get_policy_for_claim
+    storage.get_policy_for_claim = lambda c: policy
     try:
         return g.run(claim)
     finally:
-        storage.get_policy_by_phone = orig
+        storage.get_policy_for_claim = orig
 
 
 # ── The defect ────────────────────────────────────────────────────────────────
