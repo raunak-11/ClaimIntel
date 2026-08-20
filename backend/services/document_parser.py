@@ -115,7 +115,7 @@ Return ONLY valid JSON:
   "reg_no": "Vehicle registration number or null",
   "owner_name": "Registered owner name or null",
   "maker_model": "Make and model as printed or null",
-  "reg_date": "YYYY-MM-DD or null",
+  "reg_date": "DATE OF REGISTRATION as YYYY-MM-DD, or null. RC fields are laid out in TWO COLUMNS, so a text layer gives both labels and then both values ('Date of Registration' / 'Registration Valid Upto' / '15-06-2022' / '15-06-2037') - pair by position and return the FIRST (registration) date, never the Valid Upto expiry. Indian RCs print dd-mm-yyyy, so 15-06-2022 is 2022-06-15.",
   "chassis_no": "Chassis number (may be partial) or null",
   "engine_no": "Engine number (may be partial) or null",
   "fuel_type": "Petrol/Diesel/EV/CNG or null",

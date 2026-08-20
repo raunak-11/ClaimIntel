@@ -146,3 +146,59 @@ def test_breakdown_without_docs_still_works_and_says_it_estimated():
         damage, "Approve")
     assert bd["vehicle_age_estimated"] is True
     assert bd["vehicle_age_source"] == "model_year_estimate"
+
+
+# ── The RC must actually yield its registration date ──────────────────────────
+# Live claim CLM-2026-08-000001: the RC parsed fine (parsed_ok True, every other
+# field extracted, text layer read without OCR) but reg_date came back None,
+# while the PDF plainly printed 15-06-2022. An RC lays its fields out in TWO
+# COLUMNS, so the text layer emits both LABELS and then both VALUES:
+#
+#     Date of Registration
+#     Registration Valid Upto
+#     15-06-2022
+#     15-06-2037
+#
+# The model had to pair 15-06-2022 back across a gap to a label two lines
+# earlier, with a second, near-identical date sitting right beside it. It
+# returned null rather than guess — correct behaviour under the schema's own
+# "a confidently wrong value is worse than a missing one" rule, but it left
+# depreciation resting on the fallback tier.
+
+def _rc_prompts():
+    from services.document_parser import _RC_PROMPT
+    from services.gani_schemas import SCHEMAS
+    return {"gani": SCHEMAS["rc"]["instructions"], "groq": _RC_PROMPT}
+
+
+@pytest.mark.parametrize("path", ["gani", "groq"])
+def test_both_rc_prompts_explain_the_two_column_layout(path):
+    """CLAUDE.md: add to BOTH parsers or the field vanishes on whichever ran."""
+    p = _rc_prompts()[path]
+    assert "TWO COLUMNS" in p
+
+
+@pytest.mark.parametrize("path", ["gani", "groq"])
+def test_both_rc_prompts_say_not_to_return_the_expiry_date(path):
+    """The failure mode that costs real money: 'Registration Valid Upto' is
+    15 years later, which would make the car appear to be from the future and
+    silently push depreciation onto the fallback tier."""
+    p = _rc_prompts()[path]
+    assert "Valid Upto" in p
+
+
+@pytest.mark.parametrize("path", ["gani", "groq"])
+def test_both_rc_prompts_pin_the_indian_date_order(path):
+    """15-06-2022 is 15 June, not 6 March 2015 — dd-mm-yyyy, not mm-dd-yyyy."""
+    assert "dd-mm-yyyy" in _rc_prompts()[path]
+
+
+def test_an_expiry_date_mistaken_for_registration_cannot_age_the_vehicle():
+    """Belt and braces: even if a model returns the Valid-Upto date, it is in
+    the future relative to the loss, so resolve_vehicle_age must reject it
+    rather than compute a negative age or a 0% slab."""
+    r = resolve_vehicle_age(
+        {"vehicle_year": "2022"}, {"incident_date": "2026-07-21"},
+        {"rc": {"reg_date": "2037-06-15"}})       # the Valid Upto date
+    assert r["source"] == "model_year_estimate"
+    assert r["age_years"] > 0

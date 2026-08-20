@@ -169,6 +169,19 @@ SCHEMAS: dict[str, dict[str, str]] = {
             "  null here means the vehicle is owned outright, so do not invent a value.\n"
             "- Chassis and engine numbers are often printed only in part; return whatever\n"
             "  is legible rather than nothing.\n"
+            "- `reg_date` is the vehicle DATE OF REGISTRATION. It drives the depreciation"
+            " slab on every claim, so extract it whenever it is legible.\n"
+            "  An RC lays its fields out in TWO COLUMNS, which in a PDF text layer arrives"
+            " as both LABELS first and then both VALUES:\n"
+            "      Date of Registration\n"
+            "      Registration Valid Upto\n"
+            "      15-06-2022\n"
+            "      15-06-2037\n"
+            "  Pair them by POSITION - the first value belongs to the first label."
+            " Return the REGISTRATION date (the earlier one), never the Valid Upto"
+            " expiry date.\n"
+            "  Indian RCs print dd-mm-yyyy, so 15-06-2022 is 2022-06-15, not 2022-15-06."
+            " The same two-column pairing applies to Chassis / Engine Number.\n"
         ),
         "fields": """{
   "doc_type": "rc",
