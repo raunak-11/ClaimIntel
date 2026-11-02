@@ -12,8 +12,33 @@ ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY", "")
 
 # Live spare-part price lookup (optional). Set either one to enable
 # "from-the-internet" pricing in the damage estimation engine.
-SERPER_API_KEY = os.getenv("SERPER_API_KEY", "")   # serper.dev (Google, 2500 free)
-TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")   # tavily.com (1000/mo free)
+#
+# Each provider takes a CHAIN of keys, not a single key: SERPER_API_KEY first,
+# then SERPER_API_KEY_2 .. SERPER_API_KEY_9 (same shape for TAVILY_API_KEY).
+# Both free tiers are quota-capped -- Serper 2,500 searches, Tavily 1,000/month
+# -- and one investigation spends 20-50 of them, so a key can run out mid-demo.
+# When it does, parts come back unpriced and the fair-value bands abstain: the
+# pipeline still completes, which is precisely what makes the failure easy to
+# miss. price_lookup rotates to the next key in the chain on a quota or auth
+# rejection, so a spare costs nothing until the day it is needed.
+def _key_chain(base: str) -> list[str]:
+    """[base, base_2, ... base_9] -- non-empty, de-duplicated, order preserved."""
+    chain: list[str] = []
+    for name in [base] + [f"{base}_{i}" for i in range(2, 10)]:
+        key = (os.getenv(name, "") or "").strip()
+        if key and key not in chain:
+            chain.append(key)
+    return chain
+
+
+SERPER_API_KEYS = _key_chain("SERPER_API_KEY")   # serper.dev (Google, 2500 free)
+TAVILY_API_KEYS = _key_chain("TAVILY_API_KEY")   # tavily.com (1000/mo free)
+
+# First key of each chain. Kept under the original singular names so existing
+# imports and "is live pricing configured at all?" checks keep working; new code
+# should read the chain, not this.
+SERPER_API_KEY = SERPER_API_KEYS[0] if SERPER_API_KEYS else ""
+TAVILY_API_KEY = TAVILY_API_KEYS[0] if TAVILY_API_KEYS else ""
 
 # AWS Bedrock (optional) — vision-model bounding-box grounding, per
 # DAMAGE_VALIDATION_ARCHITECTURE.md §E. Without these set, damage_assessment.py
@@ -48,6 +73,30 @@ VISION_PROVIDER = (os.getenv("VISION_PROVIDER", "") or "bedrock").strip().lower(
 # ap-south-1 — Nova (any size), Pixtral and Llama-3.2-Vision all fail there.
 BEDROCK_VISION_MODEL = os.getenv("BEDROCK_VISION_MODEL", "") or "qwen.qwen3-vl-235b-a22b"
 
+# ── Text provider ─────────────────────────────────────────────────────────────
+# Who runs every text-only call: Agent 2 (fraud), Agent 5 (settlement), the four
+# document-extraction calls, and ask_json's JSON-repair pass — which fires on
+# behalf of the VISION agents too, so this setting reaches A1/A3 indirectly.
+#
+# "bedrock" (default) — openai.gpt-oss-120b-1:0 is the SAME open weights Groq
+#   serves as openai/gpt-oss-120b, so this is a relocation, not a model change:
+#   claim data stops leaving India, and the free tier stops being the ceiling on
+#   how many claims a day can be filed. It is ON_DEMAND in ap-south-1, so it
+#   takes a bare model ID — no inference profile needed.
+# "groq" — the previous arrangement. Sole rollback switch for the Bedrock text
+#   path; nothing else needs editing to go back.
+#
+# Regardless of this setting, ask_text falls back to the Groq chain if a Bedrock
+# text call fails, so a bad AWS state degrades rather than breaks the pipeline.
+# That inverts the old arrangement, where the whole fallback chain lived on one
+# provider and a Groq outage took out every text agent at once.
+TEXT_PROVIDER = (os.getenv("TEXT_PROVIDER", "") or "bedrock").strip().lower()
+
+# Same weights as GROQ_TEXT_MODEL below. Priced at $0.18/$1M in, $0.71/$1M out in
+# ap-south-1 (AWS Pricing API, verified 2026-09-18) against Groq's $0.15/$0.60 —
+# ~19% more on the text slice, which is +$0.70 per 1,000 claims end to end.
+BEDROCK_TEXT_MODEL = os.getenv("BEDROCK_TEXT_MODEL", "") or "openai.gpt-oss-120b-1:0"
+
 # ── Groq model IDs — CONFIGURABLE ON PURPOSE ─────────────────────────────────
 # These were hardcoded in llm_client.py and Groq has now decommissioned two of
 # them mid-project: meta-llama/llama-4-scout-17b (vision, Jul 2026) and
@@ -75,14 +124,14 @@ GROQ_VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "") or "qwen/qwen3.6-27b"
 # ONLY independent source in the pricing chain (price_part's own comment). With
 # it off, a part's price anchors to the garage's own line amount, i.e. the
 # "independent fair value" becomes the very estimate it is supposed to audit —
-# verified via scripts/data_sanity.py, where a 4x-inflated estimate then lands
+# verified via dev/scripts/data_sanity.py, where a 4x-inflated estimate then lands
 # in the "consistent" band and the inflation cap (FC-17 / leakage-prevented
 # analytics) can never fire.
 #
 # Web noise is handled instead by price_lookup's used-marketplace domain
 # blocklist + plausibility bands + >=2-independent-domain rule, and run-to-run
-# stability by the price cache: pre-warm it (run each demo claim once) so
-# demo-day numbers are both independent AND reproducible.
+# stability by the OEM price catalogue (OEM_CATALOG_PATH below), which is read
+# BEFORE any live search and works with this flag off.
 PRICING_LIVE = (os.getenv("PRICING_LIVE", "") or "true").strip().lower() != "false"
 
 # ── GaniParser document path (services/gani_parser.py) ────────────────────────
@@ -125,15 +174,24 @@ GANI_AWS_REGION = os.getenv("GANI_AWS_REGION", "") or AWS_REGION
 #   "bedrock" — Bedrock in ap-south-1 on AWS_*. Keeps the document in-region;
 #               spends this project's Bedrock credits.
 #
-# Demo runs on "groq"; a pilot flips this one value. Everything else is identical.
-DOC_INFERENCE_PROVIDER = (os.getenv("DOC_INFERENCE_PROVIDER", "") or "groq").strip().lower()
+# DEFAULTS TO "bedrock" as of 2026-09-18, alongside TEXT_PROVIDER above: the
+# extraction model below is the same weights Groq was serving, so the document
+# path moved in-region without changing what reads the document.
+DOC_INFERENCE_PROVIDER = (os.getenv("DOC_INFERENCE_PROVIDER", "") or "bedrock").strip().lower()
 
-# Bedrock models used when DOC_INFERENCE_PROVIDER=bedrock. Ignored under "groq".
+# Bedrock model for field extraction. Ignored under DOC_INFERENCE_PROVIDER="groq".
+#
+# This is openai.gpt-oss-120b-1:0 — the SAME weights as GROQ_TEXT_MODEL, which is
+# what ran this extraction before the provider flipped. That is deliberate: the
+# previous default here was qwen.qwen3-235b-a22b-2507-v1:0, so flipping the
+# provider alone would have silently swapped the model that sets the repair basis
+# AND cost 73% more on this slot ($0.00427 vs $0.00229 per claim). Keeping the
+# weights identical makes the provider move a move, not a model change.
+#
 # GaniParser's own default is Claude 3 Sonnet, but this project's AWS account
 # cannot serve it — verified live, Bedrock returns ResourceNotFoundException
-# ("Anthropic use case details have not been submitted"). Qwen3 235B is
-# GaniParser's other supported extraction model and works today.
-BEDROCK_DOC_MODEL = os.getenv("BEDROCK_DOC_MODEL", "") or "qwen.qwen3-235b-a22b-2507-v1:0"
+# ("Anthropic use case details have not been submitted").
+BEDROCK_DOC_MODEL = os.getenv("BEDROCK_DOC_MODEL", "") or BEDROCK_TEXT_MODEL
 
 # Vision model for the authenticity pass. Separate from BEDROCK_DOC_MODEL because
 # that one is fed OCR TEXT and need not be vision-capable, whereas this one is
@@ -153,8 +211,14 @@ NPS_MEDIUM_DAYS = int(os.getenv("NPS_MEDIUM_DAYS", "90"))   # 31–90  → Mediu
 NPS_LOW_DAYS    = int(os.getenv("NPS_LOW_DAYS",    "180"))  # 91–180 → Low risk
                                                              # >180   → no flag
 
-# IRDAI motor claim thresholds — single source of truth used by all agents
-SURVEYOR_THRESHOLD = int(os.getenv("SURVEYOR_THRESHOLD", "50000"))  # mandatory survey above ₹50k
+# IRDAI motor claim thresholds. The authoritative value is the validated ruleset
+# at data/config/irdai_rules.json; SURVEYOR_THRESHOLD in .env remains an operator
+# escape hatch for a pilot that must run a different figure without editing the
+# ruleset. Imported here rather than at the top of the file because the loader
+# honours IRDAI_RULES_PATH, which load_dotenv() above must set first.
+from services.irdai_rules import surveyor_threshold_inr as _surveyor_threshold_inr
+
+SURVEYOR_THRESHOLD = int(os.getenv("SURVEYOR_THRESHOLD", "") or _surveyor_threshold_inr())
 
 # USD→INR for the FinOps view. Providers bill in USD; an Indian insurer reads ₹.
 # Single source of truth — this used to be hardcoded at 95 in Analytics.jsx while
@@ -170,12 +234,44 @@ LABOUR_CONFIG_PATH = os.getenv("LABOUR_CONFIG_PATH", "") or os.path.join(
     CONFIG_DIR, "labour_config.json")
 
 # Minimum share (0-1) of a claim's damaged parts that must carry an independent
-# live-web price before the fair-value bands and the inflation cap are allowed
-# to reach a verdict. Below it, settlement_calc abstains — see its
-# `FAIR_VALUE_MIN_COVERAGE`, which reads this value.
+# market price (OEM catalogue or live web) before the fair-value bands and the
+# inflation cap are allowed to reach a verdict. Below it, settlement_calc
+# abstains — see its `FAIR_VALUE_MIN_COVERAGE`, which reads this value.
 PRICING_MIN_COVERAGE = float(os.getenv("PRICING_MIN_COVERAGE", "0.70"))
+
+# OEM price catalogue (services/oem_catalog.py) — the first tier of the part
+# pricing chain. Every entry was fetched from the same Serper/Tavily API as the
+# live lookup (dev/scripts/build_oem_catalog.py, plus write-back at investigation
+# time) and carries its fetch date. An entry older than the TTL triggers a fresh
+# API fetch; if that fails, the old price is used and labelled stale.
+OEM_CATALOG_PATH = os.getenv("OEM_CATALOG_PATH", "") or os.path.join(
+    CONFIG_DIR, "oem_price_catalog.json")
+OEM_CATALOG_TTL_DAYS = int(os.getenv("OEM_CATALOG_TTL_DAYS", "") or "90")
 
 # Knowledge base and vector store paths
 KB_DIR = os.path.join(DATA_DIR, "kb")
 POLICIES_PDF_DIR = os.path.join(KB_DIR, "policies")
 VECTORSTORE_DIR = os.path.join(DATA_DIR, "vectorstore")
+
+# ── Demo mode ─────────────────────────────────────────────────────────────────
+# Powers the one-click showcase-case buttons on the New Claim page: the picker
+# fetches GET /api/demo/cases and attaches the fixture files from test/. Default
+# ON so the demo works out of the box; set DEMO_MODE=false in .env for any real
+# deployment and BOTH the panel and the routes that serve test/ disappear.
+# Same "true unless explicitly false" shape as PRICING_LIVE above.
+DEMO_MODE = (os.getenv("DEMO_MODE", "") or "true").strip().lower() != "false"
+
+# The showcase fixtures. Live under data/ rather than a top-level test/ so the
+# one runtime directory the app reads is also the one directory Docker already
+# bind-mounts — the demo file route needed its own ./test:/app/test mount before,
+# which was an easy thing to forget and a silent 404 when you did.
+# abspath'd (unlike DATA_DIR, which keeps its literal "..") because
+# services/demo_cases.py containment-checks resolved file paths against it, and
+# commonpath on a path with an unresolved ".." segment is not a containment proof.
+TEST_DIR = os.path.abspath(os.path.join(DATA_DIR, "demo"))
+
+# Written by dev/scripts/generate_test_cases.py, never hand-edited: the generator
+# already computes every incident date and estimate total to print its presenter
+# block, so it emits them here too. Hand-maintaining a second copy would drift
+# the moment a case is recalibrated.
+DEMO_CASES_PATH = os.path.join(CONFIG_DIR, "demo_cases.json")

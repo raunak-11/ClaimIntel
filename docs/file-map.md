@@ -1,86 +1,110 @@
 ---
-title: Complete Backend/Frontend File Map
-description: Full annotated directory tree for backend, frontend, scripts, and data — moved out of CLAUDE.md to keep the root context file short.
+title: File Map
+description: Where everything lives after the 2026-09-09 restructure, and which paths are load-bearing.
 metadata:
   type: reference
   related: ../CLAUDE.md
 ---
 
-# ClaimIntel — Complete File Map
-
-> Companion to [CLAUDE.md](../CLAUDE.md)'s "System Architecture" section, which keeps only a brief
-> summary. This is the full annotated tree.
+# File Map
 
 ```
-backend/
-├── config.py                       ← loads .env; GROQ_API_KEY, AWS Bedrock, thresholds, KB_DIR, VECTORSTORE_DIR
-├── main.py                         ← FastAPI app, all routes, role guard (_require_adjudicator)
-├── storage.py                      ← all CSV/JSON I/O, claim-ID gen, PII encryption hooks, _csv_lock
-├── orchestrator.py                 ← eligibility gate → A1→A5, docs/telematics/dash-cam, guards, SSE, result.json
-├── agents/
-│   ├── base_agent.py               ← abstract BaseAgent.run(context) -> dict
-│   ├── damage_assessment.py        ← A1: Groq Vision + Bedrock grounding + pricing engine + image-quality/authenticity gate
-│   ├── fraud_intelligence.py       ← A2: _run_fraud_checks() = 32 checks (FC-01…FC-32) + fraud KB
-│   ├── incident_reconstruction.py  ← A3: Groq Vision (photos + dash-cam frames) + claim_history
-│   ├── context_verification.py     ← A4: geocode (memoized) + telematics GPS + weather + policy KB
-│   └── settlement_recommendation.py← A5: all agents + all KB
-└── services/
-    ├── llm_client.py               ← Groq SDK wrapper (formerly gemini_client.py); ask_text/ask_json/ask_with_images
-    ├── grounding_client.py         ← AWS Bedrock (Nova/Qwen) bounding-box grounding, with fallback to Groq boxes
-    ├── prompt_guards.py            ← shared IMAGE_INJECTION_DEFENSE text for all vision-LLM prompts
-    ├── rag_client.py               ← ChromaDB query service (graceful fallback if not built)
-    ├── eligibility_gate.py         ← pre-flight screen: policy period + SCOPE OF COVER hard stops + 13 metadata checks, NO model call
-    ├── coverage.py                 ← claim kind / scope of cover / add-on vocabulary (pure, shared by gate + settlement)
-    ├── claim_timeline.py           ← IRDAI service clock: elapsed vs the June-2024 limits, computed on read
-    ├── assessment_cache.py         ← input-addressed replay of Agent 1, so identical evidence gives an identical value
-    ├── ocr.py                      ← document text: PDF text layer first, Textract for images/scans
-    ├── pricing_engine.py           ← parts pricing: live web → unpriced + pricing_coverage (garage-anchor tier removed 2026-08-13)
-    ├── price_lookup.py             ← live-web spare-part pricing (2+ domain corroboration required)
-    ├── labour_engine.py            ← deterministic per-operation labour: hours × rate, complexity, garage variance
-    ├── labour_providers.py         ← LabourDataProvider ABC: RuleBasedLabourProvider now, OEMLabourProvider stub
-    ├── settlement_calc.py          ← IRDAI breakdown + fair-value analysis + >40% inflation cap
-    ├── garage_intel.py             ← cross-claim garage inflation scoring (FC-24 + analytics)
-    ├── historical_fraud_intel.py   ← standing fraud-archive cross-checks (FC-25/26/27)
-    ├── fraud_network.py            ← cross-claimant fraud-ring/network graph (FC-30)
-    ├── document_parser.py          ← FIR / RC / DL / garage-estimate parsing (vision LLM) + authenticity signals
-    ├── telematics_parser.py        ← telematics/IoT JSON-or-CSV ingestion
-    ├── video_parser.py             ← dash-cam video → evenly-spaced still frames (OpenCV)
-    ├── forensics_detector.py       ← local AI-image-detector model (FC-28)
-    ├── kb_glossary.py              ← expands bare KB codes into {title, description, relevance}
-    ├── report_generator.py         ← explainable PDF report (incl. settlement breakdown)
-    ├── letter_generator.py         ← auto-drafted customer decision letter
-    ├── pii.py                      ← build_llm_safe_claim() PII masking
-    ├── crypto.py                   ← Fernet field encryption for claims.csv
-    └── token_tracker.py            ← Groq token-usage logging → data/token_usage.csv
+backend/          FastAPI app          ─┐
+data/             all runtime state     ├─ the only three the app needs
+frontend/         React + Vite         ─┘
+dev/              scripts + tests         dev-only, excluded from the Docker context
+docs/             reference + diagrams    dev-only
+.env  .env.example  .dockerignore  .gitignore
+docker-compose.yml  requirements.txt  README.md  CLAUDE.md
+```
 
-frontend/src/
-├── App.jsx, utils/api.js (X-Role header), auth/ (login + ProtectedRoute), hooks/useInvestigationSSE.js
-├── pages/        Login, ClaimsQueue, NewClaim, Dashboard, FraudQueue, FraudDetail, Analytics, NotFound
-├── pages/analytics/  shell tabs — ClaimAnalyticsTab, SolutionPerformanceTab, FinOpsTab, shared.jsx
-└── components/   InvestigationWorkflow (+ FraudCheckList, VisualForensicsPanel, EligibilityDetail),
-                  RiskAndSettlement (row-1 fraud donut + ledger), SettlementBreakdown, EvidencePanel
-                  (+ LabourAssessment), KBPill (shared hover/click KB affordance), AdjusterPanel,
-                  DecisionLetter, ClaimDecision, StoryboardPanel, VisualEvidenceAnalysis,
-                  ClaimOverview, Skeleton, ErrorBoundary
+## backend/
 
+```
+main.py                 every route (no APIRouter — one file by design)
+orchestrator.py         G0 gate → A1–A5 → guards → settlement → SSE
+config.py               ALL env/config constants and paths
+storage.py              claims.csv + data/claims/{id}/ — the "database"
+agents/                 damage_assessment · fraud_intelligence · incident_reconstruction
+                        context_verification · settlement_recommendation
+services/
+  llm_client.py         ask_text / ask_with_images / ask_json (+ Bedrock vision, preflight)
+  eligibility_gate.py   G0 — deterministic, runs before any model call
+  settlement_calc.py    IRDAI payout maths — inflation cap, depreciation, salvage, add-ons
+  irdai_rules.py        the ONLY reader of data/config/irdai_rules.json
+  claim_timeline.py     IRDAI service clock, computed on read
+  oem_catalog.py        OEM price catalogue — first pricing tier, 90-day TTL, write-back
+  price_lookup.py       live web part pricing (≥2 corroborating domains)
+  labour_engine.py      deterministic per-operation labour + labour_providers.py
+  gani_parser.py        OCR → extraction → authenticity, in-region  (+ gani_redaction, gani_schemas)
+  ocr.py                PDF text layer first, Textract only for real images
+  document_parser.py    Groq-vision document fallback
+  pii.py crypto.py      masking before LLM calls; Fernet at rest
+  fraud_network.py      FC-30 cross-claimant graph
+  historical_fraud_intel.py   FC-25/26/27 against the standing archive
+  garage_intel.py       FC-24 across the live queue
+  demo_cases.py         serves data/config/demo_cases.json + the fixtures
+  rag_client.py         ChromaDB, degrades to "" with no vectorstore
+  token_tracker.py      every billable call → data/token_usage.csv
+  report_generator.py letter_generator.py claim_form.py   fpdf2 output
+  telematics_parser.py video_parser.py grounding_client.py prompt_guards.py
+  assessment_cache.py   input-addressed A1 cache (reproducibility)
+  coverage.py           scope-of-cover vocabulary + claim classification
+```
+
+## data/ — everything the running app reads or writes
+
+```
+claims.csv              the claim table (claimant + phone Fernet-encrypted)
+policies.csv            15 policies — the source of truth for vehicle facts
+claims/{claim_id}/      images/ · docs/{type}/ · dashcam_frames/ · result.json
+config/
+  irdai_rules.json      every IRDAI-imposed value, sha256-stamped into results
+  labour_config.json    operation map, baseline hours, rate card
+  demo_cases.json       GENERATED by dev/scripts/generate_test_cases.py — do not hand-edit
+  oem_price_catalog.json  part prices from the Serper/Tavily API (build_oem_catalog.py +
+                        runtime write-back) — never hand-edit a price
+kb/
+  historical_fraud_cases.json   the standing fraud archive (FC-25/26/27)
+  fraud_knowledge · claim_history · policies/   RAG source documents
+  sample_telematics/    committed telematics fixtures
+demo/{n}-case-name/     showcase fixtures + per-case README  (photos are gitignored)
+vectorstore/            ChromaDB (generated)
+token_usage.csv  price_cache.json  assessment_cache/    (generated)
+```
+
+## dev/
+
+```
 scripts/
-├── reset_claims.py                 ← wipe claims.csv / token_usage.csv / data/claims/
-├── generate_test_cases.py          ← the 3 showcase cases: FIR, estimate, DL, RC, telematics
-├── generate_policy_pdfs.py         ← policy PDFs FROM policies.csv (they had drifted apart)
-├── build_vectorstore.py            ← the 3 ChromaDB collections; --verify checks the policy_no filter
-├── data_sanity.py                  ← cross-file invariants; exit 0 required before a demo
-├── determinism_check.py            ← how much the assessed value moves across identical runs
-└── add_demo_exif.py
+  generate_test_cases.py   the demo fixtures AND data/config/demo_cases.json
+  data_sanity.py           run before every demo — 8 sections, cross-module invariants
+  build_oem_catalog.py     seed/refresh the OEM price catalogue (--dry-run, --refresh)
+  reset_claims.py          --yes to skip confirmation (also clears token_usage.csv)
+  build_vectorstore.py  generate_policy_pdfs.py  determinism_check.py  add_demo_exif.py
+tests/                     543 tests; conftest.py puts backend/ on sys.path and points
+                           the OEM catalogue at a per-test temp file
+```
 
-data/
-├── config/labour_config.json       ← labour rates/hours/complexity/thresholds (operator-editable, NOT knowledge base)
-├── claims.csv                      ← claim records (ships EMPTY; created at runtime)
-├── policies.csv                    ← 15 demo policies (phone → policy lookup)
-├── claims/{claim_id}/              ← per-claim images, docs/, dashcam_frames/, result.json
-├── kb/  fraud_indicators.json · claim_history.json · historical_fraud_cases.json ·
-│         policies/*.pdf (generated by scripts/generate_policy_pdfs.py) · sample_telematics/
-├── token_usage.csv                 ← Groq usage log (git-ignored)
-└── vectorstore/                    ← ChromaDB store (built by script; git-ignored)
+## Load-bearing paths — change these together
 
-test/                               ← showcase fixtures + per-case README (presenter adds photos/dash-cam)
+| Path | Who depends on it |
+|---|---|
+| `data/demo/` | `config.TEST_DIR` → `services/demo_cases.py`; written by `generate_test_cases.py`; checked by `data_sanity` |
+| `data/config/demo_cases.json` | generated by the generator, read by `demo_cases.py`, validated by `data_sanity` §6 |
+| `data/config/irdai_rules.json` | `services/irdai_rules.py` only — plus `docs/irdai-compliance.md` and `test_irdai_rules.py`, all updated in the same commit |
+| `storage.CSV_FIELDS` | must equal both CSV headers and `reset_claims.py` (`data_sanity` §0) |
+| `data/config/oem_price_catalog.json` | read + written by `services/oem_catalog.py` only; keys are `price_lookup._vehicle_query_name` + `pricing_engine._canon`, so renaming a canonical part orphans its entry; checked by `data_sanity` §4b |
+| workshop names in `data/kb/historical_fraud_cases.json` | matched **exactly** against `garage_workshop_name`; a rename silently drops 30 fraud points |
+
+## Frontend
+
+```
+src/pages/       NewClaim · Dashboard · ClaimsQueue · FraudQueue · FraudDetail
+                 analytics/{Claim,SolutionPerformance,FinOps} · Login · ClaimSubmitted
+src/components/  DemoCasePicker · VisualEvidenceAnalysis (bounding boxes) · SettlementBreakdown
+                 RiskAndSettlement · InvestigationWorkflow · pipeline panels
+src/ui/          the design system — Card Button Badge Tabs Panel StatCard … (index.jsx)
+src/hooks/       useInvestigationSSE
+src/utils/api.js axios instance; adds X-Role on every request
 ```

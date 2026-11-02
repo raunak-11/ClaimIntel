@@ -18,34 +18,29 @@ import re
 from datetime import date, datetime
 from typing import Optional
 
+from services import irdai_rules
+
 
 # Parts-depreciation by vehicle age — India Motor Tariff (GR.9) schedule for
-# metal parts, the same table printed in the generated policy PDFs.
-# Mirrored in data/kb/fraud_indicators.json -> irdai_guidelines.depreciation_schedule
+# metal parts, the same table printed in the generated policy PDFs. The schedule
+# itself lives in data/config/irdai_rules.json, validated on load.
 def _depreciation_pct(age_years: float) -> int:
-    if age_years <= 0.5:
-        return 0
-    if age_years <= 1:
-        return 5
-    if age_years <= 2:
-        return 10
-    if age_years <= 3:
-        return 15
-    if age_years <= 4:
-        return 25
-    if age_years <= 5:
-        return 35
-    if age_years <= 10:
-        return 40
-    return 50  # over 10 years
+    return irdai_rules.depreciation_pct_for_age(age_years)
 
 
-# IRDAI compulsory deductible by engine displacement (private car)
-COMP_DED_SMALL = 1000   # ≤ 1500 cc
-COMP_DED_LARGE = 2000   # > 1500 cc  (Innova, Scorpio, BMW etc.)
+# ── Values below are read from the IRDAI ruleset ──────────────────────────────
+# data/config/irdai_rules.json is the single source for every IRDAI-imposed
+# constant; services/irdai_rules.py validates it on load and refuses to run on a
+# malformed one rather than falling back to a built-in default. These names stay
+# bound at import for the call sites below and for dev/scripts/data_sanity.py — they
+# are process-lifetime constants, exactly as they were when hardcoded here.
 
-# Total-loss threshold — if repair ≥ this % of sum insured, it's a total loss
-TOTAL_LOSS_PCT = 75
+# Compulsory deductible by engine displacement (private car).
+COMP_DED_SMALL = irdai_rules.compulsory_deductible_inr(0)
+COMP_DED_LARGE = irdai_rules.compulsory_deductible_inr(10 ** 6)
+
+# Total-loss threshold — if repair >= this % of sum insured, it's a total loss.
+TOTAL_LOSS_PCT = irdai_rules.total_loss_threshold_pct()
 
 # ── Salvage retention on a total loss ─────────────────────────────────────────
 # "insurer" (the market default, and the only mode this deployment offers): the
@@ -54,60 +49,36 @@ TOTAL_LOSS_PCT = 75
 # insured's entitlement.
 #
 # This was previously hardcoded the other way: `round(si * 0.05)` was ALWAYS
-# deducted, silently assuming the customer kept the vehicle. On an ₹11L IDV that
-# under-paid every total loss by ₹55,000 while also letting the customer keep
-# nothing. The "insured" branch below is real and tested — that is what keeps it
-# a live option rather than a decorative constant.
-SALVAGE_RETAINED_BY = "insurer"
-SALVAGE_PCT_OF_IDV = 0.05        # only consulted when retention is "insured"
+# deducted, silently assuming the customer kept the vehicle. On an Rs.11L IDV
+# that under-paid every total loss by Rs.55,000 while also letting the customer
+# keep nothing. The "insured" branch below is real and tested — that is what
+# keeps it a live option rather than a decorative constant.
+SALVAGE_RETAINED_BY = irdai_rules.salvage_retained_by()
+SALVAGE_PCT_OF_IDV = irdai_rules.salvage_pct_of_idv()   # only when "insured"
 
 PARTS_FRACTION   = 0.70   # ~70% of a repair invoice is parts
 LABOUR_FRACTION  = 0.30   # ~30% labour
 GST_RATE         = 0.18   # 18% GST — already baked into the repair invoice total
 
-# IRDAI material-specific depreciation — overrides the blanket age-slab for
-# parts whose depreciation is fixed regardless of vehicle age.
-# Key = canonical part name fragment;  value = fixed depreciation %
-MATERIAL_DEP_OVERRIDES: dict[str, int] = {
-    # Glass — 0% depreciation (IMT GR.9: "all parts made of glass — Nil")
-    "windshield": 0, "glass": 0, "rear_glass": 0,
-    # Tyres, tubes, batteries AND AIR BAGS — 50% regardless of age.
-    # GR.9 reads "rubber/nylon/plastic parts, tyres and tubes, batteries and air
-    # bags". Air bags were missing, so a deployed airbag module fell through to
-    # the vehicle-age slab — 35% on a 4-year car instead of the mandated 50%,
-    # and 0% under Zero-Dep, which does NOT waive this carve-out. On the ~₹48,000
-    # airbag set a real front-end claim carries, that is ₹7,200 over-paid at the
-    # age slab and ₹24,000 over-paid with the add-on.
-    "tyre": 50, "tire": 50, "battery": 50, "tube": 50,
-    "airbag": 50, "air_bag": 50, "srs_module": 50,
-    # Rubber/plastic/nylon — 50%
-    "rubber": 50, "plastic": 50, "nylon": 50,
-    # Fibre-reinforced parts — 30%
-    "fibreglass": 30, "fibre_glass": 30, "fibre": 30,
-}
-
+# Material-specific depreciation — overrides the blanket age-slab for parts whose
+# depreciation is fixed regardless of vehicle age (glass nil; tyres, tubes,
+# batteries and air bags 50%; fibre 30%). The table and the reasoning behind each
+# carve-out live in data/config/irdai_rules.json.
+MATERIAL_DEP_OVERRIDES: dict[str, int] = dict(irdai_rules.material_fragments())
 
 # Materials a Zero-Depreciation add-on does NOT cover. The standard Indian
 # wording waives depreciation on metal, plastic, rubber, fibre and glass parts
 # but expressly carves out tyres, tubes and batteries, which keep their 50%.
 # Zero-dep is therefore NOT "depreciation = 0" — that would overpay every claim
-# involving a tyre or a battery.
-# Air bags sit here with tyres/tubes/batteries: GR.9 fixes them at 50% as a
-# property of the PART, and a Zero-Dep add-on does not buy that away. Omitting
-# them meant the add-on paid a ₹48,000 restraint module at 100%.
-ZERO_DEP_EXCLUDED = ("tyre", "tire", "tube", "battery", "airbag", "air_bag",
-                     "srs_module")
+# involving a tyre or a battery. Air bags sit here too: GR.9 fixes them at 50%
+# as a property of the PART, and the add-on does not buy that away.
+ZERO_DEP_EXCLUDED = irdai_rules.zero_dep_excluded()
 
-
-# Longest fragment first. Dict insertion order put "glass" (0%) ahead of
-# "fibreglass" (30%), and "glass" is a substring of "fibreglass" — so every
-# fibreglass part matched the glass rule and was paid at FULL value. Glass gets
-# nil depreciation precisely because it is glass; fibre glass is a different
-# material at 30%. Ordering by specificity makes that structural rather than a
-# property of how the dict happens to be written.
-_DEP_FRAGMENTS: tuple[tuple[str, int], ...] = tuple(
-    sorted(MATERIAL_DEP_OVERRIDES.items(), key=lambda kv: -len(kv[0]))
-)
+# Longest fragment first. "glass" (0%) is a substring of "fibreglass" (30%), so
+# declaration order once matched every fibreglass part against the glass rule and
+# paid it at FULL value. The ruleset loader sorts by specificity, making that
+# structural rather than a property of how the table happens to be written.
+_DEP_FRAGMENTS: tuple[tuple[str, int], ...] = irdai_rules.material_fragments()
 
 
 def _part_dep_pct(part_name: str, age_dep_pct: int, zero_dep: bool = False) -> int:
@@ -124,7 +95,7 @@ def _part_dep_pct(part_name: str, age_dep_pct: int, zero_dep: bool = False) -> i
 # ── No-Claim Bonus ────────────────────────────────────────────────────────────
 # IRDAI standard grid: consecutive claim-free years -> discount on the OWN-DAMAGE
 # premium at renewal. Identical across insurers by regulation.
-NCB_GRID = (20, 25, 35, 45, 50)
+NCB_GRID = irdai_rules.ncb_grid()
 
 
 def _ncb_next_slab(current_pct: int) -> int:
@@ -326,14 +297,16 @@ def _depreciation(damage: dict, repair: int, age_dep: int,
 
 
 def _compulsory_deductible(policy: dict) -> int:
-    """₹1,000 for ≤1,500cc; ₹2,000 for >1,500cc (IRDAI motor private-car schedule)."""
+    """Compulsory excess for this displacement, per the IRDAI ruleset.
+
+    An unknown or unparseable cc takes the lower rate — never charge a customer
+    the larger-engine excess on absent data.
+    """
     try:
         cc = int(str(policy.get("engine_cc") or "0").strip())
-        if cc == 0:          # EV or unknown → use small-car rate
-            return COMP_DED_SMALL
-        return COMP_DED_LARGE if cc > 1500 else COMP_DED_SMALL
     except (ValueError, TypeError):
-        return COMP_DED_SMALL
+        cc = 0
+    return irdai_rules.compulsory_deductible_inr(cc)
 
 
 def _voluntary_deductible(policy: dict) -> int:
@@ -481,8 +454,10 @@ BAND_ACTIONS = {
 }
 
 _SOURCE_LABELS = {
+    "oem_catalog":           "OEM price catalogue (API-fetched market prices, dated)",
+    "oem_catalog+live_web":  "OEM price catalogue + live web market prices",
     "live_web":              "Live web market prices",
-    "insufficient_coverage": "Live web market prices (partial coverage)",
+    "insufficient_coverage": "Market prices (partial coverage)",
     "unpriced":              "No independent price available",
     # legacy labels kept for old stored results
     "garage_estimate": "Garage estimate line items (document)",
@@ -548,8 +523,9 @@ def assessed_fair_value(damage: dict) -> tuple[float, float, float]:
 
 
 def pricing_coverage_pct(damage: dict) -> Optional[float]:
-    """Share (0-1) of damaged parts that carry an independent live-web price,
-    or None when the damage result predates the coverage field."""
+    """Share (0-1) of damaged parts that carry an independent market price (OEM
+    catalogue or live web), or None when the damage result predates the
+    coverage field."""
     cov = (damage.get("fair_value_breakdown") or {}).get("pricing_coverage")
     if not isinstance(cov, dict):
         return None
@@ -615,7 +591,7 @@ def _assess_repair(damage: dict) -> dict:
     # ever swung the other way. Report the figure, refuse the verdict.
     if coverage is not None and coverage < FAIR_VALUE_MIN_COVERAGE and claimed > 0:
         cov_note = (
-            f"Only {coverage * 100:.0f}% of damaged parts have an independent live-web "
+            f"Only {coverage * 100:.0f}% of damaged parts have an independent market "
             f"price (minimum {FAIR_VALUE_MIN_COVERAGE * 100:.0f}% required), so the "
             f"assessed value of ₹{assessed_mid:,.0f} is incomplete and no over/under-claim "
             f"verdict is issued. Repair basis is the garage quote of ₹{claimed:,.0f}; "

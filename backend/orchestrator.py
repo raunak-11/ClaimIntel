@@ -4,6 +4,7 @@ from typing import Any
 
 import storage
 from config import SURVEYOR_THRESHOLD
+from services import irdai_rules
 
 
 def _mark_survey_report(claim_id: str) -> None:
@@ -46,6 +47,35 @@ def _reported_fraud_score(fraud: dict) -> int | None:
     if _fraud_incomplete(fraud):
         return None
     return fraud.get("fraud_score", 0)
+
+
+def _inflation_guard(decision: str, breakdown: dict | None) -> tuple[str, str | None]:
+    """Block auto-approval of a claim whose garage quote is in the investigate band.
+
+    The investigate band (quote > 40% above the independently assessed fair
+    value) already caps the PAYOUT — settlement_calc pays the fair value and
+    books the rest as disallowed inflation. It did not stop the DECISION: an
+    Agent 5 "Approve" on such a claim went straight through. On the 2026-09
+    demo run the ₹10.1L write-off claim (1000% over) escalated only because
+    the model happened to choose Escalate; the story-mismatch guard its README
+    relied on never fired. An estimate that far out is a human's call, however
+    safe the capped figure is.
+
+    Returns (decision, reason). Inactive when the bands abstained (pricing
+    coverage too low → overclaim_band None) and never touches Reject/Escalate.
+    """
+    if decision != "Approve" or not breakdown or breakdown.get("overclaim_band") != "investigate":
+        return decision, None
+    pct = breakdown.get("overclaim_pct")
+    disallowed = breakdown.get("disallowed_inflation") or 0
+    reason = (
+        "Auto-approval blocked: the garage estimate is "
+        + (f"{pct:.0f}% " if isinstance(pct, (int, float)) else "")
+        + "above the independently assessed fair value (investigate band, >40%)"
+        + (f" — ₹{disallowed:,.0f} disallowed as inflation" if disallowed else "")
+        + ". Escalated for human review."
+    )
+    return "Escalate", reason
 
 
 async def run_pipeline(claim_id: str, claim: dict, queue: asyncio.Queue,
@@ -134,6 +164,7 @@ async def run_pipeline(claim_id: str, claim: dict, queue: asyncio.Queue,
             await queue.put({"type": "agent_skipped", "agent": agent_name, "reason": reason})
 
         summary = eligibility_gate.rejection_summary(gate)
+        summary["irdai_ruleset"] = irdai_rules.stamp()
         result_doc = storage.get_result(claim_id) or {"claim_id": claim_id, "agents": {}, "summary": {}}
         result_doc["summary"] = summary
         # A re-investigation that stops at the gate must not leave the previous
@@ -454,7 +485,18 @@ async def run_pipeline(claim_id: str, claim: dict, queue: asyncio.Queue,
     except Exception:
         breakdown = None
 
-    # ── Hypothecation / lien note (newupdates.md item #26) ────────────────────
+    # ── Hard inflation guard (investigate band) ───────────────────────────────
+    # Needs the breakdown's band, so it runs after the maths; the breakdown only
+    # reads `decision` for its `applies` flag, corrected here when it flips.
+    decision, inflation_reason = _inflation_guard(decision, breakdown)
+    inflation_blocked = inflation_reason is not None
+    if inflation_blocked:
+        breakdown["applies"] = False
+        settlement["recommended_settlement"] = 0
+        settlement["decision_reasons"] = [
+            inflation_reason, *(settlement.get("decision_reasons") or [])]
+
+    # ── Hypothecation / lien note (docs/newupdates.md item #26) ────────────────────
     # A large fraction of financed vehicles carry a hypothecation endorsement;
     # IRDAI settlement practice requires routing the payout through (or getting
     # consent from) the financier above certain thresholds or on total loss.
@@ -465,11 +507,8 @@ async def run_pipeline(claim_id: str, claim: dict, queue: asyncio.Queue,
         rc_parsed = (context.get("docs") or {}).get("rc") or {}
         hypothecated_to = rc_parsed.get("hypothecated_to")
         if hypothecated_to and (decision == "Approve" or breakdown.get("is_total_loss")):
-            breakdown["hypothecation_note"] = (
-                f"Vehicle is hypothecated to {hypothecated_to}. Per IRDAI settlement practice, "
-                "payout should be routed through (or requires consent from) the financier"
-                + (" on this total-loss settlement." if breakdown.get("is_total_loss") else ".")
-            )
+            breakdown["hypothecation_note"] = irdai_rules.hypothecation_note(
+                hypothecated_to, is_total_loss=bool(breakdown.get("is_total_loss")))
 
     # Reconcile the headline figure with the breakdown on approval so the
     # number shown matches the visible line-item math.
@@ -527,6 +566,12 @@ async def run_pipeline(claim_id: str, claim: dict, queue: asyncio.Queue,
             "account (story mismatch) — auto-approval blocked, needs human review"
         )
 
+    if inflation_blocked:
+        routing_reasons.append(
+            "Garage estimate in the investigate band (>40% above assessed fair value) "
+            "— auto-approval blocked, needs human review"
+        )
+
     needs_human_review = bool(routing_reasons)
 
     summary = {
@@ -553,6 +598,10 @@ async def run_pipeline(claim_id: str, claim: dict, queue: asyncio.Queue,
         "needs_human_review":  needs_human_review,
         "routing_reasons":     routing_reasons,
         "image_quality":       img_q or None,
+        # Which IRDAI ruleset decided this claim. The sha256 is of the ruleset
+        # file's bytes, so a settled claim stays traceable to the exact rates and
+        # deadlines applied to it even after the ruleset is later revised.
+        "irdai_ruleset":       irdai_rules.stamp(),
     }
 
     result_doc = storage.get_result(claim_id) or {"claim_id": claim_id, "agents": {}, "summary": {}}

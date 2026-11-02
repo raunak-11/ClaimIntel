@@ -21,10 +21,18 @@ services:
     env_file:
       - .env                  # GROQ_API_KEY (required), OPENWEATHERMAP_API_KEY (optional)
     environment:
-      # Allow requests from both the nginx frontend and local dev browser
-      ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:5173"
+      # Allow requests from both the nginx frontend and local dev browser.
+      # Overridable from .env: a `environment:` value beats `env_file:`, so the
+      # literal that used to sit here could not be changed on a deployed host
+      # without editing this file. The browser normally never needs it (nginx
+      # proxies /api and /uploads, so the app is same-origin on port 3000) --
+      # it matters when something calls the backend on :8001 directly.
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}"
     volumes:
-      # Bind-mount so claims, uploads, results and the vectorstore all persist
+      # Bind-mount so claims, uploads, results and the vectorstore all persist.
+      # Also carries data/demo — the showcase fixtures the New Claim quick-fill
+      # buttons serve. They used to sit in a top-level test/ needing its own
+      # mount, which was easy to forget and produced a silent 404 when omitted.
       - ./data:/app/data
       # Persist ChromaDB's ONNX embedding model cache across container restarts.
       # The model (~79 MB) is also baked into the image at build time, but this

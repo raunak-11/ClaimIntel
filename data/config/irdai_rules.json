@@ -1,0 +1,112 @@
+{
+  "_readme": "Single source of truth for every IRDAI-imposed rule ClaimIntel applies. Loaded, validated and cached by backend/services/irdai_rules.py; read at investigation time by settlement_calc, claim_timeline, letter_generator and the orchestrator. NEVER written by the application. Human-readable narrative for each rule lives in docs/irdai-compliance.md.",
+  "_scope": "Strictly IRDAI-attributed rules. Constants imposed by other authorities are deliberately NOT here: GST 18% (GST Act) and mandatory third-party cover (Motor Vehicles Act 1988) stay in their own modules, as do the engine's internal policies (fraud score bands, fair-value bands, parts/labour split, labour rate card). See docs/irdai-compliance.md section 6.",
+  "_change_policy": "Editing any value here changes settlements. Bump ruleset_version, update docs/irdai-compliance.md in the same commit, and expect tests/test_irdai_rules.py to fail until its pinned expectations are updated deliberately. The sha256 of this file is stamped into every claim's result.json, so a claim can always be traced to the ruleset that decided it.",
+
+  "ruleset_version": "2026.08.1",
+  "effective_from": "2024-06-01",
+  "last_verified": "2026-08-31",
+
+  "depreciation_age_slabs": {
+    "citation": "India Motor Tariff GR.9, as carried into the IRDAI-approved standard motor package policy wording",
+    "applies_to": "Metal parts. Materials listed in material_depreciation override these rates regardless of vehicle age.",
+    "unit": "percent",
+    "slabs": [
+      { "up_to_years": 0.5,  "pct": 0  },
+      { "up_to_years": 1,    "pct": 5  },
+      { "up_to_years": 2,    "pct": 10 },
+      { "up_to_years": 3,    "pct": 15 },
+      { "up_to_years": 4,    "pct": 25 },
+      { "up_to_years": 5,    "pct": 35 },
+      { "up_to_years": 10,   "pct": 40 },
+      { "up_to_years": null, "pct": 50 }
+    ]
+  },
+
+  "material_depreciation": {
+    "citation": "India Motor Tariff GR.9 — material-specific rates, fixed regardless of vehicle age",
+    "matching": "Fragment match against the lowercased part name, longest fragment first. Ordering by specificity is load-bearing: 'glass' is a substring of 'fibreglass', and matching it first would pay every fibreglass part at 0%.",
+    "unit": "percent",
+    "overrides": {
+      "windshield":  0,
+      "glass":       0,
+      "rear_glass":  0,
+      "tyre":       50,
+      "tire":       50,
+      "battery":    50,
+      "tube":       50,
+      "airbag":     50,
+      "air_bag":    50,
+      "srs_module": 50,
+      "rubber":     50,
+      "plastic":    50,
+      "nylon":      50,
+      "fibreglass": 30,
+      "fibre_glass":30,
+      "fibre":      30
+    },
+    "zero_dep_excluded": ["tyre", "tire", "tube", "battery", "airbag", "air_bag", "srs_module"],
+    "zero_dep_note": "A Zero-Depreciation add-on waives depreciation on metal, plastic, rubber, fibre and glass parts but expressly carves out tyres, tubes and batteries. GR.9 fixes air bags at 50% as a property of the part, so the add-on does not buy that away either. Zero-dep is NOT 'depreciation = 0'."
+  },
+
+  "compulsory_deductible": {
+    "citation": "IRDAI-approved standard motor package policy wording — compulsory excess, private car",
+    "currency": "INR",
+    "engine_cc_breakpoint": 1500,
+    "at_or_below_breakpoint_inr": 1000,
+    "above_breakpoint_inr": 2000,
+    "unknown_cc_note": "An unknown or zero displacement (EV, missing data) takes the lower rate — never charge a customer the higher excess on absent data."
+  },
+
+  "total_loss": {
+    "citation": "IRDAI-approved standard motor package policy wording — constructive total loss",
+    "threshold_pct_of_idv": 75,
+    "note": "Repair basis at or above this share of the sum insured is settled as a total loss."
+  },
+
+  "salvage": {
+    "citation": "IRDAI-approved standard motor package policy wording — salvage on total loss",
+    "retained_by": "insurer",
+    "pct_of_idv_when_insured_retains": 0.05,
+    "note": "Under 'insurer' (the market default) the insured surrenders the wreck and is paid the full IDV less deductibles; the wreck's realisation is the insurer's recovery, NOT a deduction from the insured. 'insured' is the only other permitted value, and then pct_of_idv_when_insured_retains is deducted."
+  },
+
+  "ncb": {
+    "citation": "IRDAI standard No-Claim Bonus grid — uniform across insurers by regulation",
+    "grid_pct": [20, 25, 35, 45, 50],
+    "impact_formula": "annual_premium * pct / (100 - pct)",
+    "impact_formula_note": "The discount being removed, not a flat percentage of premium. A 50% bonus costs the full premium again, not half of it.",
+    "reset_on_claim": true,
+    "reset_note": "NCB is reported, never written back. The reset happens at renewal and only if the claim is actually paid. An NCB Protect add-on retains the slab."
+  },
+
+  "surveyor": {
+    "citation": "IRDAI (Insurance Surveyors and Loss Assessors) Regulations",
+    "mandatory_above_inr": 50000,
+    "note": "A licensed surveyor must inspect above this amount. This is a PROCESS requirement, not a fraud signal — it must never contribute to a fraud score."
+  },
+
+  "service_standards": {
+    "citation": "IRDAI Master Circular on Protection of Policyholders' Interests, June 2024 — motor claim service parameters",
+    "surveyor_appointment_hours": 24,
+    "survey_report_days": 15,
+    "settlement_days_after_report": 7,
+    "penalty_or_interest_computed": false,
+    "penalty_note": "The circular does provide a per-day amount on surveyor delay and interest on delayed settlement. This engine deliberately computes NEITHER — turning a service-level breach into a rupee figure on a real customer's payout is a policy-administration and regulatory-reporting decision. A test asserts no penalty or interest key is ever emitted.",
+    "deployment_note": "This deployment has no licensed-surveyor workflow: the AI investigation's start and completion stand in for surveyor appointment and survey report. They occupy the same position in the claim chain but are not a licensed surveyor's acts."
+  },
+
+  "ombudsman": {
+    "citation": "Insurance Ombudsman Rules / IRDAI Grievance Redressal framework",
+    "required_on": "every repudiation (Reject decision) communicated to a claimant",
+    "clause": "If you believe this decision does not reflect the full circumstances of your claim, you may write to us with additional supporting evidence and we will review it again. If you remain unsatisfied after that review, you have the right to escalate this matter to the Insurance Ombudsman under the IRDAI Grievance Redressal framework."
+  },
+
+  "hypothecation": {
+    "citation": "IRDAI settlement practice — financed vehicles",
+    "note_template": "Vehicle is hypothecated to {financier}. Per IRDAI settlement practice, payout should be routed through (or requires consent from) the financier{suffix}",
+    "total_loss_suffix": " on this total-loss settlement.",
+    "default_suffix": ".",
+    "note": "Surfaces the fact on the breakdown. Nothing in this system computes payout routing — that is a manual and legal step outside it."
+  }
+}

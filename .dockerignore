@@ -32,5 +32,9 @@ Thumbs.db
 
 # Docs / non-essential
 *.md
-Arch_Diagrams/
-FLOW.zip
+
+# Dev-only: not copied by any Dockerfile, so excluding them just keeps the
+# build context small (docs/diagrams alone is ~10MB of PNGs).
+dev/
+docs/
+*.md

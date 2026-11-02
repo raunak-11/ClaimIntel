@@ -8,6 +8,7 @@ import api from '../utils/api'
 import { useAuth } from '../auth/AuthContext'
 import { Card, Button, Badge, Tabs } from '../ui'
 import { inr } from '../ui/tokens'
+import DemoCasePicker from '../components/DemoCasePicker'
 
 const inputCls =
   'w-full bg-surface border border-line rounded-lg px-3.5 py-2.5 text-sm text-ink placeholder-faint focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400 transition'
@@ -177,6 +178,107 @@ export default function NewClaim() {
     }
   }
 
+  // ── Demo quick-fill ─────────────────────────────────────────────────────────
+  // Loads ONE showcase case: its field values and its fixture files. Fills only,
+  // never submits.
+  const [demoBusyId, setDemoBusyId] = useState(null)
+
+  const fillDemoCase = async (c) => {
+    setDemoBusyId(c.id)
+    setSubmitError('')
+    setExtractError('')
+    setExtractDone('')
+    setExtractWarnings([])
+
+    // Clear the PREVIOUS case first. Cases carry different evidence — case 3 is
+    // the only one with a telematics file — so without this, clicking case 3
+    // then case 1 would leave case 3's telematics attached and upload it under
+    // case 1's claim. Same for the text fields: applyExtraction merges with a
+    // spread, so any field the new case leaves blank would keep the old value.
+    setPhotos([])
+    setEstimateFiles([])
+    setFirFiles([])
+    setLicenseFiles([])
+    setRcFiles([])
+    setDashcamFiles([])
+    setTelematicsFiles([])
+    setClaimFormFiles([])
+    setForm({ claim_type: 'Motor - Own Damage', incident_date: '', incident_location: '', description: '' })
+    setGarage({ amount: '', workshop_name: '' })
+    setFir({ number: '' })
+    setEvidenceTab('photos')
+
+    try {
+      // Real lookup, so the policy card shows genuine data from policies.csv
+      // rather than anything this manifest asserts.
+      setPhone(c.phone)
+      setLookupError('')
+      const { data: pol } = await api.get(`/customers/lookup?phone=${c.phone}`)
+      setPolicy(pol)
+
+      // Reuse the claim-form auto-fill path rather than re-implementing field
+      // writes: it already handles the "Motor - " prefix, the date+time join,
+      // the future-date guard and the green summary line. policy_no/vehicle_reg
+      // are deliberately omitted — applyExtraction would compare them against a
+      // stale `policy` from this closure and warn about a mismatch that is not
+      // real.
+      applyExtraction(
+        {
+          type_of_loss: String(c.claim_type || '').replace(/^Motor - /, ''),
+          incident_date: c.incident_date,
+          incident_time: c.incident_time,
+          incident_location: c.incident_location,
+          description: c.description,
+          fir_number: c.fir_number,
+          workshop_name: c.workshop_name,
+        },
+        { total_estimate_inr: c.estimate_amount, workshop_name: c.workshop_name },
+      )
+
+      // Fetch each fixture and hand it to the same state the file pickers use.
+      const byType = {
+        images: [], estimate: [], fir: [], license: [],
+        rc: [], dashcam: [], telematics: [], claim_form: [],
+      }
+      const failed = []
+      for (const f of c.files) {
+        if (!f.present) { failed.push(f.serve_as); continue }
+        try {
+          const res = await fetch(f.url)
+          if (!res.ok) throw new Error(String(res.status))
+          const blob = await res.blob()
+          byType[f.doc_type]?.push(new File([blob], f.serve_as, { type: blob.type }))
+        } catch {
+          failed.push(f.serve_as)
+        }
+      }
+
+      if (byType.images.length) setPhotos(byType.images)
+      if (byType.estimate.length) setEstimateFiles(byType.estimate)
+      if (byType.fir.length) setFirFiles(byType.fir)
+      if (byType.license.length) setLicenseFiles(byType.license)
+      if (byType.rc.length) setRcFiles(byType.rc)
+      if (byType.dashcam.length) setDashcamFiles(byType.dashcam)
+      if (byType.telematics.length) setTelematicsFiles(byType.telematics)
+
+      // Deliberately does NOT name c.expected. The decision is the pipeline's to
+      // produce — stating it on the intake screen pre-announces the answer.
+      const attached = c.files.length - failed.length
+      setExtractDone(
+        `Case ${c.id} (${c.label}) loaded — ${attached} of ${c.files.length} document(s) attached. `
+        + `Review and click Submit Claim.`,
+      )
+      setExtractWarnings(failed.length
+        ? [`Not attached (file not on disk): ${failed.join(', ')} — add ${failed.length > 1 ? 'them' : 'it'} manually before submitting.`]
+        : [])
+    } catch (err) {
+      setExtractError(err.response?.data?.detail
+        || 'Could not load the demo case — check the backend is running and the fixtures exist.')
+    } finally {
+      setDemoBusyId(null)
+    }
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!policy) return
@@ -258,6 +360,12 @@ export default function NewClaim() {
       </div>
 
       <Card className="p-6 space-y-5">
+        {/* Demo quick-fill. Must sit OUTSIDE the `policy &&` block below — the
+            whole form is unmounted until a policy is looked up, so a button
+            rendered inside it could never be the thing that fills it. Renders
+            null when DEMO_MODE is off. */}
+        <DemoCasePicker onSelect={fillDemoCase} busyId={demoBusyId} />
+
         {/* Step 1 — Phone lookup */}
         <div>
           <label className={labelCls}>Registered Mobile Number</label>

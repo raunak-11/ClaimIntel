@@ -38,15 +38,18 @@ from datetime import datetime
 from typing import Optional
 
 from config import SURVEYOR_THRESHOLD
+from services import irdai_rules
 
-# IRDAI Master Circular on Protection of Policyholders' Interests, June 2024 —
-# motor own-damage claim service parameters.
-SLA_SURVEYOR_APPOINTMENT_HOURS = 24
-SLA_SURVEY_REPORT_DAYS = 15
-SLA_SETTLEMENT_DAYS_AFTER_REPORT = 7
+# Service parameters come from the validated IRDAI ruleset
+# (data/config/irdai_rules.json), not from literals here — see
+# services/irdai_rules.py. Names stay bound at import: they are
+# process-lifetime constants, exactly as they were when hardcoded.
+_SLA = irdai_rules.service_standards()
+SLA_SURVEYOR_APPOINTMENT_HOURS = _SLA["surveyor_appointment_hours"]
+SLA_SURVEY_REPORT_DAYS = _SLA["survey_report_days"]
+SLA_SETTLEMENT_DAYS_AFTER_REPORT = _SLA["settlement_days_after_report"]
 
-SOURCE = ("IRDAI Master Circular on Protection of Policyholders' Interests, "
-          "June 2024 — motor claim service parameters.")
+SOURCE = _SLA["citation"]
 
 BASIS_NOTE = (
     "Elapsed time is measured against the circular's limits and breaches are "
@@ -54,12 +57,9 @@ BASIS_NOTE = (
     "administration and regulatory-reporting function, not a claims-engine one."
 )
 
-DEPLOYMENT_NOTE = (
-    "This deployment has no licensed-surveyor workflow: the AI investigation's "
-    "start and completion stand in for surveyor appointment and survey report. "
-    "They occupy the same position in the claim chain but are not a licensed "
-    "surveyor's acts."
-)
+# Sourced from the ruleset so the caveat cannot drift apart from the register.
+# BASIS_NOTE above stays local: it describes what THIS engine does, not a rule.
+DEPLOYMENT_NOTE = _SLA["deployment_note"]
 
 # Status vocabulary
 ST_RECORDED = "recorded"          # anchor event; nothing to measure against

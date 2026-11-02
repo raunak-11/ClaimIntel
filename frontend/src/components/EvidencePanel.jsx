@@ -389,15 +389,24 @@ function FairValueBreakdown({ fv, undeclaredParts, unverifiedParts, scopeMismatc
         </p>
       )}
 
-      {/* Part prices come from live web market data only — never from the
-          estimate being audited. How much of the claim that actually covered
-          decides whether the fair-value band is allowed to reach a verdict. */}
+      {/* Part prices come from market data only (the API-fetched OEM price
+          catalogue or a live web search) — never from the estimate being
+          audited. How much of the claim that actually covered decides whether
+          the fair-value band is allowed to reach a verdict. */}
       {cov && (
         <div className={cx('mt-3 pt-2 border-t border-line text-[11px] leading-relaxed',
           cov.coverage_pct >= 70 ? 'text-faint' : 'text-warning-700')}>
           Independent pricing coverage: <span className="font-medium">
             {cov.priced_count}/{cov.total_count} parts ({cov.coverage_pct}%)
-          </span> priced from live web market data.
+          </span> priced from market data.
+          {(cov.stale_parts || []).length > 0 && (
+            <span className="text-warning-700"> Stale price used for{' '}
+              <span className="capitalize">
+                {cov.stale_parts.map((p) => String(p).replace(/_/g, ' ')).join(', ')}
+              </span> — the catalogue entry is past its validity window and the price API could not
+              refresh it, so the last fetched price is shown.
+            </span>
+          )}
           {(cov.unpriced_parts || []).length > 0 && (
             <> No corroborated market price found for{' '}
               <span className="capitalize">

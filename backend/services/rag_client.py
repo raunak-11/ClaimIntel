@@ -1,7 +1,7 @@
 """
 RAG (Retrieval-Augmented Generation) client for ClaimIntel.
 
-Queries ChromaDB collections built by scripts/build_vectorstore.py.
+Queries ChromaDB collections built by dev/scripts/build_vectorstore.py.
 Uses ChromaDB's built-in ONNX embedding (all-MiniLM-L6-v2) — same model used at
 index time, so query vectors are always compatible with stored vectors.
 100% local, no API calls, no rate limits.

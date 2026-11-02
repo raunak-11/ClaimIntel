@@ -25,6 +25,7 @@ fully-generated flow below (PROMPT).
 
 from typing import Optional
 
+from services import irdai_rules
 from services.llm_client import ask_text
 
 
@@ -46,12 +47,10 @@ def _inr(val) -> str:
 # Hardcoded, not LLM-generated — the concrete compliance requirement is that
 # this exact disclosure appears on every Reject communication, regardless of
 # what an LLM call does or doesn't do on a given run.
-_OMBUDSMAN_CLAUSE = (
-    "If you believe this decision does not reflect the full circumstances of your claim, "
-    "you may write to us with additional supporting evidence and we will review it again. "
-    "If you remain unsatisfied after that review, you have the right to escalate this matter "
-    "to the Insurance Ombudsman under the IRDAI Grievance Redressal framework."
-)
+# The wording lives in the IRDAI ruleset, which refuses to load a clause that no
+# longer mentions the Ombudsman — the disclosure cannot be edited away by
+# accident. Bound at import, so a Reject letter never depends on a file read.
+_OMBUDSMAN_CLAUSE = irdai_rules.ombudsman_clause()
 
 # Fixed shell for every Reject letter — only {claimant}, {claim_id}, {vehicle},
 # {incident_date}, {location} and {reasons_text} are substituted. The

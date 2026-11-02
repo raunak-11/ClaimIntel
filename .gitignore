@@ -10,6 +10,7 @@
 # backend/services/gani_*.py reimplements the logic against backend/config.py
 # credentials instead of importing any of it.
 Gani_Parser_Latest/
+_archived_Gani_Parser_Latest/
 
 # ── Python ────────────────────────────────────────────────────────────────────
 venv/
@@ -20,6 +21,10 @@ __pycache__/
 .Python
 *.egg-info/
 .pytest_cache/
+
+# Claude Code: settings.json is shared, settings.local.json is per-developer
+# (personal permission grants) and should not be committed.
+.claude/settings.local.json
 
 # ── Node / Frontend ───────────────────────────────────────────────────────────
 node_modules/
@@ -39,15 +44,15 @@ data/claims/
 data/reports/
 
 # ── Demo media supplied at demo time ──────────────────────────────────────────
-# The generated showcase fixtures (PDFs, telematics JSON, *_NEEDED.txt, README)
-# are committed; the real photos / dashcam clips dropped into test/ are not.
-test/**/*.jpg
-test/**/*.jpeg
-test/**/*.png
-test/**/*.webp
-test/**/*.mp4
-test/**/*.mov
-test/**/*.avi
+# The generated showcase fixtures (PDFs, telematics JSON, README) are committed;
+# the real photos / dashcam clips dropped into data/demo/ are not.
+data/demo/**/*.jpg
+data/demo/**/*.jpeg
+data/demo/**/*.png
+data/demo/**/*.webp
+data/demo/**/*.mp4
+data/demo/**/*.mov
+data/demo/**/*.avi
 
 # ── Editor / OS ───────────────────────────────────────────────────────────────
 .vscode/*

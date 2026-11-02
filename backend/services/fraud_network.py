@@ -22,7 +22,7 @@ The current claim is flagged when it connects to >= 2 OTHER distinct
 claimants (by phone) within the window — a single shared garage/plate is
 common and not itself a ring signal; two or more is the pattern.
 
-Scope note: the original design (see newupdates.md item #20) also connects
+Scope note: the original design (see docs/newupdates.md item #20) also connects
 claims on witness name. No document prompt or the free-text description
 parser currently extracts a witness-name field — that's a document_parser.py
 / FIR-prompt schema change, not a graph change, and is left for that item.

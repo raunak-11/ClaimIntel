@@ -26,7 +26,7 @@ this:
      so real listings are found before forum/blog noise.
   5. The evidence (which domains, what each reported) is now cached alongside
      the value — previously only the final number was kept, so there was no
-     way to audit why a price was chosen (see newupdates.md item #10c).
+     way to audit why a price was chosen (see docs/newupdates.md item #10c).
 
 Important: the claimant/garage estimate is NOT used to clamp live search
 results. It is evidence to verify, not a benchmark to trust.
@@ -42,7 +42,7 @@ from typing import Optional
 
 import httpx
 
-from config import DATA_DIR, SERPER_API_KEY, TAVILY_API_KEY
+from config import DATA_DIR, SERPER_API_KEYS, TAVILY_API_KEYS
 
 _CACHE_PATH = os.path.join(DATA_DIR, "price_cache.json")
 # 5: model-level query (trim/engine stripped), loose relevance synonyms, and a
@@ -94,10 +94,10 @@ def _save_cache() -> None:
             pass
 
 
-def _serper(query: str) -> list[dict]:
+def _serper(query: str, api_key: str) -> list[dict]:
     r = httpx.post(
         "https://google.serper.dev/search",
-        headers={"X-API-KEY": SERPER_API_KEY, "Content-Type": "application/json"},
+        headers={"X-API-KEY": api_key, "Content-Type": "application/json"},
         json={"q": query, "gl": "in", "num": 10},
         timeout=_TIMEOUT,
     )
@@ -115,11 +115,11 @@ def _serper(query: str) -> list[dict]:
     return results
 
 
-def _tavily(query: str) -> list[dict]:
+def _tavily(query: str, api_key: str) -> list[dict]:
     r = httpx.post(
         "https://api.tavily.com/search",
         json={
-            "api_key": TAVILY_API_KEY,
+            "api_key": api_key,
             "query": query,
             "search_depth": "basic",
             "max_results": 8,
@@ -159,18 +159,96 @@ def reset() -> None:
     _dead_providers.clear()
 
 
+# Key chains: a spent key is not a dead provider.
+#
+# Both free tiers are quota-capped and one investigation spends 20-50 searches,
+# so the interesting failure here is not "the network is down", it is "this key
+# is used up", and the two need opposite handling. A used-up key must never be
+# retried (every attempt is a wasted round-trip that leaves the provider dark),
+# but the PROVIDER is still perfectly good on the next key in its chain, so
+# tripping the circuit breaker above would throw away working capacity.
+#
+# HTTP status -> what it says about the KEY:
+#   401 unauthorized, 402 payment required, 403 out of credits (Serper),
+#   432/433 plan limit (Tavily)  -> spent: never tried again in this process.
+#   429                          -> either the monthly cap or a burst rate-limit
+#                                   (pricing_engine prices 6-20 parts at once)
+#                                   and the body rarely distinguishes the two,
+#                                   so rest the key and let the next one carry
+#                                   the burst rather than burning a spare for
+#                                   what may be a two-second overrun.
+# Anything else (timeout, TLS, 5xx) is the provider's fault rather than the
+# key's and trips the per-investigation circuit breaker exactly as before.
+_SPENT_STATUSES = {401, 402, 403, 432, 433}
+_KEY_COOLDOWN = 90.0
+
+# key -> unix time it may be tried again (inf = spent). Deliberately NOT cleared
+# by reset(): a quota that ran out during claim N has not refilled by claim N+1,
+# and re-testing it once per investigation is the wasted round-trip the chain
+# exists to avoid. A process restart re-arms everything, which is the right
+# granularity for a quota that refills daily or monthly.
+_key_blocked_until: dict[str, float] = {}
+_key_lock = threading.Lock()
+
+
+def _mask(api_key: str) -> str:
+    """Last 4 characters only. This goes to stdout."""
+    return f"...{api_key[-4:]}" if len(api_key) > 4 else "..."
+
+
+def _live_keys(chain: list[str]) -> list[str]:
+    """The keys in this chain that are neither spent nor resting, in order."""
+    now = time.time()
+    with _key_lock:
+        return [k for k in chain if _key_blocked_until.get(k, 0.0) <= now]
+
+
+def _block_key(provider: str, chain: list[str], api_key: str, status: int) -> None:
+    spent = status in _SPENT_STATUSES
+    with _key_lock:
+        _key_blocked_until[api_key] = (
+            float("inf") if spent else time.time() + _KEY_COOLDOWN
+        )
+    state = "spent" if spent else f"rate-limited, resting {_KEY_COOLDOWN:.0f}s"
+    print(f"[pricing] {provider} key {_mask(api_key)} {state} (HTTP {status})",
+          flush=True)
+    if not _live_keys(chain):
+        # Worth shouting about: with no key left, this provider contributes
+        # nothing, and if the other one is also out every part comes back
+        # unpriced and the fair-value bands abstain rather than fail.
+        # ASCII only: this line lands on a Windows console, where the repo's
+        # usual em dash comes out as a replacement glyph (same reason
+        # _PRICE_RE spells the rupee sign as an escape).
+        print(f"[pricing] {provider} has no usable key left "
+              f"({len(chain)} configured): add one to the chain as "
+              f"{provider.upper()}_API_KEY_2, or pricing will abstain",
+              flush=True)
+
+
 def _search(query: str) -> list[dict]:
-    """Try every configured provider in order; a network/API failure on one
-    falls through to the next instead of silently returning no results.
-    Returns a list of {"text": ..., "url": ...} — url is used for domain dedup."""
-    for name, key, fn in (("serper", SERPER_API_KEY, _serper), ("tavily", TAVILY_API_KEY, _tavily)):
-        if not key or name in _dead_providers:
+    """Try every configured provider in order, and within a provider every key
+    in its chain; a network/API failure on one falls through to the next
+    instead of silently returning no results.
+    Returns a list of {"text", "url", "provider"} — url is used for domain
+    dedup, provider is recorded in the evidence (and the OEM catalogue) so a
+    price can be traced back to the API that produced it."""
+    for name, chain, fn in (("serper", SERPER_API_KEYS, _serper),
+                            ("tavily", TAVILY_API_KEYS, _tavily)):
+        if name in _dead_providers:
             continue
-        try:
-            return fn(query)
-        except Exception:
-            _dead_providers.add(name)
-            continue
+        for api_key in _live_keys(chain):
+            try:
+                return [dict(r, provider=name) for r in fn(query, api_key)]
+            except httpx.HTTPStatusError as exc:
+                status = exc.response.status_code
+                if status == 429 or status in _SPENT_STATUSES:
+                    _block_key(name, chain, api_key, status)
+                    continue          # same provider, next key in the chain
+                _dead_providers.add(name)
+                break                 # provider-level fault: next provider
+            except Exception:
+                _dead_providers.add(name)
+                break
     return []
 
 
@@ -196,7 +274,7 @@ _PRICE_RE = re.compile(
 _PART_QUERY_ALIASES = {
     "bonnet": ["bonnet", "hood panel"],
     "boot": ["boot lid", "dickey door", "tailgate"],
-    "roof": ["roof panel"],
+    "roof_panel": ["roof panel"],   # canonical name — _canon() maps "roof" here
     "front_bumper": ["front bumper", "bumper front"],
     "rear_bumper": ["rear bumper", "bumper rear"],
     "bumper_reinforcer": ["bumper reinforcement", "bumper bracket"],
@@ -211,10 +289,16 @@ _PART_QUERY_ALIASES = {
     "fender_right": ["right fender", "RH fender", "right mudguard"],
     "quarter_panel_left": ["left quarter panel", "LH quarter panel"],
     "quarter_panel_right": ["right quarter panel", "RH quarter panel"],
-    "door_front_left": ["front left door", "LH front door shell"],
-    "door_front_right": ["front right door", "RH front door shell"],
-    "door_rear_left": ["rear left door", "LH rear door shell"],
-    "door_rear_right": ["rear right door", "RH rear door shell"],
+    # Keyed by pricing_engine's CANONICAL door names. These four were keyed
+    # `door_front_left` etc., which _canon() rewrites to `front_left_door` before
+    # any lookup — so doors never got their search phrasings or their band.
+    # Listings write "Front Door Left" / "Front Door LH" — the phrasing that
+    # priced a Baleno door before this key was renamed — so it leads; the
+    # phrase also doubles as the relevance filter's keyword.
+    "front_left_door": ["front door left", "front door LH", "front left door"],
+    "front_right_door": ["front door right", "front door RH", "front right door"],
+    "rear_left_door": ["rear door left", "rear door LH", "rear left door"],
+    "rear_right_door": ["rear door right", "rear door RH", "rear right door"],
     "side_mirror_left": ["left ORVM", "LH side mirror", "outer rear view mirror"],
     "side_mirror_right": ["right ORVM", "RH side mirror", "outer rear view mirror"],
     "windshield_front": ["front windshield glass", "windscreen glass"],
@@ -223,16 +307,29 @@ _PART_QUERY_ALIASES = {
     "window_glass_right": ["right door window glass"],
     "alloy_wheel": ["alloy wheel rim", "wheel rim"],
     "radiator": ["radiator assembly", "radiator core"],
-    "condenser": ["AC condenser", "air conditioner condenser"],
     "wheel_arch_liner": ["wheel arch liner", "fender liner", "splash shield"],
     "moulding": ["side moulding", "body side moulding"],
     "apron": ["front apron panel", "upper apron"],
+    # Added 2026-09-11 for the OEM price catalogue: every physical line on the
+    # four demo estimates, plus parts the vision model reports as undeclared on
+    # them. Without a phrasing each searched on its bare name and, with no band,
+    # rarely cleared the two-domain rule.
+    "ac_condenser": ["AC condenser", "air conditioner condenser"],
+    "airbag_module_set": ["airbag module", "SRS airbag"],
+    "seat_belt_pretensioner": ["seat belt pretensioner", "seat belt assembly"],
+    "front_suspension_crossmember": ["front crossmember", "front subframe", "suspension crossmember"],
+    "power_steering_rack": ["steering rack assembly", "power steering rack"],
+    "engine_undertray": ["engine under cover", "engine undertray", "skid plate"],
+    "hood_latch": ["bonnet lock", "hood latch"],
+    "engine_mounts": ["engine mount", "engine mounting"],
+    "front_bumper_sensors": ["parking sensor", "bumper sensor"],
+    "number_plate_bracket": ["number plate bracket", "number plate holder"],
 }
 
 _PART_BANDS = {
     "bonnet": (4000, 70000),
     "boot": (4000, 70000),
-    "roof": (6000, 90000),
+    "roof_panel": (6000, 90000),
     "front_bumper": (2500, 60000),
     "rear_bumper": (2500, 60000),
     "bumper_reinforcer": (1000, 30000),
@@ -247,10 +344,14 @@ _PART_BANDS = {
     "fender_right": (2500, 50000),
     "quarter_panel_left": (3000, 60000),
     "quarter_panel_right": (3000, 60000),
-    "door_front_left": (6000, 90000),
-    "door_front_right": (6000, 90000),
-    "door_rear_left": (6000, 90000),
-    "door_rear_right": (6000, 90000),
+    # Floor was 6000 while these rows were unreachable (see the alias table) —
+    # it had never actually filtered anything. Applied for the first time on
+    # 2026-09-11, it discarded every corroborated Baleno door price (₹2,900–
+    # ₹7,400 across six retailers). Same floor as a fender.
+    "front_left_door": (2500, 90000),
+    "front_right_door": (2500, 90000),
+    "rear_left_door": (2500, 90000),
+    "rear_right_door": (2500, 90000),
     "side_mirror_left": (800, 35000),
     "side_mirror_right": (800, 35000),
     "windshield_front": (2500, 60000),
@@ -259,10 +360,20 @@ _PART_BANDS = {
     "window_glass_right": (1000, 25000),
     "alloy_wheel": (3000, 45000),
     "radiator": (1500, 40000),
-    "condenser": (2000, 40000),
     "wheel_arch_liner": (400, 12000),
     "moulding": (300, 15000),
     "apron": (2000, 45000),
+    # Plausibility filters for scraped figures, not prices — deliberately wide.
+    "ac_condenser": (2000, 40000),
+    "airbag_module_set": (5000, 150000),
+    "seat_belt_pretensioner": (1500, 30000),
+    "front_suspension_crossmember": (3000, 80000),
+    "power_steering_rack": (5000, 90000),
+    "engine_undertray": (500, 15000),
+    "hood_latch": (300, 8000),
+    "engine_mounts": (800, 20000),
+    "front_bumper_sensors": (500, 15000),
+    "number_plate_bracket": (200, 5000),
 }
 
 # Genuine India spare-parts marketplaces with structured, real listing prices
@@ -423,7 +534,7 @@ def _plausible_band(part: str) -> tuple[int, int]:
     return _PART_BANDS.get(part, (300, 500000))
 
 
-def lookup_part_price(vehicle: str, part: str) -> Optional[int]:
+def lookup_part_price(vehicle: str, part: str, force_refresh: bool = False) -> Optional[int]:
     """
     Return a representative current OEM price for `part` on `vehicle`, or None.
 
@@ -435,8 +546,11 @@ def lookup_part_price(vehicle: str, part: str) -> Optional[int]:
     mentions on the same page) report a relevant, in-band figure that agree
     within a sane spread — a single noisy hit is not trusted, and the part is
     reported unpriced rather than given a number nothing corroborates.
+
+    `force_refresh` skips this module's 30-day cache and always asks the API —
+    used by dev/scripts/build_oem_catalog.py --refresh.
     """
-    if not (SERPER_API_KEY or TAVILY_API_KEY):
+    if not (SERPER_API_KEYS or TAVILY_API_KEYS):
         return None
 
     cache = _load_cache()
@@ -448,7 +562,7 @@ def lookup_part_price(vehicle: str, part: str) -> Optional[int]:
     now = time.time()
     with _lock:
         hit = cache.get(key)
-    if hit:
+    if hit and not force_refresh:
         ttl = _TTL_SECONDS if hit.get("value") else _NEG_TTL_SECONDS
         if hit.get("version") == _CACHE_VERSION and now - hit.get("ts", 0) < ttl:
             return hit.get("value")
@@ -463,6 +577,8 @@ def lookup_part_price(vehicle: str, part: str) -> Optional[int]:
 
         # {domain: [plausible, relevant prices found on that domain]}
         by_domain: dict[str, list[int]] = {}
+        # {domain: provider that returned it} — traceability for the catalogue.
+        provider_of: dict[str, str] = {}
 
         def _collect(query: str) -> None:
             for res in _search(query):
@@ -483,6 +599,7 @@ def lookup_part_price(vehicle: str, part: str) -> Optional[int]:
                 nums = [n for n in _extract_prices(res["text"]) if lo <= n <= hi]
                 if nums:
                     by_domain.setdefault(domain, []).extend(nums)
+                    provider_of.setdefault(domain, res.get("provider") or "")
 
         for part_query in aliases:
             for trusted in _TRUSTED_RETAIL_DOMAINS:
@@ -535,6 +652,7 @@ def lookup_part_price(vehicle: str, part: str) -> Optional[int]:
                     "used": consistent,
                     "observed_low": observed_low,
                     "observed_high": observed_high,
+                    "providers": sorted({p for p in provider_of.values() if p}),
                 }
     except Exception:
         value = None
@@ -552,15 +670,17 @@ def lookup_part_price(vehicle: str, part: str) -> Optional[int]:
     return value
 
 
-def lookup_market_price(vehicle: str, part: str) -> Optional[dict]:
+def lookup_market_price(vehicle: str, part: str, force_refresh: bool = False) -> Optional[dict]:
     """`lookup_part_price` plus the evidence behind it.
 
-    Returns `{price, low, high, domains, sources}` — `low`/`high` being the
-    OBSERVED spread across the independent retailers that corroborated the
-    figure, so a caller can express a range without inventing one. None when the
-    part could not be priced.
+    Returns `{price, low, high, domains, sources, providers, fetched_at}` —
+    `low`/`high` being the OBSERVED spread across the independent retailers
+    that corroborated the figure, so a caller can express a range without
+    inventing one; `fetched_at` the epoch time the API actually returned it
+    (a cache hit reports the original fetch, not now). None when the part could
+    not be priced.
     """
-    value = lookup_part_price(vehicle, part)
+    value = lookup_part_price(vehicle, part, force_refresh=force_refresh)
     if not value:
         return None
     key = f"{_vehicle_query_name(vehicle)}|{part}".lower().strip()
@@ -574,4 +694,6 @@ def lookup_market_price(vehicle: str, part: str) -> Optional[dict]:
         "high": ev.get("observed_high") or value,
         "domains": domains,
         "sources": len(domains),
+        "providers": ev.get("providers") or [],
+        "fetched_at": entry.get("ts") or time.time(),
     }

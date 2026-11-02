@@ -1,7 +1,7 @@
 policy_no,phone,customer_name,vehicle_make,vehicle_model,vehicle_year,vehicle_reg_no,coverage_type,sum_insured,policy_start,policy_end,annual_premium,engine_cc,voluntary_deductible,ncb_pct,add_ons,vehicle_registration_date
 POL-784512,9876543210,Rajesh Kumar,Maruti Suzuki,Swift Dzire VXI,2020,KA01MN2345,Comprehensive,500000,2023-01-15,2027-01-15,12000,1197,0,20,,2020-12-27
 POL-234567,9845012345,Priya Sharma,Honda,City ZX CVT,2019,MH02AB1234,Comprehensive,700000,2022-03-10,2027-03-10,16000,1498,0,0,,2019-11-08
-POL-891234,9988776655,Mohammed Faiz,Toyota,Innova Crysta GX,2023,TN07CD5678,Comprehensive,1200000,2025-04-01,2026-04-01,28000,2694,0,0,,2023-01-01
+POL-891234,9988776655,Mohammed Faiz,Toyota,Innova Crysta GX,2023,TN07CD5678,Comprehensive,1200000,2026-04-01,2027-04-01,29500,2694,0,0,,2023-01-01
 POL-345678,9123456789,Kavitha Reddy,Tata,Nexon EV Max,2021,AP09EF3456,Comprehensive,800000,2023-07-22,2026-07-22,22500,0,0,0,,2021-01-09
 POL-567890,9900112233,Arjun Mehta,Hyundai,Creta SX Turbo,2022,MH28BQ2255,Comprehensive,900000,2024-06-01,2027-06-01,20000,1482,2500,25,zero_dep;consumables,2022-06-15
 POL-112233,9567890123,Vijay M,Kia,Seltos HTX Plus,2022,TN12AJ1603,Comprehensive,950000,2024-08-15,2027-08-15,21000,1497,0,0,zero_dep,2022-06-15

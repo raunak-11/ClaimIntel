@@ -228,7 +228,8 @@ def _assess_authenticity(image_path: str) -> dict:
                 inferenceConfig={"maxTokens": 512, "temperature": 0},
             )
             _log_bedrock_usage(response, "document_authenticity", BEDROCK_DOC_VISION_MODEL)
-            data = _parse_json(response["output"]["message"]["content"][0]["text"])
+            from services.llm_client import converse_text
+            data = _parse_json(converse_text(response))
         else:
             # Groq's vision model, via this project's own client — which brings
             # its JSON repair and token-usage tracking along for free.
@@ -309,7 +310,11 @@ def _extract_fields(ocr_text: str, doc_type: str) -> dict:
         # internally) — otherwise switching provider silently empties the
         # Analytics page's token/cost view for document parsing.
         _log_bedrock_usage(response, f"document_extract_{doc_type}", BEDROCK_DOC_MODEL)
-        return _parse_json(response["output"]["message"]["content"][0]["text"])
+        # NOT content[0] — BEDROCK_DOC_MODEL is a reasoning model and Converse
+        # returns its chain-of-thought as a separate block first. See
+        # llm_client.converse_text.
+        from services.llm_client import converse_text
+        return _parse_json(converse_text(response))
 
     # Groq text model, through this project's own client — no images are sent
     # here, only the OCR text, so this is a text call not a vision one.

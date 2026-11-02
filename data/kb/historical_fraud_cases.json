@@ -197,6 +197,48 @@
         "claimed_collision_speed_kmph": 70
       },
       "notes": "GPS location matched (vehicle genuinely at the claimed location) but no impact/braking event recorded despite a claimed high-speed collision — physics-mismatch telematics signature, a variant fraud pattern from the GPS-spoofing cases above."
+    },
+    {
+      "case_id": "HISTFRAUD-012",
+      "claimant_name": "Arjun Mehta",
+      "phone": "9900112233",
+      "vehicle": "Hyundai Creta SX Turbo (MH28BQ2255)",
+      "garage_workshop_name": "Roadside QuickFix Garage",
+      "claim_type": "Motor - Own Damage",
+      "incident_date": "2026-01-27",
+      "fraud_score": 83,
+      "fraud_label": "High",
+      "decision": "Rejected",
+      "fraud_schemes": ["FS-002: Staged Collision", "FI-CLM-001: Serial Claimant"],
+      "garage_vs_ai_variance_pct": -41,
+      "telematics_signature": {
+        "gps_location_match": false,
+        "impact_consistent": false,
+        "hard_braking_detected": false,
+        "claimed_collision_speed_kmph": 58
+      },
+      "notes": "Same claimant, same vehicle and same unregistered workshop as the current claim. Telematics placed the vehicle outside the claimed district with no impact or braking event, and the workshop quoted 41% BELOW independent assessment — cash-settlement bypass alongside the staged-collision signature already seen in HISTFRAUD-008/009/010."
+    },
+    {
+      "case_id": "HISTFRAUD-013",
+      "claimant_name": "Sathish Kumar R",
+      "phone": "9001122343",
+      "vehicle": "Hyundai Venue S (TN11UV4417)",
+      "garage_workshop_name": "Roadside QuickFix Garage",
+      "claim_type": "Motor - Own Damage",
+      "incident_date": "2026-04-09",
+      "fraud_score": 77,
+      "fraud_label": "High",
+      "decision": "Rejected",
+      "fraud_schemes": ["FS-002: Staged Collision"],
+      "garage_vs_ai_variance_pct": -38,
+      "telematics_signature": {
+        "gps_location_match": false,
+        "impact_consistent": false,
+        "hard_braking_detected": false,
+        "claimed_collision_speed_kmph": 62
+      },
+      "notes": "Second unrelated claimant routed through the same unregistered workshop within three months, same GPS-mismatch/no-impact signature and the same below-market cash quote — the pattern is the workshop's, not one claimant's."
     }
   ]
 }

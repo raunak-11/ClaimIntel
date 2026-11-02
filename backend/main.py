@@ -160,13 +160,24 @@ def health():
 
 @app.get("/api/health/models")
 def health_models():
-    """Are the configured Groq model IDs actually servable by this key?
+    """Are the configured models actually callable — on every provider in use?
 
     Groq has decommissioned two models this project depended on mid-project;
     each time the first symptom was a live investigation failing halfway. This
     turns that into a check an operator can run before a demo instead of
     discovering it during one. Never raises — an unreachable API reports
     `reachable: false`, which is a different problem from a missing model.
+
+    The `bedrock_text` and `bedrock_vision` blocks cover the PRIMARY providers —
+    text (A2, A5, document extraction) and vision (A1, A3, document
+    authenticity). Vision was previously unchecked here, so invalid AWS
+    credentials looked healthy: every vision call quietly fell back to a Groq
+    model that cannot serve a full-size claim photo, and the failure only
+    appeared mid-investigation as a JSON parse error naming the wrong provider.
+    Text now sits in the same position and gets the same check.
+
+    Both run even when the Groq list is unreachable — Groq is the fallback now,
+    so its absence must not hide the state of the providers doing the work.
     """
     from services import llm_client
     return llm_client.preflight()
@@ -450,12 +461,52 @@ def get_sample_telematics(filename: str):
     cross-checking pipeline be demoed without one. They are git-tracked, not
     generated: a script that regenerates static committed files would be a dead
     end. The per-case variant with live timestamps is written by
-    scripts/generate_test_cases.py.
+    dev/scripts/generate_test_cases.py.
     """
     path = os.path.join(KB_DIR, "sample_telematics", os.path.basename(filename))
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="Sample file not found")
     return FileResponse(path, media_type="application/json", filename=filename)
+
+
+# ── Demo quick-fill (showcase cases) ──────────────────────────────────────────
+# Backs the one-button-per-case picker on the New Claim page. Unguarded, like
+# every other claim-filing route — and gated on DEMO_MODE, so one .env line
+# removes both the data and the files from a real deployment.
+
+@app.get("/api/demo/cases")
+def list_demo_cases():
+    """The showcase cases, with incident dates resolved against today.
+
+    Returns [] rather than 404ing when demo mode is off or the fixture manifest
+    has never been generated: the frontend hides the whole panel on an empty
+    list, so "not available" and "nothing configured" both degrade to invisible
+    rather than to an error on a page a customer can reach.
+    """
+    from services import demo_cases as _demo
+    return {"cases": _demo.load_cases()}
+
+
+@app.get("/api/demo/cases/{case_id}/files/{file_key}")
+def get_demo_case_file(case_id: str, file_key: str):
+    """One fixture file, served under its manifest `serve_as` name.
+
+    `file_key` is a manifest KEY, not a path — the filename and directory are
+    both looked up server-side, so there is no caller-supplied path component to
+    traverse with (demo_cases.resolve_file additionally containment-checks the
+    result against TEST_DIR).
+
+    The rename matters for case 2: its damage photos are AI-generated and one
+    still carries its Gemini default filename, which trips FC-28 (30 points) and
+    would carry that case past 70 into Reject instead of the Escalate it is
+    designed for. Its README already tells presenters to rename by hand.
+    """
+    from services import demo_cases as _demo
+    resolved = _demo.resolve_file(case_id, file_key)
+    if not resolved:
+        raise HTTPException(status_code=404, detail="Demo fixture not found")
+    path, download_name = resolved
+    return FileResponse(path, filename=download_name)
 
 
 # ── Document List ─────────────────────────────────────────────────────────────
@@ -837,7 +888,7 @@ def analytics():
         # Leakage prevented is deliberately the NARROW, defensible definition:
         # money trimmed off claims that were actually paid. v1 summed the full
         # ask of every rejected claim, which counts legitimately-rejected genuine
-        # claims as "savings" — newplan.md §16 calls that "a number an actuary
+        # claims as "savings" — docs/architecture-v2.md §16 calls that "a number an actuary
         # would refuse to sign", and it also made this figure numerically
         # identical to fraud exposure avoided, so the dashboard printed the same
         # rupees twice under two names.

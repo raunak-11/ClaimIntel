@@ -4,174 +4,23 @@ description: Complete narrative detail, code traces, and live-verification evide
 metadata:
   type: changelog
   status: living document
-  related: ../newupdates.md, ../CLAUDE.md, DAMAGE_VALIDATION_ARCHITECTURE.md
+  related: newupdates.md, ../CLAUDE.md, DAMAGE_VALIDATION_ARCHITECTURE.md
 ---
 
 # ClaimIntel — Full Changelog & Fix Detail
 
-> This is the detailed companion to [`newupdates.md`](../newupdates.md), which holds the lightweight
+> This is the detailed companion to [`newupdates.md`](newupdates.md), which holds the lightweight
 > status index. Everything below is the full reasoning, code traces, and live-verification evidence
 > behind each item. Items verified against the actual codebase and the real demo claims — not guesses.
 
-## Session-by-session narrative log
+## How to read this
 
-> Status as of 2026-07-17. Ordered chronologically.
+Items are numbered and grouped by priority. **Numbers are permanent** — code comments
+cite them (`see docs/changelog.md item #34`), so an item is never renumbered or removed.
+Items still cited from code keep their full detail; the rest are collapsed to a one-line
+record of what was found and when it was fixed.
 
-**2026-07-14:** added a new top-priority section (P0-A) from a full production/
-regulatory audit (findings archived in [`PROJECT_HISTORY.md`](PROJECT_HISTORY.md) §5, formerly
-`AUDIT.md`) and a Liberty General pitch-readiness review. These supersede
-the original P0 items in urgency — they're the difference between "demo-ready" and
-"a real insurer's risk/compliance team can evaluate this."
-
-**2026-07-14 update 2:** worked P0-A items #17–23. #17/19/20/21/23 are code-complete
-(decision-band enforcement, honest weather labeling, cross-claimant network detection as
-FC-30, prompt-injection defense, document authenticity). #18/22 have no code fix by
-themselves (confirmed while implementing — both are deployment/commercial decisions); they're
-now documented as explicit pre-pilot decision gates in CLAUDE.md instead of sitting as an
-implicit gap.
-
-**2026-07-14 update 3:** worked items #24–25, both code-complete. #24: Reject decision
-letters are now a fixed, code-owned template with a hardcoded Ombudsman/IRDAI Grievance
-Redressal disclosure (LLM only fills a narrow reasons paragraph); Approve/Escalate
-unchanged. #25: garage-shorthand synonym table expanded (bpr/hdlmp/fdr/whl/tl/etc.), plus a
-real matching bug fixed (multi-word synonym values weren't splitting back into separate
-tokens) and a new display-normalization step wired in at parse time so the Documents tab no
-longer shows an unexplained raw abbreviation.
-
-**2026-07-15 update:** redesigned the demo DL/RC generator against real Indian document
-formats (item #26b) and wired up item #26 (hypothecation) while doing it — the RC now has a
-Financial Encumbrance section, and `document_parser.py`/`orchestrator.py`/
-`SettlementBreakdown.jsx`/the PDF report all carry it through end-to-end. That same
-redesign surfaced (and fixed) a real bug from an earlier session: the document-authenticity
-check added for item #23 was flagging every generated DL because it read our own "for demo
-purposes only" disclaimer text as a forgery signal (item #26c) — fixed with a deterministic
-Python guard since prompt instructions alone didn't reliably suppress it. All 3 cases
-re-verified against the live vision parser after both changes: FC-29 and FC-28 both pass.
-
-**2026-07-15 update 2:** personalized Case 1 and Case 2 with real names/DOB/father's-name
-(Vijay M, Rohit Madeshiya) supplied via 2 real DLs — deliberately NOT the real DL numbers,
-exact addresses, or photos (see the update above's reasoning). Updated `policies.csv`,
-`scripts/generate_test_cases.py`, both cases' `README.md`, and renamed the `test/` folders
-themselves (`1-aditya-nair-genuine-approve` → `1-vijay-m-genuine-approve`,
-`2-meera-iyer-inflation-escalate` → `2-rohit-madeshiya-inflation-escalate`) plus every file
-prefix inside them, so no stale name survives in a path, filename, or doc. Also fixed two
-stale, pre-existing (not something this session introduced) references to a
-`scripts/generate_demo_assets.py` that doesn't exist in this branch and an unrelated
-"Rajesh Kumar" name, found in the root `README.md`/`CLAUDE.md` demo tables while touching
-them. Re-verified end-to-end after the rename: FC-29, FC-28, and Case 1's Approve outcome
-all still pass.
-
-**2026-07-15 update 3:** user reported Case 1 (Vijay M, the flagship "clean approve" case)
-actually Escalated on filing — found and fixed item #31, a real fraud-score-inflation bug
-(a document authenticity flag that was a string instead of a list got exploded into 4 bogus
-flags character-by-character, worth 30 base-score points). Verified live end-to-end:
-fraud_score 42→20, decision Escalate→Approve.
-
-**2026-07-15 update 4:** user asked why Arjun Mehta's (Case 3) fraud score was so low despite
-it being the designed fraud case — confirmed live (not a bug): no telematics file was uploaded
-for any of the 3 cases, and Case 3's entire signal (FC-21/FC-22/FC-27) depends on it; proved
-this by re-running fraud checks with the telematics fixture actually loaded — FC-22 correctly
-flagged CRITICAL (GPS 1039km from the claimed location). Also fixed item #33 (FC-01 conflating
-the surveyor-threshold process check with fraud scoring, caught live by the user) and produced
-item #34, a full estimate-driven-verification architecture review for Agent 1 (design only,
-not yet implemented — see `DAMAGE_VALIDATION_ARCHITECTURE.md`).
-
-**2026-07-16 update:** implemented item #34 Phase 1 (estimate-driven verification, single-call
-adaptation — see #34 for the full breakdown). `damage_assessment.py` now requires an explicit,
-structurally-mandatory verdict per claimed estimate line instead of a free-form pass that could
-silently drop an unphotographed claim; new `unverified_parts`/`claimed_but_undamaged`/
-`scope_mismatches` buckets, two new fraud checks (FC-31, FC-32), pricing/report/frontend wired
-through. Verified live on Case 1's real photo (not just unit tests): zero silent drops across 6
-claimed lines, FC-32 caught 2 real scope-inflation findings the old system structurally could
-not surface. Surfaced (not caused) the already-known item #10c pricing-noise issue more
-visibly — noted as a caveat, not treated as a Phase 1 bug. Frontend builds clean, all 13
-backend tests pass. #27 onward (excl. #34 Phase 2+) not yet started.
-
-**2026-07-23 update:** hard-copy claim-form intake (auto-fill). ClaimIntel now has its own
-one-page Motor Insurance Claim Form (`backend/services/claim_form.py`, served at
-`GET /api/claim-form/blank`), modeled on two real insurer forms (National Insurance's
-one-pager, Royal Sundaram's two-pager) with two deliberate OCR-driven layout choices:
-label + writing line instead of per-character comb boxes, and X-mark checkboxes whose marks
-survive LINE-block OCR as fragments next to the option text. The policyholder handwrites it,
-photographs it, and `POST /api/claims/extract-form` pre-fills the New Claim screen — claim
-type, incident date & time (AM/PM-aware), location, description, FIR number, workshop name
-and estimate amount (parsed garage estimate wins over the handwritten figure). Extraction is
-`gani_parser.extract_form_for_prefill()`: GaniParser leg first (Textract OCR in-region →
-schema extraction, new `claim_form` schema in `gani_schemas.py`), Groq vision fallback;
-stateless — pre-claim, nothing persisted, values returned CLEAR to the submitter (their own
-handwriting), no authenticity pass (that belongs to the investigation), and failures never
-trip the module circuit breaker. The UI panel keeps everything editable (auto-fill is a head
-start, not a submission), warns on policy-no/vehicle-reg mismatches vs the phone-lookup
-policy, and manual entry remains untouched. The form file itself is stored on the claim as
-`doc_type=claim_form` and shows in the Documents tab. Also merged the Dash Cam and
-Telematics tabs on New Claim into one "Dashcam & Telematics" tab (user request). Verified
-live: blank form through the pipeline extracts all-nulls (no hallucination from printed
-template text — the schema's "never return template text" rule held), Vijay's fair estimate
-extracted `total 50386` with all 8 line items on the `ganiparser` leg; frontend builds clean.
-
-**2026-07-23 update 2:** user filed a claim with two Gemini-generated damage photos and got
-zero warnings — investigated live, three findings. (1) The local AI-image classifier had
-never run on this machine: `transformers`/`optimum` (pinned in requirements.txt) weren't
-installed, and `forensics_detector`'s graceful fallback silently returned no signal — while
-FC-28 reported **"pass — no AI-generated/manipulated signals detected"**. Fail-open: the
-absence of the scanner read as a clean scan. (2) Once installed, the classifier
-(`LPX55/detection-model-1-ONNX`) labelled both Gemini images "real" at 98.7%/99.7% — it
-predates current-generation photoreal output; its "real" verdict is weak evidence. (3) The
-EXIF-missing advisory did fire but is deliberately soft. Fixes: `forensics_detector.py` now
-runs **deterministic provenance checks** on every image regardless of model availability —
-generator default-filename patterns (`Gemini_Generated_Image_*`, "ChatGPT Image", etc.) and
-embedded credit/C2PA metadata markers (`trainedAlgorithmicMedia`, "Made with Google AI",
-`c2pa.org`, …) — and a provenance hit sets `is_ai_generated_suspected` outright; each entry
-records `classifier_available`. FC-28 wording now separates provenance hits (file facts)
-from classifier hits (model opinion), and its pass-branch discloses when the classifier
-did not run instead of claiming a clean scan; the image-quality gate summary mirrors the
-same split. Verified live on the claim's own photos: the Gemini-named file now flags via
-provenance (classifier still says "real" — recorded as the known limitation it is); the
-second photo (renamed, metadata stripped) is honestly beyond the current local classifier —
-only the EXIF advisory covers it. Deps installed: `transformers==4.57.6`,
-`optimum[onnxruntime]==2.1.0` (+ `sse-starlette==3.4.5` earlier the same day).
-
-**2026-07-23 update 3:** demo cases recalibrated against real photos now shipped in `test/`
-folders, and two incident-reconstruction prompt fixes. Case 2 (Baleno): photos show far more
-than the old bumper+bonnet scope (shattered windscreen, both LH doors, fender, mirror) —
-estimate scope expanded to the 11 visibly damaged lines (fair ₹67,732 / inflated ₹129,328,
-same scope at ~+90%), FIR story extended (swerve into divider explains the left side), FIR/RC
-colour fixed Granite Grey→Nexa Blue to match the photos. Case 3 (white Hyundai, plate matches
-policy): old story was a ₹11k rear parking dent but the photos are a severe FRONT collision
-with deployed airbags — FIR rewritten to a front-end hit-and-run at the same time/location
-(telematics contradiction preserved), fair estimate includes mandatory SRS/airbag+pretensioner
-replacement (₹116,584), under-declared variant skips airbags (₹18,880 → FC-23), colour
-Typhoon Silver→Polar White. Case 1 untouched (its photo and calibrated rows are unchanged).
-Prompt fixes in `incident_reconstruction.py`: (1) airbag rule made symmetric — deployment may
-only be claimed from visible bags or telematics, never inferred from damage severity, and a
-telematics-vs-photo airbag contradiction is now an explicit reportable inconsistency (case 3
-exercises exactly this: `airbag_deployed: false` + visibly deployed bags); (2) the claimed
-incident date/time and location are now IN the prompt (they never were), with a
-scene-photos-only time/location cross-check (daylight vs claimed clock time, scene type vs
-claimed location, dashcam timestamp overlays) — garage-background photos explicitly excluded
-to avoid false flags. Case 2/3 READMEs synced (amounts, stories, new FC-28 note on the
-Gemini-named photo). Case 2's fair band and case 3's assessed value need one live
-verification run before the demo — noted in both READMEs.
-
-**2026-07-23 update 4:** user reported Case 1 "always shows more than 20% negative variance"
-— root-caused to a **double-GST bug in the AI-vs-garage comparison**, present at both sites
-(the 2026-07-16 item #35 fix over-corrected). The AI's `total_repair_estimate` = parts +
-labour, where the PARTS values come from live-web retail listings — and Indian e-commerce
-prices are **GST-inclusive by MRP display rules** — while only the LABOUR pool (allocated
-from the estimate's own pre-GST subtotal lines) is GST-exclusive. Grossing the whole total by
-1.18 double-counted GST on ~85% of it: verified on the live claim CLM-2026-07-000001, the
-comparison used ₹73,160 where the true inclusive basis is ₹63,494, showing −31.1% variance
-where the truth was −20.6%. Beyond mis-flagging, the "investigate" band caps payouts AT the
-assessed value, so inflated claims were being capped ~13% too HIGH. Fix: gross up the labour
-component only (`damage_assessment.py` variance calc + `settlement_calc._assess_repair`),
-verified by recomputing the stored claim deterministically. Case 1's fair estimate then
-recalibrated ₹50,386 → **₹54,280** (three part prices +₹3,300) to centre at −14.5% with ~5
-points of drift margin. Also set **temperature 0.1 → 0** on both LLM paths
-(`llm_client.py` Groq text + Bedrock vision; the GaniParser/grounding paths were already 0):
-every call in this app is structured extraction/verification where run-to-run consistency
-beats sampling diversity — remaining volatility comes from web price lookups (30-day cache
-TTL), not sampling. Not bit-reproducible across provider hardware, but the sampling
-component is gone.
+Index of open/tracked items: [`newupdates.md`](newupdates.md).
 
 ---
 
@@ -182,61 +31,9 @@ component is gone.
 > pilot. None of these are prompt-tuning nitpicks — each is a reason a real evaluator would
 > stop the conversation.
 
-### 17. ~~Decision bands (Approve/Reject/Escalate) are prompt-only, not code-enforced~~ ✅ FIXED 2026-07-14
-> `orchestrator.py` now hard-enforces the bands right after the deterministic fraud score is
-> read, before the story-mismatch guard: `fraud_score >= 70` forces `Reject`, `40–69` forces
-> `Escalate` if the model said `Approve`. When the band overrides the LLM, a
-> `decision_reasons` entry is prepended explaining the override (mirrors the existing
-> `is_ineligible` / `story_mismatch_blocked` guard pattern) — `decision_reasons`/
-> `reasoning_trail` are otherwise preserved for explainability.
-
-#### (original finding, kept for context)
-- [orchestrator.py:233](../backend/orchestrator.py#L233) — `decision = settlement.get("decision", "Pending")`.
-  The fraud score is deterministic (base score + LLM clamped ±15), but nothing maps that
-  score to a decision in code. The Approve<40 / Escalate 40–69 / Reject≥70 mapping exists
-  **only as prose** in the Agent 5 prompt — the LLM is asked to follow it, nothing verifies it did.
-- **Why it matters:** two claims with identical fraud_score/evidence can get different
-  decisions purely from LLM sampling variance. This is the first thing a regulator or
-  internal auditor would ask to see disproven, and currently can't be.
-
-### 18. Claim data (photos + text) goes to a third-party US-hosted LLM, mostly unmasked — ◐ DOCUMENTED 2026-07-14 as a pre-pilot decision gate
-> No code fix exists for this by itself (confirmed — it's a deployment-model decision, not a
-> bug). CLAUDE.md's "Data Residency & PII" section now has an explicit "Pre-pilot decision
-> gates" subsection naming this + item #22 as the same unresolved decision, with the three
-> options (India-hosted/dedicated LLM, phased Groq-for-non-PII story, or a signed enterprise
-> DPA) called out so it can't be silently skipped before a pitch. Still **not resolved** —
-> resolving it requires a business/legal decision outside this codebase.
-
-#### (original finding, kept for context)
-- Every agent call sends claim data to Groq (US-hosted). PII masking (`services/pii.py`)
-  covers only `claimant`/`phone` on two agents; vehicle reg, policy_no, and location are
-  sent **unmasked** by design (documented in CLAUDE.md as "required for catalog/fraud/
-  geocoding logic"). Damage/document *images* are never masked at all — they go to Groq raw.
-- **Why it matters:** this is not a "fix later" item for an actual Indian insurer pitch,
-  especially one with a US corporate parent that runs its own vendor/InfoSec review. India's
-  DPDP Act 2023 and IRDAI's data-handling expectations for insurance data make "unmasked
-  customer + vehicle data to a third-party US API with no deployment-specific DPA" a **hard
-  stop** for anything beyond an internal sandbox demo — not a gap to note and move past.
-
-### 19. ~~Weather-fraud scheme (FS-005) is defined in the KB but structurally unimplementable~~ ✅ FIXED 2026-07-14 (option b)
-> `context_verification.py` now returns `weather_at_investigation_time` (renamed from
-> `weather`) plus a new `weather_verification_note` field. `_weather_verification_note()`
-> detects backdated incidents and, when the claim description mentions a weather event
-> (hail/flood/storm/etc.), returns an explicit `"NOT VERIFIED: ..."` note stating FS-005
-> cannot be corroborated or contradicted from current-conditions data — surfaced in the
-> frontend (`InvestigationWorkflow.jsx`, amber when unverified), the PDF report, and fed to
-> Agent 5. Option (a) — a paid historical weather API — is still not built.
-
-#### (original finding, kept for context)
-- `_get_weather()` in [context_verification.py](../backend/agents/context_verification.py#L52-L68)
-  calls OpenWeatherMap's **current** weather endpoint, always — never weather *at the incident
-  date*. `data/kb/fraud_indicators.json` defines **FS-005 Weather Fabrication** as a known
-  scheme with a worked example (HIST-004), but no code path anywhere checks it.
-- **Why it matters:** a claim filed today about "hailstorm damage two weeks ago" gets shown
-  *today's* weather next to it, which the UI presents as if it were verification. It verifies
-  nothing for a backdated claim — this is worse than an absent check, it's a check that looks
-  present and isn't.
-
+- **17. Decision bands (Approve/Reject/Escalate) are prompt-only, not code-enforced ✅ FIXED 2026-07-14
+- **18. Claim data (photos + text) goes to a third-party US-hosted LLM, mostly unmasked — ◐ DOCUMENTED 2026-07-14 as a pre-pilot decision gate
+- **19. Weather-fraud scheme (FS-005) is defined in the KB but structurally unimplementable ✅ FIXED 2026-07-14 (option b)
 ### 20. ~~No fraud-ring / cross-claimant network detection~~ ✅ FIXED 2026-07-14 — new FC-30
 > New module `services/fraud_network.py` (`build_claim_network`), wired in as **FC-30** in
 > `fraud_intelligence.py`. Scans all other investigated claims within a rolling 90-day window
@@ -280,66 +77,9 @@ component is gone.
 - **Why it matters:** this is an emerging, real attack surface for any vision-LLM claims
   tool and is currently completely untested here, let alone defended against.
 
-### 22. Scale economics: free-tier API limits vs real claim volume — ◐ DOCUMENTED 2026-07-14 as the same decision gate as #18
-> No code fix exists for this by itself either (confirmed, same reasoning as #18). The one
-> thing that WAS code — usage observability so the limit fails visibly instead of silently —
-> already existed (`token_tracker.py` + the Analytics page's `CapBar`, amber at 80% of the
-> daily free-tier request cap) and has been cross-referenced from CLAUDE.md's new "Pre-pilot
-> decision gates" section rather than re-built. The actual fix (an enterprise LLM contract
-> sized to pilot volume) is still **not resolved** — same business decision as #18, documented
-> together since they're the same underlying call.
-
-#### (original finding, kept for context)
-- Groq free tier: 6,000 text / 1,000 vision requests per day (`CLAUDE.md`). A real insurer's
-  motor claims volume would exhaust this in hours on even a modest pilot, not days.
-- **Why it matters:** entangled with #18 — the hosting/contract decision for PII compliance
-  and the scale decision are the same decision. Can't pitch "pilot-ready" without both settled.
-
-### 23. ~~Document-forgery blind spot: FIR/RC/DL get no authenticity scrutiny~~ ✅ FIXED 2026-07-14
-> All 4 document-parser prompts (`_ESTIMATE_PROMPT`, `_FIR_PROMPT`, `_LICENSE_PROMPT`,
-> `_RC_PROMPT` in `document_parser.py`) now share a `_DOC_AUTHENTICITY_SECTION` (digital-
-> editing tells, template mismatch vs standard Indian formats) and emit `authenticity_flags`
-> / `authenticity_notes`, mirroring the damage-photo section. Wired into the fraud engine
-> rather than left to sit unused: **FC-28** ("Visual forensics") now folds in document
-> authenticity flags alongside the existing image/video signal, so a flagged FIR/RC/DL
-> actually surfaces as a fraud check instead of being extracted and discarded (the same
-> anti-pattern items #27/#28 below call out for other unused extracted fields).
-
-#### (original finding, kept for context)
-- Damage *photos* get an explicit authenticity section (AI-generation/stock/screenshot
-  signs) in `damage_assessment.py`. The FIR/RC/DL prompts in `document_parser.py` — arguably
-  higher-value forgery targets — have **no equivalent instruction at all**.
-- **Why it matters:** inconsistent threat model — the system defends the evidence type
-  that's hardest to convincingly forge (a real damage photo) and leaves undefended the
-  evidence type that's easiest (a templated document image).
-
-### 24. ~~Customer letter: free-text regulatory communication, no template-lock, missing Ombudsman disclosure~~ ✅ FIXED 2026-07-14
-> `letter_generator.py` now branches on decision: **Reject** letters are built from a fixed,
-> code-owned `_REJECT_TEMPLATE` (salutation, rejection statement, Ombudsman clause, sign-off —
-> all hardcoded, substituted not generated); the LLM is only used for a narrowly-scoped
-> `_REJECT_REASONS_PROMPT` call that turns `decision_reasons` into a plain-English paragraph
-> (still instructed to strip fraud scores/internal codes), slotted into the fixed template.
-> The `_OMBUDSMAN_CLAUSE` constant (naming the Insurance Ombudsman / IRDAI Grievance
-> Redressal framework, per the audit's suggested wording) is substituted on every Reject
-> letter — including the exception-fallback path if the reasons-LLM call fails, so the
-> disclosure is never contingent on the LLM being reachable. Approve/Escalate letters are
-> unchanged (still fully LLM-generated via `PROMPT` — not repudiations, lower legal stakes).
-> Response now carries `template_locked: true/false`; the frontend (`DecisionLetter.jsx`)
-> shows a "regulatory template" indicator when it's set. Verified manually: Reject path
-> produces a customer-safe reasons paragraph with no fraud-score/check-ID leakage and the
-> Ombudsman clause present; Approve path unchanged.
-
-#### (original finding, kept for context)
-- [letter_generator.py](../backend/services/letter_generator.py) fully free-generates the
-  customer decision letter. IRDAI mandates disclosure of the Insurance Ombudsman /
-  Grievance Redressal channel on every repudiation (Reject) communication — the current
-  prompt says "mention the right to appeal with evidence" but never names the actual
-  regulatory channel.
-- **Why it matters:** two separate issues — (a) a real insurer's legal team will generally
-  not sign off on free-generated text for a *legally significant* customer communication
-  without template-locking, independent of quality; (b) the Ombudsman omission is a
-  concrete compliance gap on Reject letters specifically.
-
+- **22. Scale economics: free-tier API limits vs real claim volume — ◐ DOCUMENTED 2026-07-14 as the same decision gate as #18
+- **23. Document-forgery blind spot: FIR/RC/DL get no authenticity scrutiny ✅ FIXED 2026-07-14
+- **24. Customer letter: free-text regulatory communication, no template-lock, missing Ombudsman disclosure ✅ FIXED 2026-07-14
 ### 25. ~~Garage-abbreviation normalization has evidenced coverage gaps~~ ✅ FIXED 2026-07-14
 > `_TEXT_SYNONYMS` in `pricing_engine.py` expanded with the exact list below. Also fixed a
 > latent bug this surfaced: a multi-word synonym value (e.g. `"tl": "tail_light"`) was being
@@ -379,142 +119,15 @@ component is gone.
 > No payout-routing logic was added — that's a manual/legal step outside this system; this
 > only makes the fact visible instead of silently discarding a field the parser now extracts.
 
-### 26b. ~~DL/RC generator used a generic black-and-white layout instead of a realistic Indian format~~ ✅ FIXED 2026-07-15
-> Redesigned `generate_license()`/`generate_rc()` in `scripts/generate_test_cases.py` against
-> real Indian DL/RC reference photos (state header bar, EMV-style chip icon, photo box, a
-> QR-like graphic, DOB/blood-group/COV-authorisation table for DL; registration/chassis/
-> engine, owner details, a vehicle-particulars table, and the new financial-encumbrance
-> section for RC), with a per-state colour theme (`_STATE_THEMES`, keyed off the reg/DL
-> state code) instead of one fixed blue. Kept every field the fraud engine actually reads
-> (`reg_no`, `owner_name`, `chassis_no`, `engine_no`, `fuel_type`, DL `valid_till`) in place,
-> just restyled, and re-verified end-to-end against the real vision parser (not just visual
-> inspection): all 3 cases still extract correctly and **FC-29 passes for all 3** after the
-> redesign. Caught and fixed two real bugs in the same pass: (a) a hardcoded absolute
-> `set_y()` in the DL layout that overlapped the address text with the section header below
-> it for any address of realistic length — replaced with natural flow + a minimum-y clamp;
-> (b) see #26c below — this one was actually a `document_parser.py` prompt bug, not a
-> generator bug, but only surfaced because the redesign prompted an actual live-parse test
-> of these fixtures for the first time. No photo/face image is generated or inserted (a grey
-> "PHOTO" placeholder box is drawn instead) — deliberately avoided producing anything that
-> could look like a photorealistic identity photo.
-
-### 26c. ~~Document-authenticity check flags our OWN "demo purposes only" disclaimer as forgery~~ ✅ FIXED 2026-07-15
-> Surfaced by live-testing the redesigned DL/RC against the real vision parser (see #26b):
-> every generated DL got `authenticity_flags: ["digital_editing_suspected"]` because the
-> model read its own printed disclaimer ("[FOR DEMO PURPOSES ONLY] ... Not a genuine
-> government document") and — reasonably, if uselessly for this system — concluded the
-> document says it isn't genuine. Adding an explicit prompt exception
-> (`_DOC_AUTHENTICITY_SECTION`'s "EXPLICIT SELF-DISCLOSURE IS NOT A FORGERY SIGNAL" rule)
-> reduced but did **not** reliably fix it — one response literally reasoned "this disclaimer
-> alone does not raise flags" and then raised one anyway. **Fix:** added a deterministic
-> Python guard (`_suppress_disclaimer_false_positive()` in `document_parser.py`, consistent
-> with this codebase's existing "Python overrides unreliable LLM output" pattern — fraud
-> score clamping, NPS risk level, scheme validation) that clears the flag whenever the
-> model's own stated reason cites the demo disclaimer rather than an actual visual tell. Safe
-> by construction: a genuine customer-submitted document would never contain this exact
-> disclaimer text, so the override cannot mask a real forgery. Re-verified: all 3 cases' DL
-> and RC now correctly return `authenticity_flags: ["none"]`, and FC-28 passes end-to-end.
-
-### 27. 🟡 FIR parser doesn't extract the statutory section cited
-- `_FIR_PROMPT` extracts `fir_number, police_station, dates, location, vehicle_reg,
-  complainant_name` but not the cited IPC/MV Act section, despite the generated test
-  fixtures including one (e.g. "Section 279 IPC").
-- **Why it matters:** a cited section disproportionate to the claimed incident (a heavy
-  criminal section for a minor parking scrape, or none at all for a claimed hit-and-run
-  that should be cognizable) is a usable fraud-consistency signal, currently thrown away.
-- **Fix:** add `statutory_sections: []` to the schema; add a plausibility cross-check to a
-  fraud check.
-
-### 28. 🟡 DL `vehicle_classes` extracted but never cross-checked
-- FC-29 validates RC-reg↔policy-vehicle and DL-name↔claimant, but the DL's
-  `vehicle_classes` (e.g. `["MCWG"]` vs `["LMV"]`) is never checked against the claimed
-  vehicle type — a motorcycle-only licence holder driving a car claim is an invalid-license
-  signal that's extracted and then discarded.
-- **Fix:** extend FC-29 to require an appropriate vehicle class for the claim's vehicle type.
-
-### 29. 🟡 Agent 3's story-match verdict isn't cross-validated against Agent 2's telematics finding
-- FC-21 (fraud_intelligence.py) can independently conclude "telematics shows no impact
-  despite a claimed collision" while Agent 3 (incident_reconstruction.py) independently
-  concludes `damage_matches_story: true` — nothing reconciles these two agents' verdicts
-  against each other. Only Agent 3's *own* internal mismatch triggers the existing
-  `story_mismatch_blocked` guard; a disagreement *between* agents is invisible.
-- **Fix:** add a cross-agent consistency check in the orchestrator, parallel to the
-  existing story-mismatch guard.
-
-### 30. 🟡 CSV storage is single-worker-safe only by accident of current deployment
-- `storage.py`'s `_csv_lock` is a Python `threading.Lock()` — correct for the current
-  single-process `uvicorn main:app` (no `--workers` flag in the Dockerfile CMD), but the
-  moment anyone adds `--workers 4` for throughput, each worker gets its own lock object and
-  the race condition this exists to prevent silently returns.
-- **Fix:** document the single-worker constraint loudly in the Dockerfile comment, or move
-  to SQLite (WAL mode) before any multi-worker deployment.
-
-### 31. ~~FC-28 silently exploded a document's "none" authenticity flag into 4 phantom flags~~ ✅ FIXED 2026-07-15
-> Caught live, on the flagship demo case: Vijay M's (Case 1) genuine claim came back
-> **fraud_score 42 (Medium) → Escalate** instead of Approve. The parsed FIR's
-> `authenticity_flags` was `"none"` — a bare STRING instead of the schema's `["none"]` LIST —
-> and `fraud_intelligence.py`'s FC-28 document loop did
-> `[f for f in parsed.get("authenticity_flags") ...]` with no type check. Iterating a Python
-> string walks it character-by-character, so `"none"` became 4 "flags":
-> `['n', 'o', 'n', 'e']`, none of which equal the string `"none"`, so ALL FOUR survived the
-> `!= "none"` filter and got reported as `"FIR document flagged: n, o, n, e — possible
-> synthetic/manipulated evidence"`. FC-28 is one of the high-weight checks (30 base-score
-> points, same tier as FC-25–27/FC-30) — this single formatting slip accounted for 30 of the
-> claim's 38 base score, i.e. it was almost the entire reason a clean claim escalated. This
-> is exactly the kind of bug item #17's hard decision-band enforcement was built to catch —
-> and did: previously an LLM might have quietly Approved anyway despite the score, masking
-> this underlying bug; with bands enforced, a score this wrong now visibly breaks a case
-> instead of hiding.
-> **Fix:** (a) `document_parser.py` — new `_normalize_authenticity_flags()` coerces a bare
-> string to a 1-item list at the parse source, before ANY consumer sees it (mirrors the same
-> defensive `isinstance(..., str)` coercion `damage_assessment.py`'s `_image_quality_gate`
-> already does for the photo-side flags — this was the one place that pattern hadn't been
-> applied yet); (b) `fraud_intelligence.py`'s FC-28 document loop gets the same defensive
-> coercion directly, belt-and-suspenders. **Verified live end-to-end**, not just unit-tested:
-> re-parsed Case 1's actual FIR fresh (confirmed the model still sometimes emits a bare
-> string) and re-ran the full damage+fraud pipeline — fraud_score dropped **42 → 20**
-> (Medium → Low), decision under the hard-enforced bands flips **Escalate → Approve**. Also
-> found the identical stored bug in Case 2's parsed FIR (didn't flip its outcome — that case
-> escalates by design via FC-05/FC-20 regardless — but was overstating its score); both
-> self-correct on the next investigation since documents are re-parsed fresh each run.
-
-### 31b. ~~No way to re-run an investigation from the UI once a claim has a result~~ ✅ FIXED 2026-07-15
-> Surfaced immediately after #31: told the user to "just re-run the investigation" to pick up
-> the fix, and there was no button to do that. `InvestigationWorkflow.jsx`'s "Start
-> Investigation" button was wrapped in `{!hasResult && (...)}` — it unconditionally
-> disappeared forever the moment a claim got its first result, with no other way to trigger
-> `/api/claims/{id}/investigate` again short of filing an entirely new claim. The backend
-> route and `orchestrator.py` were already fully ready for this (no re-run guard; documents
-> are re-parsed fresh every call; `run_pipeline` already explicitly clears any previous
-> `adjuster_decision` at the start specifically so "a re-investigation starts clean") — this
-> was purely a frontend gap, not a backend limitation.
-> **Fix:** added a second button, `{hasResult && (...)}`, labelled "↻ Re-investigate",
-> visually distinct (outline style vs. the solid "Start Investigation" button) so it doesn't
-> read as the same low-stakes action. Gated behind a `window.confirm()` since it's more
-> consequential than the first run — it overwrites the current agent findings and clears any
-> recorded adjuster decision, which the confirmation text says explicitly. Reuses the
-> existing `start()` handler from `useInvestigationSSE` unchanged (it already resets
-> `agentStatuses`/`liveAgents` on every call, first run or not) — no backend or hook changes
-> needed. Verified: `npm run build` succeeds cleanly.
-
-### 33. ~~FC-01 conflated a regulatory process requirement (mandatory surveyor >₹50k) with fraud scoring~~ ✅ FIXED 2026-07-15
-> User caught this live while diagnosing why a genuine claim's fraud score wasn't near-zero even
-> after #31's fix. `FC-01` in `fraud_intelligence.py` flagged (contributing 8 base-score points)
-> whenever `claim_amount > SURVEYOR_THRESHOLD` (₹50,000), labelling it "mandatory surveyor
-> required (IRDAI)" — but a surveyor requirement is a **process** trigger, not fraud evidence; a
-> ₹52,250 claim is not more likely to be fraudulent than a ₹49,000 one. Worse, this duplicated
-> logic that already exists correctly and separately in `orchestrator.py` (`final_status =
-> "Survey Required"` when `decision == "Escalate" and final_amount > SURVEYOR_THRESHOLD`) — so
-> the same threshold was doing its correct job in one place and silently inflating the fraud
-> score in another. Verified live: this was the *entire remaining* fraud-score contribution on
-> Case 1 (Vijay M) after #31's fix. **Fix:** FC-01 now only flags for genuine total-loss/very-
-> high-value territory (>₹5,00,000, kept as a fraud signal — high-value claims do carry more
-> real fraud incentive, an industry-standard heuristic). Crossing the surveyor threshold alone
-> now returns `pass`, with the requirement kept as informational context in the check's detail
-> text (still visible to the adjudicator in the Fraud Check List) rather than as a score
-> contributor. Checked the other 29 checks for the same pattern (a pure compliance/process
-> trigger mislabeled as fraud evidence) — found no other instance; this was the only one.
-
+- **26b. DL/RC generator used a generic black-and-white layout instead of a realistic Indian format ✅ FIXED 2026-07-15
+- **26c. Document-authenticity check flags our OWN "demo purposes only" disclaimer as forgery ✅ FIXED 2026-07-15
+- **27. 🟡 FIR parser doesn't extract the statutory section cited
+- **28. 🟡 DL `vehicle_classes` extracted but never cross-checked
+- **29. 🟡 Agent 3's story-match verdict isn't cross-validated against Agent 2's telematics finding
+- **30. 🟡 CSV storage is single-worker-safe only by accident of current deployment
+- **31. FC-28 silently exploded a document's "none" authenticity flag into 4 phantom flags ✅ FIXED 2026-07-15
+- **31b. No way to re-run an investigation from the UI once a claim has a result ✅ FIXED 2026-07-15
+- **33. FC-01 conflated a regulatory process requirement (mandatory surveyor >₹50k) with fraud scoring ✅ FIXED 2026-07-15
 ### 34. ~~Damage-assessment pipeline redesigned — estimate-driven verification~~ ◐ PHASE 1+2 SHIPPED 2026-07-16
 > Full design in [`DAMAGE_VALIDATION_ARCHITECTURE.md`](DAMAGE_VALIDATION_ARCHITECTURE.md).
 > **Phase 1 (data-model split, no new vendor) is implemented and verified live. Phase 2
@@ -721,247 +334,13 @@ component is gone.
 > live. A live filing surfaced a second, independent bug and a real story/estimate inconsistency
 > that this item's fix alone didn't cover.
 
-### 36. ~~Case 2's "fair" estimate falsely tripped FC-17 workshop inflation~~ ✅ FIXED 2026-07-16
-> Found by actually filing Case 2 live (not just reasoning about it) after item #35's fix — the
-> "fair" option's README explicitly promises "no inflation flag," but the real result showed
-> **FC-17 firing at 183.7% overclaim**, `overclaim_band: "investigate"`, inflation cap applied.
-> Two separate causes, both root-caused via live re-investigation against the real filed claim's
-> photo rather than guessed:
-> 1. **A second, independent occurrence of item #35's GST bug.** `damage_assessment.py` (lines
->    ~436-446) has its own garage-vs-AI comparison — separate from `settlement_calc.py`'s, which
->    item #35 fixed — that feeds `garage_vs_ai_variance_pct`/`garage_inflation_flag` into
->    **FC-17, FC-23, and FC-24** (`garage_intel.py` just reads these same fields, no separate
->    math of its own). This copy still compared GST-exclusive `total_repair_estimate` against
->    GST-inclusive `garage_estimate_amount_inr` unfixed. Same fix applied: gross up by
->    `(1 + GST_RATE)` (imported from `services.settlement_calc` — no circular import) before
->    comparing. This alone cut the overclaim from 235% to 183.7%.
-> 2. **The larger cause: the "fair" estimate claimed 7 parts, but the claimant's own story and
->    the FIR both only describe 4** (front bumper, bonnet, both headlamps) — 3 phantom lines
->    (radiator grille, front-left fender, radiator core) were added to the estimate with no
->    basis in the account at all. No photo could ever verify parts the story never claimed, so
->    those 3 always landed in `unverified_parts` (unpriced), dragging the AI's assessed value
->    well below the claimed total regardless of photo quality or coverage.
-> **Fix, in two calibration passes against the real photo already uploaded to the live-filed
-> claim** (`data/claims/CLM-2026-07-000002/images/5.jpg` — a real accident photo, not a demo
-> asset, confirming the fix against an actual arbitrary user-supplied image rather than a
-> curated one): Pass 1 trimmed the estimate to the 4 story-consistent parts — cut overclaim to
-> 104.1%, but **still failed**: the AI read the actual photo (severely crumpled bonnet, cracked
-> windshield, but genuinely intact-looking headlight lenses) and correctly reported both
-> headlights as `claimed_but_undamaged` — an honest vision-model read, not a bug, but it meant
-> even story-consistent headlamp damage wasn't reliably verifiable against a real photo. Pass 2
-> trimmed further to just **bumper + bonnet** — the two parts virtually any real front-end
-> collision photo shows clearly regardless of angle — removing dependence on one specific
-> photo's quirks entirely. Updated the FIR statement text and claim description to match (no
-> longer claims headlamp damage). `rows`/`rows_fair` in `scripts/generate_test_cases.py`
-> updated with the full reasoning as an inline comment; `Rohit_Madeshiya_Garage_Estimate_Fair
-> /_Inflated.pdf` regenerated (new totals ₹56,640 / ₹107,616); Case 2's README updated
-> (description, upload guidance, expected outcomes) to match.
-> **Verified live, twice, against the real photo:** both bumper and bonnet confirmed
-> `damaged_parts` with High confidence in every run, zero `claimed_but_undamaged` or
-> `unverified_parts`, `garage_inflation_flag: False` both times — **despite the AI's own
-> assessed value swinging between the two runs (₹56,817 then ₹72,216 GST-inclusive)**, itself a
-> live demonstration of this session's already-documented pricing volatility (#10c/#34). The
-> final fair-estimate amount (₹56,640) was deliberately priced near the *center* of the observed
-> assessed range rather than its lower edge — the first calibration attempt (₹38,232) technically
-> passed at −32.7% but left only ~2 points of margin above FC-23's −35% under-declaration
-> threshold, too thin given the demonstrated run-to-run swing; ₹56,640 has ≥13 points of margin
-> on both the +20% Review and −35% FC-23 boundaries across both observed runs. Both photo passes
-> also surfaced `undeclared_parts` (a cracked windshield the estimate never claimed, and in one
-> run the headlights too) — a bonus finding, not a failure, showing the system catching *more*
-> damage than what was claimed. All 13 tests still pass (no test changes needed for this item —
-> it's fixture/demo-data and a second application of item #35's already-tested code fix).
-
-### 37. ~~"WhatsApp strips EXIF" was stated as an absolute, but only its Photo-send mode does~~ ✅ REFINED 2026-07-17
-> Caught by the user directly — checked live (not assumed): WhatsApp's default **"Photo"** send
-> recompresses and strips EXIF, but **"Send as Document"** transmits the original file
-> byte-for-byte, EXIF fully intact (GPS, camera model, timestamp — everything). The existing
-> advisory-only EXIF logic (`damage_assessment.py`'s `_exif_authenticity_check` /
-> `_image_quality_gate`, item #5) was already correctly non-blocking, but its comments and the
-> adjuster-facing UI text both stated the blanket "WhatsApp strips EXIF" claim without this
-> distinction. **No behavior change** — the code still can't tell which send mode produced a
-> given file, so missing EXIF correctly stays advisory either way — this is a precision fix to
-> the reasoning stated in code comments, the UI's `image_quality.issues` text, and Case 1's
-> README, not a logic change. Updated all three to name the Photo-vs-Document distinction
-> explicitly, so a future reader (or an adjuster reading the UI text) understands *why* missing
-> EXIF alone can't be trusted as a signal, rather than relying on an oversimplified claim.
-
-### 38. ~~The pipeline paid for the whole investigation before checking whether the policy was in force~~ ✅ FIXED 2026-08-13
-> Policy expiry was established by Agent 4 and acted on at `orchestrator.py:260-272` — **37 lines
-> after the last agent finished**. An out-of-cover claim therefore paid for four document-parse
-> vision calls (Textract + Bedrock), Agent 1's vision call on every photo, Agent 2's LLM call,
-> Agent 3's vision call over photos *and* dash-cam frames, Agent 4 and Agent 5, and only then got
-> stamped `Reject`. Nothing any of those calls could return would change the answer: coverage is a
-> binary fact sitting in `policies.csv`.
-> A second, quieter hole: the guard read **only** Agent 4's `policy_coverage_note`, so if Agent 4
-> errored (`context_v == {"status": "error"}` → `eligibility_fail == ""`) an expired-policy claim
-> fell straight through to whatever the fraud band decided.
-> **Fix:** new `services/eligibility_gate.py`, run at the very top of `run_pipeline` **before the
-> document-parse block**. Deterministic — no LLM, no network, no image. It calls
-> `context_verification._check_policy_validity` (which handles pre-inception as well as expiry,
-> unlike FC-03) plus the 13 metadata-only checks now exposed as
-> `fraud_intelligence.run_metadata_checks()` / `METADATA_CHECK_IDS`. On a hard fail the
-> orchestrator emits `agent_done` for the gate, a new `agent_skipped` event per agent, writes
-> `decision: Reject` / status `Rejected` / `fraud_risk_score: **None**` (not 0 — Agent 2 never ran,
-> and printing a number would imply an assessment that does not exist), and returns.
-> Agent 2 still recomputes all 32 checks from scratch on the pass path, so **the gate changes no
-> score**; the point is to skip *model* calls, not local ones. Agent 4's guard stays as a backstop.
-> **Verified live:** an expired-policy claim through `run_pipeline` emitted
-> `agent_start → agent_done(eligibility_screen) → 5 × agent_skipped → done(decision=Reject,
-> score=None)` with zero model calls and only `eligibility_screen` written to `result.json`. A
-> re-investigation that stops at the gate also clears the previous run's agent findings, so a
-> stale damage assessment can't render beside a skipped pipeline.
-> **Knock-on fixed:** `main.py`'s analytics did `fraud_score_sum += summary.get("fraud_risk_score", 0)`
-> — with a real `None` in the record that is a `TypeError` that would have taken the whole
-> analytics endpoint down. Gate-rejected claims are now excluded from the mean and the timeline
-> rather than counted as 0 (verified: average held at 52.5 instead of being dragged to 35 by an
-> unassessed claim).
-
-### 39. ~~The "independent" fair value was partly built from the document it audits~~ ✅ FIXED 2026-08-13
-> `price_part()` tier 2 priced a part from its matched garage-estimate line whenever the live web
-> lookup missed. That made the variance for that line **structurally zero** — the benchmark for
-> FC-17, FC-23, FC-24 and the inflation cap was, in part, a copy of the quote being checked.
-> `config.py` documented this circularity for `PRICING_LIVE=false`, but it was happening per-part
-> even with live pricing on, and `pricing_method` reported `"live_web"` if even ONE part hit the
-> web — so the UI printed "Live web market prices" over a value that was mostly garage figures.
-> **Fix:** tier 2 deleted. `pricing_source` is now `live_web | unpriced`, and the OEM/aftermarket
-> split is emitted explicitly (`oem_price_INR` / `aftermarket_price_INR`) instead of being implied
-> by the min-max band. An OEM/insurer catalog is the intended second tier — the waterfall is
-> shaped for it and the slot is deliberately left empty rather than filled with invented data.
-> **The guard is the real work.** `data/price_cache.json` showed **21 of 31 entries null** — that
-> fallback was catching roughly two thirds of parts. Removing it bare would collapse
-> `total_repair_estimate`, fire FC-23 "under-declaration" on honest claims, and *under-deduct*
-> depreciation (per-part depreciation on ₹0 parts ⇒ **overpayment**). So:
-> - `fair_value_breakdown.pricing_coverage` records `{priced_count, total_count, coverage_pct,
->   unpriced_parts}`.
-> - Below `PRICING_MIN_COVERAGE` (default 70%) `settlement_calc._assess_repair` **abstains**: no
->   band, no inflation cap, repair basis stays the garage quote, and the note names the coverage
->   and the unpriced parts. A fair value built from 3 of 9 parts is not a benchmark.
-> - Depreciation falls back to the blanket `PARTS_FRACTION` under that threshold, not only when
->   `damaged_parts` is empty.
-> - FC-17/FC-23 emit `na` with the coverage percentage instead of scoring an unreliable variance.
-> **Coverage fixes so the change doesn't just mean "mostly unpriced":** `_PART_QUERY_ALIASES`
-> 11→33 and `_PART_BANDS` 13→32 entries (every cached null was a part absent from both tables —
-> doors, ORVM, wheel rims, mouldings, brackets, liners, latches, reinforcers, fog lamps); the
-> cache key now uses `_vehicle_query_name()` so it no longer embeds the registration number
-> (`kia seltos htx plus (tn12aj1603)|grille` was never reusable across claims); and
-> `_dead_providers` gained a `reset()` called per investigation — it was a **process-lifetime**
-> breaker, so one transient Serper failure silently removed live pricing from every later claim
-> until restart, which with live web as the only source now zeroes the assessed value.
-> **Also:** the GST gross-up was duplicated verbatim in `damage_assessment.py` and
-> `settlement_calc.py` and covered only `matched.labour_total`, leaving any priced *undeclared*
-> part's labour GST-exclusive inside a GST-inclusive figure. Both now call one
-> `settlement_calc.assessed_fair_value()` helper.
-
-### 40. Labour estimation engine — explainable, rule-based, OEM-pluggable ✅ ADDED 2026-08-13
-> Labour was 100% garage-derived: the pool was the sum of the estimate's `type == "labour"` rows,
-> allocated in proportion to the garage's *own* part amounts, with a bare 30%-of-part-cost
-> heuristic otherwise. Item #39 made parts independent; this does the same for labour.
-> **`services/labour_engine.py`** — a deterministic service, **not** a sixth agent. Code owns
-> operations, hours, complexity deltas, rates, multiplication, totals, variance and thresholds.
-> The LLM contributes only classification and it already has: Agent 1's per-part `repair_type`
-> (Replace/Repair/Paint) is the operation signal, so **no new model call is made**.
-> `data/config/labour_config.json` holds everything tunable — part→category map,
-> action→operations with per-category overrides (a headlight is electrical and never painted;
-> glass is R&I, not body repair), baseline hours, complexity factors (severity, presence state,
-> structural, access, aluminium/HSS, EV, ADAS, adjacent components — each reported as its own
-> hours delta, capped in aggregate), a ₹/hour rate card by region × garage tier, and the variance
-> thresholds. Nothing lives in a prompt.
-> **Honesty constraints, deliberate:** every operation carries `source: "rule_based_mvp"`, its own
-> reasoning and assumptions, and a disclaimer ("OEM estimating data not currently connected")
-> that travels into the UI and the PDF. `services/labour_providers.py` defines the
-> `LabourDataProvider` interface a licensed OEM feed would implement;  `OEMLabourProvider` is a
-> stub that reports itself unavailable. No fabricated OEM times anywhere.
-> Vehicle traits are inferred only from evidence in the vehicle string — an unrecognised vehicle
-> gets **no** complexity uplift and a lower confidence score rather than a guess. Diagnostic/scan
-> is billed once per claim, not per part.
-> **Fraud integration:** variance vs the garage's labour lines goes to Agent 2 as *evidence*
-> (`labour_layer` + a prompt block), with an explicit instruction that a gap is not automatically
-> fraud and must only move the score when it corroborates other findings. **No new FC row, no
-> change to `_HIGH_WEIGHT_CHECKS` or the base-score weights** — a new flagging check would have
-> silently added 8 points to every dealer-rate-card claim.
-> 24 tests in `tests/test_labour_engine.py` (classification, per-factor adjustments, rate
-> resolution, hours × rate, all four thresholds at their boundaries, graceful degradation).
-
-### 41. Adjudicator screen rebuilt around exceptions ✅ 2026-08-13
-> Four UI problems, all of them the same shape — the signal was there but buried:
-> - **Investigation Summary removed.** It repeated four consistency verdicts already visible in
->   the agent details and in `ClaimDecision`'s reasoning, while the settlement ledger — the number
->   the adjudicator is there to sign off — sat below the fold inside `ClaimDecision`. Row 1 col 3
->   is now `RiskAndSettlement`: the fraud donut plus `SettlementBreakdown`, which was **moved**
->   (not duplicated) out of `ClaimDecision`.
-> - **Fraud list shows signals, not a checklist.** 26 green "pass" rows pushed the three that
->   matter off the screen. The panel now lists `flag` and `na` only, flags first, open by default;
->   the header still reports the passed count so it stays visible that all 32 ran, and
->   `result.json` + the PDF keep the full audit trail.
-> - **Visual forensics surfaced.** `visual_forensics_layer` was fully computed at
->   `fraud_intelligence.py:631` and consumed by **nothing** — grepping `frontend/src` for
->   `forensic|authenticity` returned zero hits, and the report generator ignored it too. Now a
->   dedicated "Evidence Authenticity" block leading the fraud detail (and a PDF section):
->   vision-model flags, provenance hits reported separately from classifier hits (they are
->   deterministic file facts, not model opinions), dash-cam frame counts, document flags, the
->   honest "classifier did not run — coverage reduced" case, and EXIF as explicitly advisory.
-> - **Historical cases are readable.** Agent 3 returned bare `HIST-003` strings rendered as plain
->   badges. `kb_glossary.expand_code()` already knew how to expand `HIST-*` — Agent 2 and Agent 5
->   used it, Agent 3 never did. One line in `incident_reconstruction.py` plus the archive's own
->   outcome figures (decision, fraud score, claimed vs settled, parts) added to the glossary
->   entry; `KBPill` was lifted out of `EvidencePanel` into a shared component so hover-for-summary
->   / click-for-detail works identically for precedents and KB sources. No retrieval, no LLM cost.
->
-> **Also fixed while in here:** `tests/test_settlement_calc.py` was **stale and failing** — its
-> expectations encoded the 2026-07-16 "gross the whole total by 1.18" behaviour that the
-> 2026-07-23 fix replaced, so the suite could not have validated any of the above. Repaired, and
-> given a direct regression test that the gross-up applies to labour only. `scripts/data_sanity.py`
-> section 3 lost its offline fair-value *simulation* — it priced each line from its own garage
-> amount and compared the result back to the garage total, which only ever worked because of the
-> anchor tier item #39 removed. It now checks estimate internal consistency and reports real
-> live-pricing coverage under `PRICING_LIVE=true`.
-
-### 42. ~~Every uploaded document went through Textract on an AWS account this project doesn't own~~ ◐ PARTLY SUPERSEDED — see #46
-> **The Tesseract half of this item was reverted on 2026-08-14 (item #46).** The PDF-text-layer
-> path and the estimate reconciliation guard below survive and are what actually fixed the
-> problem; everything describing a local OCR engine is kept for the audit trail only.
-> `gani_parser._ocr()` sent all five document types to Textract `detect_document_text`. Four of
-> them — garage estimate, FIR, driving licence, RC — are **printed**. Only the claim form is
-> handwritten, and handwriting is the one thing local OCR genuinely cannot read. Textract is
-> entitled on **GaniParser's** AWS account and not on ours (verified live:
-> `SubscriptionRequiredException`), so every claim was loading an account this project has no
-> authority over, for four documents that never needed it.
-> **Fix:** new `services/ocr.py` owns the provider choice. `TEXTRACT_DOC_TYPES` (default
-> `claim_form`) routes handwriting to Textract; everything else runs on local Tesseract with
-> **Textract as the fallback** when local quality is poor — the printed documents are usually
-> phone photos, and FC-20/FC-29 depend on that text being right.
-> **The line structure was the hard part, not the API.** The output contract is one
-> newline-separated string and the newlines carry meaning: a garage estimate is a table, and a
-> lost row boundary pairs an amount with the wrong part — which becomes `settlement_calc`'s repair
-> basis. Textract LINE blocks give this free. `pytesseract.image_to_string` does not, so the
-> Tesseract branch uses `image_to_data` and rebuilds lines from block/paragraph/line indices,
-> ordering words by `left` within each line.
-> **Two escalation triggers, because one is not enough.** Generic: mean word confidence below
-> `OCR_MIN_CONFIDENCE` (55) or fewer than `OCR_MIN_CHARS` (80) alphanumerics. Estimate-specific:
-> the extracted line items must reconcile with the document's own stated total (allowing for
-> pre-GST lines under a GST-inclusive grand total). A *scrambled* table reads as confident,
-> plausible text — confidence alone cannot catch it, and this is the one document whose OCR errors
-> turn into money. On a reconciliation failure the estimate is re-read once via Textract, and the
-> retry is only kept if it actually reconciles (otherwise the estimate genuinely doesn't add up,
-> which is a finding about the document, not about the OCR).
-> **Three things that would have quietly broken:**
-> - `_configured()` / `is_available()` hard-required `GANI_AWS_*`. Left alone, a deployment
->   without those keys would disable the whole GaniParser leg and send DL/RC/FIR — DOB, father's
->   name, address, chassis number — to Groq vision in the US, the exact egress this module exists
->   to prevent. Both are now per-doc-type.
-> - The circuit breaker was one module-global flag, so a Tesseract failure would have disabled
->   Textract too. Now per-engine, re-armed per investigation like `grounding_client`.
-> - `_prepare_image_bytes` caps the long edge at 2048px and re-encodes to JPEG q50 for Bedrock's
->   payload limit. That is ~175 DPI on A4, under Tesseract's working range, and JPEG ringing
->   wrecks 8pt text. The Tesseract branch reads the original in grayscale instead.
-> New `ocr_engine` field per parsed result (`tesseract` / `textract` / `tesseract→textract`) —
-> the existing `parser` field would have conflated them, and CLAUDE.md leans on it as an audit
-> control. Degrades rather than breaks: no `pytesseract` or no binary → one log line, everything
-> routes to Textract. `pytesseract` pinned in requirements.txt; `tesseract-ocr` +
-> `tesseract-ocr-eng` added to the Dockerfile; `TESSERACT_CMD` for Windows dev.
-> **15 tests** in `tests/test_ocr.py` (routing, line rebuilding, ordering, the gate, the fallback
-> chain, per-engine breakers) + 8 in `tests/test_gani_parser.py` for the reconciliation guard.
-
+- **36. Case 2's "fair" estimate falsely tripped FC-17 workshop inflation ✅ FIXED 2026-07-16
+- **37. "WhatsApp strips EXIF" was stated as an absolute, but only its Photo-send mode does ✅ REFINED 2026-07-17
+- **38. The pipeline paid for the whole investigation before checking whether the policy was in force ✅ FIXED 2026-08-13
+- **39. The "independent" fair value was partly built from the document it audits ✅ FIXED 2026-08-13
+- **40. Labour estimation engine — explainable, rule-based, OEM-pluggable ✅ ADDED 2026-08-13
+- **41. Adjudicator screen rebuilt around exceptions ✅ 2026-08-13
+- **42. Every uploaded document went through Textract on an AWS account this project doesn't own ◐ PARTLY SUPERSEDED — see #46
 ### 43. ~~Bedrock calls were billed at Groq's text rate and the vision cap bar was permanently 0~~ ✅ FIXED 2026-08-13
 > `token_tracker.VISION_MODEL_NAME` was `meta-llama/llama-4-scout-17b-16e-instruct` — a model Groq
 > decommissioned months earlier (see the `llm_client.py` comment recording its removal). Three
@@ -990,57 +369,8 @@ component is gone.
 > precise about: that inflated figure was the apparent business case for item #42, and it does not
 > survive contact with the actual API. The real justification is account ownership, not cost.
 
-### 44. Analytics split into three sub-tabs, with honest percentages ✅ 2026-08-13
-> One 445-line page mixing money, model quality and claim volumes, with no rates anywhere and one
-> number printed twice under two names. Now a shell (`pages/Analytics.jsx`: one fetch, one `Tabs`)
-> plus **Claim Analytics** / **Solution Performance** / **FinOps** under `pages/analytics/`. Every
-> existing card was redistributed; none was lost.
-> **The duplicate.** There is no `settlement_saved` key — the repetition was that *Leakage
-> Prevented* and *Fraud Exposure Stopped* both summed `claimed` over the same rejected claims
-> (`main.py:627-630` and `:648-649`) and rendered the **identical** ₹1,29,328 on the live dataset.
-> `leakage_prevented` is now the narrow, defensible definition this project's own architecture doc
-> already mandates ([newplan.md §16](../newplan.md): *"v1 counted every rejected ask… a number an
-> actuary would refuse to sign"*) — inflation disallowed on claims that were **paid**. The blocked
-> ask survives as `fraud.exposure_avoided`, relabelled as risk avoided rather than money saved and
-> structurally incapable of equalling leakage again.
-> **Flagged honestly:** on the current two-claim dataset the honest figure is **₹0** (the rejected
-> claim was never paid; the approved one had no inflation cap). The headline number is gone. That
-> is the correct number, and FinOps carries a "how these numbers are defined" panel saying so.
-> **Percentages** are computed server-side so every consumer divides by the same denominator, and
-> return `null` → "—" when there is no denominator rather than a misleading 0%: approval,
-> rejection, escalation, investigated, fraud-case rate, override rate, auto-decision rate,
-> image-gate failure rate, payout as % of the amount claimed.
-> **New `governance.human_decisions`**: `decisions` is the *AI recommendation*, so a rejection
-> rate taken from it is the model's rate, not the desk's. Both are now available and each card
-> says which it is.
-
-### 45. New Fraud workspace — cross-claim review, checks clustered by evidence ✅ 2026-08-13
-> Fraud detail was reachable only by opening a claim, expanding the pipeline card, then expanding
-> the fraud agent row — and arrived as a flat list of 32 checks with no structure. There was no
-> way to look at fraud across claims at all.
-> **`FRAUD_CHECK_GROUPS`** (server-side, next to `FRAUD_CHECK_NAMES`) clusters all 32 into 8
-> groups **by what each check reads**, not by what its title suggests — everything in a group
-> stands or falls on the same evidence: Policy & Exposure · Claimant History & Filing Behaviour ·
-> Document Integrity & Identity · Photo & Damage Evidence · Evidence Authenticity · Telematics ·
-> Pricing, Inflation & Repair Scope · Network & Historical Archive. A test asserts the taxonomy
-> covers the catalog exactly, so adding an FC-33 without grouping it fails CI rather than
-> silently vanishing from the page.
-> **`group` and `weight` now ride on each check row.** Severity was previously recoverable only by
-> string-matching `"CRITICAL"` in the free-text `detail`, and the 30-point tier only by knowing
-> `_HIGH_WEIGHT_CHECKS` by heart. `check_weight()` is now the single implementation and the base
-> score is `sum(check_weight(c) for c in checks)` — so the weight shown beside a check in the UI
-> is by construction the weight that was scored.
-> **`GET /api/fraud/claims`** (adjudicator-guarded) returns a light projection per investigated
-> claim; detail reuses `GET /api/claims/{id}`, which already carries the whole fraud block — no
-> second detail endpoint. **`/fraud`** ranks claims worst-first (an unscored claim sorts last, not
-> as 0); **`/fraud/:id`** renders one `Collapsible` per group, auto-opened where something flagged,
-> with `visual_forensics_layer`, `historical_fraud_layer` + `fraud_network_layer` and `labour_layer`
-> each rendered **inside the group whose evidence they are**. Shows everything by default with a
-> hide-passed toggle — the inverse of the dashboard's pipeline panel, because this is the audit view.
-> **Gate-rejected claims** have no `agents.fraud_intelligence` at all: both views detect that, show
-> the 13 pre-screen checks from `agents.eligibility_screen` and render "Not assessed" rather than a
-> score of 0. Older results that predate `weight` fall back to the same rules the scorer uses.
-
+- **44. Analytics split into three sub-tabs, with honest percentages ✅ 2026-08-13
+- **45. New Fraud workspace — cross-claim review, checks clustered by evidence ✅ 2026-08-13
 ### 46. ~~Local Tesseract tier removed — it did no useful work and caused a false fraud flag~~ ✅ REVERTED 2026-08-14
 > Item #42 added a local Tesseract stage ahead of Textract. Run against real documents it earned
 > its removal on three counts, found by the user asking the right question — "what is Tesseract
@@ -1079,20 +409,7 @@ component is gone.
 
 ## P0 — Real-world correctness (settlement math & policy handling)
 
-### 1. Zero Depreciation add-on is ignored in settlement math — ⏸ DEFERRED (2026-07-10)
-> Deliberately parked: all depreciation-related changes wait until the new
-> estimate-anchored **assessed fair value** approach is validated by a real
-> adjudicator. Revisit this item (and the depreciation slabs generally) after that
-> sign-off.
-- `backend/services/settlement_calc.py` docstring (line ~259) claims it handles the
-  "zero-dep add-on", but **no such logic exists** — depreciation is always deducted.
-- POL-567890 (Arjun Mehta, Creta) lists *Zero Depreciation* under SECTION D of its policy
-  PDF, yet its breakdown applied ₹26,145 depreciation. A real zero-dep policyholder gets
-  parts at 100% — this is the single most visible "not real world" payout error left.
-- **Fix:** add an `addons` column to `data/policies.csv` (e.g. `zero_dep;consumables;tyre`),
-  read it in `compute_settlement_breakdown()`, skip depreciation when zero-dep is present,
-  and surface "Zero Depreciation add-on applied" in the breakdown + PDF report.
-
+- **1. Zero Depreciation add-on is ignored in settlement math — ⏸ DEFERRED (2026-07-10)
 ### 2. ~~Policy RAG retrieval mixes pages from other customers' policies~~ ✅ FIXED 2026-07-10
 > `get_policy_context()` now queries with a hard `where={"policy_no": ...}` metadata
 > filter (chunks already carried the metadata), with unfiltered fallback only for
@@ -1120,41 +437,12 @@ component is gone.
   (single source of truth), print the full real IMT table, regenerate all PDFs, and
   rebuild the vectorstore.
 
-### 4. ~~Stale results~~ ✅ RESOLVED 2026-07-10 — all 3 claims reset to Pending (results deleted), will be re-investigated fresh
-
-#### (original finding, kept for context)
-- The prompt fix (2026-07-10) only affects *new* investigations. The three stored
-  `result.json` files still say "exceeds the IRDAI Escalate/Reject threshold" in
-  `decision_reasons`, and their breakdowns were computed with the old (wrong)
-  depreciation slabs.
-- **Fix:** re-run the three demo investigations (or reset via `scripts/reset_claims.py`
-  and refile) before any demo/judging session.
+- **4. Stale results ✅ RESOLVED 2026-07-10 — all 3 claims reset to Pending (results deleted), will be re-investigated fresh
 
 ---
-
 ## P1 — Fraud engine false positives (all three observed live in the demo claims)
-
-### 5. ~~"No EXIF" fails the image-quality gate~~ ✅ FIXED 2026-07-10
-> Missing EXIF is now advisory-only in both the image-quality gate and FC-28; only
-> positive forgery signals (vision-model authenticity flags, local forensics detector)
-> block/flag.
-
-#### (original finding, kept for context)
-- Every one of the 3 demo claims failed the gate on "N/N photo(s) have no EXIF metadata",
-  forcing `needs_human_review` even for the genuine case. In India most claim photos
-  arrive via WhatsApp, which strips EXIF — so in production this fires on nearly
-  every claim, making the gate meaningless.
-- **Fix:** in `backend/agents/damage_assessment.py`, downgrade missing-EXIF from a
-  gate-fail to an advisory note unless it co-occurs with another authenticity signal
-  (forensics model flag, vision-model flag, or screenshot detection). Keep the hard fail
-  for *positive* forgery signals.
-
-### 6. ~~FC-16 "multiple vehicles in frame" is too naive~~ ✅ FIXED 2026-07-10
-- Vision model now reports `other_vehicle_in_contact` (physically involved in THIS
-  collision; parked/background vehicles explicitly excluded), and FC-16 flags only when
-  a second vehicle is in contact while the claimant's story mentions no other vehicle.
-  A story that *does* mention another vehicle now corroborates instead of flagging.
-
+- **5. "No EXIF" fails the image-quality gate ✅ FIXED 2026-07-10
+- **6. FC-16 "multiple vehicles in frame" is too naive ✅ FIXED 2026-07-10
 ### 7. ~~LLM scheme-matching contradicts deterministic facts~~ ✅ FIXED 2026-07-10
 > `matched_schemes` are post-validated against deterministic preconditions (FS-001
 > needs a young policy or FC-14; FS-002 needs FC-16/21/22/27; FS-004 needs FC-17/23/24/25).
@@ -1167,44 +455,193 @@ component is gone.
   against the deterministic checks (e.g. drop FS-001 unless `policy_age_days < 180`;
   drop FS-004 unless FC-17/FC-24 flagged) before scoring/output.
 
-### 8. ~~KB reference codes attached to wrong findings~~ ✅ FIXED 2026-07-10
-> 8 miscoded KB references corrected in the check details (FC-07/12/13/15/18/20), and
-> LLM `kb_references` are filtered to codes actually raised by this claim's flagged
-> checks or surviving schemes.
-
-#### (original finding, kept for context)
-- Same claim: an FIR **vehicle-registration mismatch** was labelled `FI-LOC-001 "Remote
-  Isolated Location"` — an unrelated indicator. The kb_references relevance text is
-  stitched to whatever code the LLM cited.
-- **Fix:** map deterministic check IDs → correct KB codes in code (FC-20 → FI-CLM/doc
-  inconsistency family), and only let the LLM *add* codes that appear in the KB glossary.
+- **8. KB reference codes attached to wrong findings ✅ FIXED 2026-07-10
 
 ---
-
 ## P2 — Demo fixtures & documentation drift
 
-### 8b. ~~Demo fixtures need DL + RC assets~~ ✅ FIXED 2026-07-10 — generator now emits a synthetic DL + RC per case
+### 62. ~~Showcase cases documented outcomes the scoring arithmetic does not produce~~ ✅ FIXED 2026-09-09
 
-#### (original finding, kept for context)
-- Garage estimate (file + amount), driving licence, and RC are now **mandatory** for all
-  repair claims — both in the New Claim form and enforced at `/investigate` (422).
-  The three showcase cases in `test/` ship no DL/RC images, so they can no longer be
-  filed as scripted. **Fix:** add a demo DL + RC (image or PDF) per case to
-  `scripts/generate_test_cases.py`, with the RC reg matching `policies.csv` (FC-29
-  cross-verifies it) and the DL name matching the claimant.
+The five cases resolved to Approve · Escalate · Escalate · Approve · Reject, and two of those
+were not actually reproducible.
 
-### 9. ~~Test fixtures drifted from policies.csv~~ ✅ FIXED 2026-07-10
-> `generate_test_cases.py` now reads reg/make/model from `policies.csv`
-> (`_load_policy`); Case 3's stale DL-05 plate is gone. Fixtures regenerated.
+**Case 2 (Rohit Madeshiya).** Both CLAUDE.md and the case README said "**Escalate regardless of
+estimate** — FC-05 + FC-20 fire either way." They do fire, but at 8 points each. The fraud score
+is `base ± 15` where base is a deterministic weight sum, and the Escalate band starts at 40 — so
+the fair variant sits at base 16, final 1–31, squarely in **Low**, i.e. Approve. What actually
+carries the inflated variant is **FC-25 at 30 points**: its workshop `Ganga Motors & Body Works`
+is HISTFRAUD-001/002 in the fraud archive (base 54, final 39–69). The generator's own printed
+text already said "option A (fair → milder path)" and contradicted the READMEs. Both documents
+now state which estimate produces the outcome and show the arithmetic. No fixture changed.
 
-#### (original finding, kept for context)
-- Case 3's FIR PDF still shows reg `DL-05-XY-9876`; `policies.csv` now has `MH28BQ2255`
-  for that policy — this alone pushed the case from its designed "Escalate" to "Reject".
-  The case README even documents the stale plate.
-- **Fix:** make `scripts/generate_test_cases.py` read vehicle reg/policy fields from
-  `policies.csv` at generation time (never hardcode), and regenerate all three cases
-  before each demo.
+**Case 4 (Mohammed Faiz).** Shipped a ₹10,82,118 estimate (90% of the ₹12,00,000 IDV) for a
+described catastrophic collision — "engine bay destroyed, both airbags deployed, towed" — and
+**no damage photo at all**; the README instructed the presenter to supply "a real photo of a
+wrecked Innova" that did not exist. The only real Innova photo available shows a *repairable*
+front-end hit (bumper detached, grille smashed, LH headlamp, bonnet edge, LH fender; cabin
+straight, no airbag deployment, plate illegible). Rather than discard it, the case was rebuilt
+around what the evidence shows: **constructive-total-loss write-off inflation.**
 
+The mechanism is pre-existing behaviour, not new code. `compute_settlement_breakdown()` calls
+`_assess_repair()` **before** the 75%-of-IDV total-loss test, so the >40% "investigate" band caps
+the repair basis at the AI fair value first — and the capped ~₹2L basis is ~17% of IDV, so the
+constructive total loss **collapses on its own arithmetic** (`is_total_loss: false`, ~₹8L
+`disallowed_inflation`). Two independent code-enforced guards reach Escalate: the story-mismatch
+guard (load-bearing — the claimant's oversold account vs the photo) and the fraud band
+(corroborating, base ~40–48, so not guaranteed — the READMEs say so rather than overclaiming).
+Documents are split by author so both fire honestly: the **FIR is honest** and matches the photo
+(FC-20 only cross-checks date/location/registration, never the damage narrative), the
+**claimant's description** oversells, and the **garage estimate** is the inflated artefact.
+
+The estimate is deliberately built from **common front-end parts at 4–5× prices** rather than
+exotic assemblies: part pricing is live-web-only, and below `PRICING_MIN_COVERAGE` (70%) the
+fair-value bands abstain — no verdict, **no inflation cap**, basis falls back to the quote, which
+would sail back over the 75% line and re-become a total loss. The previous version quoted a ₹3.2L
+engine short block, a turbo and an intercooler and would have been exposed to exactly that.
+
+**Case 3 (Arjun Mehta) promoted to Reject.** It was the natural carrier — telematics placing the
+vehicle ~1,000 km away with no impact event is the hardest evidence in the set — but sat at base
+~46 (FC-21 8 + FC-22 8 + FC-27 30, its anomaly signature already matching HISTFRAUD-008/009/010).
+Reject is enforced at `fraud_score >= 70`, and with the ±15 clamp a *guaranteed* Reject needs
+base ≥ 85. Two entries added to `data/kb/historical_fraud_cases.json`: **HISTFRAUD-012** (this
+claimant's phone at `Roadside QuickFix Garage` — one entry satisfying **both** FC-26 and FC-25)
+and **HISTFRAUD-013** (a second unrelated claimant at the same workshop, so the garage pattern
+reads as systemic). With the under-declared estimate: 8+8+8+30+30+30 = 114 → capped at 95 → final
+80–95, Reject every run. Verified by calling `build_historical_fraud_layer` directly.
+
+Case 4's workshop (`Kongu Auto Body & Paint Works`) is deliberately **absent** from the archive —
+an FC-25 hit is 30 points and would push it out of Escalate into Reject. Folders renamed to match
+the outcome convention (`3-…-staged-collision-reject`, `4-…-writeoff-inflation-escalate`).
+
+- **8b. Demo fixtures need DL + RC assets ✅ FIXED 2026-07-10 — generator now emits a synthetic DL + RC per case
+- **9. Test fixtures drifted from policies.csv ✅ FIXED 2026-07-10
+
+### 63. Demo quick-fill buttons on the New Claim page ✅ ADDED 2026-09-09
+
+Filing a showcase claim by hand meant a phone lookup, seven text fields and five to seven file
+attachments across four evidence tabs — and a presenter who had not read `test/*/README.md` had no
+way to know that `9567890123` is the phone that opens Case 1. The values existed only in prose.
+
+`GET /api/demo/cases` now backs a panel of four buttons (cases 1–4) above the phone lookup.
+One click loads **one** case: its field values and its fixture files. It fills; it never submits —
+the presenter still clicks Submit, which keeps the filled form part of the demo.
+
+**The manifest is generated, not written.** Every value a button needs already moves under
+`generate_test_cases.py`: incident dates are computed from a reference date, and estimate totals
+are row-sums recalibrated whenever live pricing drifts (Case 1's README has been wrong about its
+amount before, for exactly that reason). So the generator emits
+`data/config/demo_cases.json` in the same run that writes the PDFs. Dates are stored as
+**`incident_days_ago` offsets** and resolved against `date.today()` on read, which matters beyond
+tidiness — FC-05 reads the incident-to-filing gap, and cases 2 and 4 are *designed* to flag it
+while 1 and 3 are designed to pass. A frozen date would silently change the fraud score as days
+passed.
+
+Reuse rather than reimplementation: the frontend hands `applyExtraction()` — the existing
+claim-form auto-fill path — a hand-built object in its response shape, so the `Motor - ` prefixing,
+the `YYYY-MM-DDTHH:mm` join, the future-date guard and the summary line are all already handled.
+`policy_no`/`vehicle_reg` are deliberately omitted from that object: `applyExtraction` would
+compare them against a `policy` still stale in its closure and warn about a mismatch that is not
+real.
+
+Three things this had to get right:
+
+* **Switching cases must clear the last one.** Case 3 is the only case with a telematics file, so
+  without a reset, clicking Case 3 then Case 1 would upload Case 3's telematics under Case 1's
+  claim. `applyExtraction` merges with a spread, so blank fields would keep stale values too.
+  Every click now empties all seven file arrays and resets `form`/`garage`/`fir` first.
+* **Case 2's photos are served renamed.** They are AI-generated and one still carries its Gemini
+  default filename; uploading that verbatim adds FC-28 (30 pts) and would carry the case past 70
+  into Reject instead of its designed Escalate. The manifest's `serve_as` does what that case's
+  README already tells presenters to do by hand. Case 4's workshop is likewise kept out of the
+  fraud archive for the same band reason.
+* **Missing fixtures degrade, they do not fail.** `.gitignore` excludes
+  `test/**/*.{jpg,jpeg,png,webp,mp4,...}`, so a fresh clone has the DL/RC/FIR/estimate PDFs and
+  no damage photos at all. Each file carries `present`; the button attaches what exists and names
+  what does not.
+
+Gated on `DEMO_MODE` (default true, `PRICING_LIVE`'s "true unless explicitly false" shape). With
+it false, `load_cases()` returns `[]`, the file route 404s, and the panel renders nothing — the
+frontend hides itself on an empty list, so "demo off" and "generator never run" both degrade to
+invisible rather than to an error on a page a customer can reach. `file_key` is a manifest key,
+never a path, and `resolve_file` containment-checks the result against `TEST_DIR`; traversal
+attempts (raw and URL-encoded) return 404. Docker needed `./test:/app/test:ro` at the time; the later restructure moved the
+fixtures into `data/demo/`, so the existing `./data` mount now covers them — `backend/Dockerfile` copies only `backend/`.
+
+Verified end to end: fetched Case 1 through the API, downloaded all five fixtures, created a real
+claim and uploaded them — all five landed in the right `data/claims/{id}/` subdirectories.
+`data_sanity` §6 now asserts every manifest file exists, every `doc_type` is on the upload
+endpoint's whitelist, and every case carries the `images`/`estimate`/`license`/`rc` set plus an
+amount the form requires before it will submit.
+
+### 66–69. Claim check of the four filed demo claims (2026-09-11)
+
+Filing cases 1–4 live and reading every `result.json` found only Case 2 behaving as documented.
+Four fixes followed; each is pinned by its own test file.
+
+**66. Geocoding ✅ FIXED.** Nominatim matched none of `NH-32, near Ulundurpet, Tamil Nadu`,
+`Near Ramanujan IT City Parking, Perungudi, Chennai` or `NH-544, near Sankagiri, Salem District,
+Tamil Nadu` as typed — verified live — while the town inside each resolved at once. Consequences:
+Case 1 (fraud 12, story match, consistent price) escalated because Agent 5 read "location
+unverified" as a mixed signal; Case 3 lost FC-22 (`na` with no geocode) **and** FC-27 (its
+signature match needs `gps_location_match`), dropping its base from 95 to 68 — Escalate, not
+Reject. `_geocode` now retries with road codes and direction words stripped and leading segments
+peeled, accepts only town-level or finer (`place_rank ≥ 16`), and reports
+`precision: approximate`; `_check_gps_trail` widens the tolerance from 2 km to 25 km for an
+approximate match (the Case 3 trail is 1,039 km out and still flags). Agent 5 is told an
+approximate match is a verified location. Note: FC-22's flag text says CRITICAL, so it weighs 35,
+not the 8 the Case 3 README's table lists. `dev/tests/test_geocode.py`.
+
+**67. Plate copied from the prompt ✅ FIXED.** Agent 1's prompt carried
+`Registered vehicle (from policy): Toyota Innova Crysta GX (TN07CD5678)` next to an instruction not
+to copy the plate. On Case 4's 257×196 photo, whose plate reads `MH…`, the model returned
+`TN07CD5678`; FC-13 and FC-15 passed. The prompt now carries make/model/trim only
+(`_vehicle_for_prompt`); FC-15 already compares in Python. The assessment-cache key hashes the
+claim fields but not the prompt, so `_PROMPT_REV` is folded into Agent 1's key — otherwise the
+stored assessment with the copied plate replays forever. `dev/tests/test_plate_blind_prompt.py`.
+
+**68. Investigate-band guard ✅ FIXED.** Case 4 (₹10.1L quote, ~1000% over the fair value)
+escalated only because Agent 5 chose Escalate: Agent 3 returned `damage_matches_story: true`,
+so the story-mismatch guard its README called load-bearing never fired, and the fraud score was
+34. An Approve would have gone straight through. `orchestrator._inflation_guard` now converts
+Approve → Escalate whenever `overclaim_band == "investigate"`, after the settlement maths (it
+needs the band) and before the headline figure is reconciled. Inactive when the bands abstain.
+`dev/tests/test_decision_guards.py`.
+
+**69. OEM price catalogue ✅ ADDED.** Part prices were a live web search per investigation, cached
+30 days in a gitignored file — so the same part re-priced between runs (the Innova's LH and RH
+headlamps, one component, at ₹24,700 and ₹11,500) and a fresh clone priced nothing until it had
+spent API quota. `data/config/oem_price_catalog.json` (committed) holds vehicle → part → price,
+low, high, sources, provider and `fetched_on`. Every figure comes from the same API and the same
+≥2-domain rule as the live tier — `dev/scripts/build_oem_catalog.py` seeds the four showcase
+vehicles (every estimate line + a standard body-part set), and `price_part` writes back whatever
+it prices live. This is not the fabricated catalogue removed on 2026-08-13 (item 57): nothing in
+it is typed in. Order in `price_part`: fresh catalogue entry → live web (written back) → catalogue
+entry past the 90-day TTL, flagged `price_stale` (the user's call: an old real price, labelled,
+beats none) → unpriced. Stale prices are named in the UI parts list, the evidence panel's
+coverage line and the PDF. `data_sanity` §4b FAILs if a demo-estimate part is missing.
+
+Found on the way: `price_lookup`'s door rows were keyed `door_front_left`, which `_canon` rewrites
+to `front_left_door` before any lookup — doors never got their search phrasing or band; same for
+`roof`. `condenser` was aliased to `radiator`, pricing an AC condenser as a radiator. 17
+naming-drift aliases added (`bonnet_panel`, `front_door_left`, sided wheel-arch liners, …) so one
+part is one catalogue key; a test now fails on any search-config key `_canon` cannot reach.
+`dev/tests/test_oem_catalog.py`. The door plausibility floor (₹6,000) had never run while the
+key was unreachable; applied, it discarded every corroborated Baleno door price, so it is now
+₹2,500 and door listings are searched as "front door left" (the phrasing listings use).
+
+**Verified end to end** by re-investigating all four claims. Cases 1/3/4 landed Approve / Reject /
+Escalate at once. Case 2 escalated but exposed one more gap: the vision model named four claimed
+parts with estimate shorthand (`front_fender_lh`, `front_door_lh_skin`, `orvm_lh`,
+`wheel_arch_liner_lh`), `_canon` did not map `lh`, coverage fell to 50%, the bands abstained and
+the inflation cap never fired — and the live write-back stored a `rear_door_lh` key nothing could
+read. `_canon` now maps `lh`/`rh` and drops `skin`/`shell`/`assy`/`assembly`/`oem`;
+`build_oem_catalog.py` prunes unreachable keys and `data_sanity` §4b warns on them. Re-run: 100%
+catalogue coverage, investigate band 167%, ₹1,21,580 disallowed, fraud base 54 → Escalate
+(ceiling 69 under the ±15 clamp). Final: 1 Approve (net ₹89,884) · 2 Escalate · 3 Reject (base
+95; FC-22 at 1,039 km + FC-27) · 4 Escalate (788% over, ₹8.98L disallowed, FC-15 flags the plate).
+
+- **8b. Demo fixtures need DL + RC assets ✅ FIXED 2026-07-10 — generator now emits a synthetic DL + RC per case
+- **9. Test fixtures drifted from policies.csv ✅ FIXED 2026-07-10
 ### 10. ~~Case 1 ("clean approve") isn't clean~~ ✅ FIXED 2026-07-14
 > Recalibrated `scripts/generate_test_cases.py`'s `case_aditya()` Fair-estimate `rows` against
 > `DamageAssessmentAgent`'s actual live-web assessed value for the real uploaded photo
@@ -1267,95 +704,17 @@ component is gone.
 > through to the garage-line amount; a genuine corroborated part (`grille`) correctly resolved to
 > ₹4,900 from 2 agreeing domains (kakkarmotors.com ₹6,500, boodmo.com ₹3,228).
 
-### 11. Case READMEs list stale expected outcomes
-- Case 2's README expects a 40–69 "Escalate" score, but the newer historical-fraud layer
-  (FC-24/25, Ganga Motors archive hit) pushes it to 85 → "Reject". Either recalibrate
-  check weights for the intended band or update the READMEs' expected outcome + flags.
-
-### 12. ~~CLAUDE.md file map stale~~ ✅ FIXED 2026-07-10 (CLAUDE.md corrected: real scripts list, 29 checks, API-first pricing; per-case READMEs still to refresh)
-
-#### (original finding, kept for context)
-- They reference `scripts/build_vectorstore.py`, `scripts/generate_policy_pdfs.py`,
-  `scripts/generate_sample_telematics.py`, `scripts/generate_demo_assets.py` — none exist
-  in this branch (only `reset_claims.py`, `generate_test_cases.py`, `add_demo_exif.py`).
-  Restore the scripts or fix the docs; currently a new contributor can't rebuild the
-  vectorstore or policy PDFs at all from what's checked in.
+- **11. Case READMEs list stale expected outcomes
+- **12. CLAUDE.md file map stale ✅ FIXED 2026-07-10 (CLAUDE.md corrected: real scripts list, 29 checks, API-first pricing; per-case READMEs still to refresh)
 
 ---
-
 ## P3 — Engineering & ops
-
-### 13. ~~Pin Python dependencies~~ ✅ FIXED 2026-07-10 — requirements.txt pinned to the verified image's versions
-
-#### (original finding, kept for context)
-- `requirements.txt` is fully unpinned. The last Docker build watched pip download
-  `transformers 5.13.0`, backtrack, and settle on `4.57.6` via optimum's constraint —
-  wasted time now, a silent breaking upgrade later. **Fix:** pin exact versions
-  (`pip freeze` from the known-good image) and refresh deliberately.
-
-### 14. ~~No automated tests~~ ✅ FIXED 2026-07-10 — `tests/` added (13 passing: IMT depreciation slabs, material overrides, deductibles, inflation-cap bands, estimate matcher, labour allocation, unpriced guarantee)
-
-#### (original finding, kept for context)
-- `settlement_calc.py` (depreciation slabs, total-loss, inflation cap, deductibles) and
-  `_run_fraud_checks()` are pure functions — ideal pytest targets; currently zero tests.
-  The depreciation-slab bug fixed on 2026-07-10 would have been caught by a 5-line test
-  against the policy-PDF table. **Fix:** add `tests/` with pytest covering both modules.
-
-### 15. Auth is a spoofable header
-- Role guard = client-sent `X-Role: adjudicator` header set from localStorage. Fine for
-  an ideathon; say so explicitly in the demo script, and note the production path
-  (server-issued session/JWT) in the architecture slide. Low effort, avoids a judge
-  "gotcha".
-
-### 16. Repo hygiene — ◐ PARTIAL 2026-07-10 (`data/claims/`, `data/reports/` now gitignored; commit + stray-file cleanup still pending)
-- Uncommitted work spans 18+ modified files plus untracked `4.jpg` (stray photo in repo
-  root), `SB_Explanatory_doc.md`, `test/`, `data/claims/`, `data/reports/`. Commit the
-  intentional changes, delete the stray photo, and gitignore runtime dirs
-  (`data/claims/`, `data/reports/`).
+- **13. Pin Python dependencies ✅ FIXED 2026-07-10 — requirements.txt pinned to the verified image's versions
+- **14. No automated tests ✅ FIXED 2026-07-10 — `tests/` added (13 passing: IMT depreciation slabs, material overrides, deductibles, inflation-cap bands, estimate matcher, labour allocation, unpriced guarantee)
+- **15. Auth is a spoofable header
+- **16. Repo hygiene — ◐ PARTIAL 2026-07-10 (`data/claims/`, `data/reports/` now gitignored; commit + stray-file cleanup still pending)
 
 ---
-
 ## P4 — Dashcam & telematics (lowest priority, parked)
-
-- Case 3 README says no `.mp4` demo asset exists — either produce one H.264 clip or
-  remove dashcam from the demo narrative.
-- `sample_telematics/` files are referenced by `GET /api/sample-telematics/` but the
-  download row was removed from the UI (2026-07-10); decide whether to remove the route
-  too or keep it for the test-fixture READMEs.
-- Telematics timestamp isn't cross-checked against the incident *date* (only GPS distance
-  and impact G) — Case 3's trail is from 2026-06-01 vs incident 2026-07-05 and nothing
-  flagged the month-old data. Worth one extra check when this area is next touched.
-
 ---
-
 ## Recently completed (2026-07-10) — for context
-
-**Estimate-anchored assessment overhaul (second batch):**
-- **Garage estimate mandatory** for repair claims (file + amount, New Claim form +
-  `/investigate` 422 guard); its parsed line items are now fed INTO the vision prompt so
-  the model actively looks for every claimed part (garages list small parts the LLM used
-  to miss, which kept the AI value artificially below the estimate).
-- **Bounding-box guardrails:** only estimate-listed parts carry boxes (deterministic
-  token-matching + LLM concurrence); extra visible damage goes to `undeclared_parts` —
-  priced and surfaced to the adjuster but never drawn. LEFT/RIGHT are defined as the
-  driver's seated perspective (RHD India), incl. RH/LH garage shorthand.
-- **Assessed fair value now has 4 sections** (EvidencePanel): estimate-matched parts
-  value + their labour, and undeclared-parts value + their labour; labour allocated from
-  the estimate's own Labour rows proportionally.
-- **Static pricing catalogs removed** (`parts_pricing_base.json` segment catalog +
-  vehicle KB prices — fabricated data): pricing is now live-web-API-first, falling back
-  to the matched garage line amount (real document), else "unpriced" — never invented.
-- **DL + RC uploads** — new mandatory "DL & RC" section beside Garage Estimate; parsed
-  by the vision model; new **FC-29** cross-verifies RC reg ↔ policy vehicle, DL name ↔
-  claimant, and licence validity at the incident date.
-- **FC-16 fixed for the real world** (see item 6 above).
-
-- Docker: CPU-only torch install (build ~30 min → ~5 min; image 11.1 GB → 4.55 GB),
-  BuildKit pip cache mounts, `# syntax=docker/dockerfile:1`.
-- Removed fabricated "IRDAI Escalate/Reject threshold" attribution from the Agent-5
-  prompt (now "internal claims-triage policy / insurer's SIU threshold").
-- Fixed age-depreciation slabs to the real India Motor Tariff GR.9 schedule
-  (0/5/10/15/25/35/40/50) in `settlement_calc.py`.
-- Aligned `data/kb/fraud_indicators.json` scoring bands to the Python-authoritative
-  40/70 thresholds; corrected its depreciation table; added material-depreciation entries.
-- Removed the "Demo sample files" download row from the New Claim telematics tab.

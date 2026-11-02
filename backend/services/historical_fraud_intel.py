@@ -5,7 +5,7 @@ result.json — claims this deployment has actually investigated): this module
 reads a standing synthetic archive (data/kb/historical_fraud_cases.json) of
 previously confirmed/suspected-fraud claims, so cross-claim pattern checks
 still have history to compare against even when the live queue is fresh
-(claims.csv ships/resets empty, per scripts/reset_claims.py).
+(claims.csv ships/resets empty, per dev/scripts/reset_claims.py).
 
 Three pattern checks, mirroring the request: has this exact garage, this
 exact claimant, or this exact telematics-fraud signature shown up in a past

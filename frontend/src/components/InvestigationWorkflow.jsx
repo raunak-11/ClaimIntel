@@ -54,13 +54,23 @@ function InfoTile({ label, value, tone }) {
 }
 
 // ── Damage Assessment ─────────────────────────────────────────────────────────
-// Part prices are live web market data only. A part the lookup could not
-// corroborate is shown as unpriced rather than quietly given the garage's own
-// number — the raw `pricing_source` token used to be printed here verbatim.
+// Part prices are market data only: the API-fetched OEM price catalogue, or a
+// live web search. A part neither could price is shown as unpriced rather than
+// quietly given the garage's own number — the raw `pricing_source` token used
+// to be printed here verbatim.
 const PRICE_SOURCE_LABELS = {
+  oem_catalog: 'OEM price catalogue',
   live_web: 'Live web market price',
   unpriced: 'No independent price found',
   garage_estimate: 'Garage estimate (legacy result)',
+}
+
+// "2026-09-11T14:02:10+05:30" → "11 Sep 2026". Empty for older results.
+function fetchedDate(iso) {
+  const d = iso ? new Date(iso) : null
+  return d && !Number.isNaN(d.getTime())
+    ? d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+    : ''
 }
 
 function DamageDetail({ data }) {
@@ -81,7 +91,16 @@ function DamageDetail({ data }) {
                   <span className="text-xs text-ink font-medium capitalize">{asText(p.part).replace(/_/g, ' ')}</span>
                   <span className="text-[11px] text-faint ml-2">
                     {p.repair_type} · {PRICE_SOURCE_LABELS[p.pricing_source] || p.pricing_source}
+                    {fetchedDate(p.price_fetched_on) && ` · fetched ${fetchedDate(p.price_fetched_on)}`}
                   </span>
+                  {p.price_stale && (
+                    <span
+                      className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-warning-700 bg-warning-50 border border-warning-100 rounded px-1.5 py-0.5"
+                      title="This catalogue price is older than its validity window and could not be refreshed from the price API — the last fetched price is used."
+                    >
+                      stale
+                    </span>
+                  )}
                   {/* Market price + the observed spread across the retailers that
                       corroborated it. Older stored claims carry the previous
                       OEM/aftermarket split instead, so fall back to that. */}

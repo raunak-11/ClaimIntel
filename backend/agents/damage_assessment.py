@@ -42,6 +42,50 @@ def _extract_reg_no(vehicle_str: str) -> str:
         return re.sub(r'[\s\-]', '', m.group(1))
     return ""
 
+
+def _vehicle_for_prompt(vehicle_str: str) -> str:
+    """The policy vehicle WITHOUT its registration number, for the vision prompt.
+
+    The prompt used to carry 'Toyota Innova Crysta GX (TN07CD5678)' and told the
+    model not to copy the plate from it. It copied it anyway: on a 257x196 photo
+    whose plate visibly reads 'MH…', the model returned plate_text_in_image
+    'TN07CD5678' — exactly the policy registration — and FC-13/FC-15 passed on
+    a plate nobody had read. The model now reads the plate blind; FC-15 compares
+    what it read against the registration in Python (fraud_intelligence.py).
+    Make, model and trim stay — the vehicle-match check needs them.
+    """
+    return re.sub(r"\s*\([^)]*\)", "", vehicle_str or "").strip()
+
+
+# Folded into Agent 1's assessment-cache key. The key hashes the claim fields,
+# images and estimate lines but not the prompt text, so a prompt change that
+# alters what the model returns must change this, or stored assessments made
+# under the old prompt keep replaying. Agent 3's key includes Agent 1's output,
+# so it re-keys on its own when this one does.
+_PROMPT_REV = "plate-blind-1"
+
+
+def _valid_box(b: object, max_img_idx: int) -> bool:
+    """Is this a drawable box for a real image?
+
+    Used only for the backfilled `bounding_boxes` entries. The primary
+    `bounding_box` is clamped into range instead of dropped, because every part
+    must keep exactly one box; a backfilled extra is optional, so an unusable
+    one is discarded rather than nudged onto a spot it was never found at.
+    """
+    if not isinstance(b, dict):
+        return False
+    idx = b.get("image_index")
+    if not isinstance(idx, int) or idx < 0 or idx > max_img_idx:
+        return False
+    try:
+        x, y, w, h = (float(b[k]) for k in ("x", "y", "w", "h"))
+    except (KeyError, TypeError, ValueError):
+        return False
+    if w < 5 or h < 5:
+        return False
+    return 0 <= x and 0 <= y and x + w <= 100.5 and y + h <= 100.5
+
 BASE_PROMPT = """You are a motor insurance CLAIM VALIDATOR performing an estimate-driven verification.
 Your job is NOT open-ended damage detection. Your job is to verify a specific, numbered list of
 CLAIMED parts against the photographic evidence, one by one, and separately note anything else you
@@ -49,7 +93,7 @@ see that was never claimed. Thoroughness matters as much as precision — a clai
 verify causes as much financial harm as a hallucinated one.
 
 Claim description: {description}
-Registered vehicle (from policy): {vehicle}
+Registered vehicle make/model (from policy): {vehicle}
 Number of images provided: {{image_count}}
 
 ━━━ CLAIMED PARTS TO VERIFY — YOUR PRIMARY TASK ━━━
@@ -278,7 +322,7 @@ class DamageAssessmentAgent(BaseAgent):
         image_paths = storage.get_claim_images(claim["claim_id"])
 
         # Garage estimate line items — the estimate-driven verification loop's
-        # anchor (newupdates.md #34 / DAMAGE_VALIDATION_ARCHITECTURE.md). Labour/
+        # anchor (docs/newupdates.md #34 / DAMAGE_VALIDATION_ARCHITECTURE.md). Labour/
         # Material rows aren't physical parts to visually verify, so only
         # Replace/Repair/Paint-type lines become numbered claimed parts; the raw
         # `line_items` (incl. labour) still feeds pricing_engine's labour-pool
@@ -328,7 +372,7 @@ class DamageAssessmentAgent(BaseAgent):
             .replace("{{claimed_count}}", str(len(claimed_lines)))
             .format(
                 description=claim.get("description", ""),
-                vehicle=vehicle,
+                vehicle=_vehicle_for_prompt(vehicle),
                 estimate_items=estimate_items_text,
             )
         )
@@ -339,7 +383,8 @@ class DamageAssessmentAgent(BaseAgent):
         # temperature 0), so the assessment is keyed on its own inputs and
         # replayed. Change a photo or an estimate line and the key changes, so a
         # fresh read happens automatically — there is no stale-cache trap.
-        cache_key = assessment_cache.compute_key(claim, image_paths, claimed_lines)
+        cache_key = assessment_cache.compute_key(
+            claim, image_paths, claimed_lines, extra={"prompt_rev": _PROMPT_REV})
         force_fresh = bool(context.get("force_fresh_assessment"))
         cached = None if force_fresh else assessment_cache.load(claim["claim_id"], cache_key)
 
@@ -393,7 +438,7 @@ class DamageAssessmentAgent(BaseAgent):
             result["registration_plate_visible"] = False
             result["plate_text_in_image"] = None
 
-        # ── Estimate-driven merge (newupdates.md #34) ──────────────────────────
+        # ── Estimate-driven merge (docs/newupdates.md #34) ──────────────────────────
         # Replaces the old "detect everything, then fuzzy-match against the
         # estimate" flow. The model now returns an explicit, structurally-
         # mandatory verdict per claimed line, so a claimed part with no
@@ -439,6 +484,13 @@ class DamageAssessmentAgent(BaseAgent):
             idx = bb.get("image_index", 0)
             if not isinstance(idx, int) or idx < 0 or idx > max_img_idx:
                 bb["image_index"] = 0
+            # Same validation for every backfilled box (see _apply_bedrock_grounding).
+            # A box that fails it is dropped rather than clamped into a wrong
+            # place: the primary box is already correct, so a bad extra one is
+            # noise on a photo, not a missing annotation.
+            extra = part.get("bounding_boxes")
+            if isinstance(extra, list):
+                part["bounding_boxes"] = [b for b in extra if _valid_box(b, max_img_idx)]
             # Clamp x, y, w, h to [0, 100] and ensure minimum size of 5
             x = max(0.0, min(100.0, float(bb.get("x") or 0)))
             y = max(0.0, min(100.0, float(bb.get("y") or 0)))
@@ -605,7 +657,7 @@ class DamageAssessmentAgent(BaseAgent):
             result["garage_inflation_flag"] = False
             result["garage_inflation_note"] = (
                 f"Not compared: only {coverage * 100:.0f}% of damaged parts have an "
-                f"independent live-web price (minimum "
+                f"independent market price (minimum "
                 f"{FAIR_VALUE_MIN_COVERAGE * 100:.0f}% required), so the AI mid-estimate "
                 f"of ₹{ai_mid:,.0f} is incomplete and any variance against it would be an "
                 f"artefact of missing prices rather than of the garage's quote."
@@ -634,7 +686,7 @@ class DamageAssessmentAgent(BaseAgent):
                              undeclared_raw: list) -> dict[str, list[dict]]:
         """Turn the model's structured claimed-part verdicts + undeclared-damage
         sweep into the existing result shape, plus the new claim-validation
-        buckets (newupdates.md #34 / DAMAGE_VALIDATION_ARCHITECTURE.md). Pure
+        buckets (docs/newupdates.md #34 / DAMAGE_VALIDATION_ARCHITECTURE.md). Pure
         function — no LLM call, easy to test in isolation.
 
         A claimed line resolves to exactly one of four buckets:
@@ -773,20 +825,22 @@ class DamageAssessmentAgent(BaseAgent):
         # is 4s x image count added to the critical path the SSE stream is
         # waiting on; the calls are independent, so fan them out the same way
         # pricing_engine already fans out its per-part price lookups.
-        def _locate(idx: int, parts: list) -> tuple[int, dict]:
+        def _locate(idx: int, parts: list, strict: bool = False) -> tuple[int, dict]:
             query_parts = [
                 {"part_id": p.get("part", f"part_{i}"),
                  "label": f"{(p.get('part') or '').replace('_', ' ')} - {p.get('visible_evidence', '')}"[:120]}
                 for i, p in enumerate(parts)
             ]
             try:
-                return idx, grounding_client.locate_boxes(image_paths[idx], query_parts)
+                return idx, grounding_client.locate_boxes(
+                    image_paths[idx], query_parts, strict=strict)
             except Exception:
                 return idx, {}
 
+        import concurrent.futures
+
         located_by_image: dict[int, dict] = {}
         if by_image:
-            import concurrent.futures
             with concurrent.futures.ThreadPoolExecutor(max_workers=min(4, len(by_image))) as ex:
                 for idx, located in ex.map(lambda kv: _locate(*kv), by_image.items()):
                     located_by_image[idx] = located
@@ -798,6 +852,38 @@ class DamageAssessmentAgent(BaseAgent):
                 if box:
                     p["bounding_box"] = {"image_index": idx, **box}
                     p["grounding_source"] = source_tag
+
+        # ── Per-image backfill ────────────────────────────────────────────────
+        # `bounding_box` is singular, so a part can only ever be drawn on ONE
+        # photo. When every claimed part happens to be visible in the first
+        # photo, the model quite reasonably boxes them all there and every OTHER
+        # uploaded photo renders with no annotation at all — which reads as "the
+        # AI ignored this photo" to an adjudicator looking at real damage in it.
+        # Verified on CLM-2026-09-000002: two photos of the same Baleno, 8 parts,
+        # all 8 boxed on image 0, image 1 blank despite showing the bonnet,
+        # windscreen and bumper.
+        #
+        # So: keep the primary box exactly as it was (pricing, the PDF report and
+        # every existing consumer still read `bounding_box`), and ADD a
+        # `bounding_boxes` list carrying that primary plus one box per other
+        # photo the part can be found in. The grounding prompt already instructs
+        # the model to OMIT a part it cannot confidently locate in a given image,
+        # so a part genuinely absent from a photo stays absent rather than being
+        # hallucinated into it.
+        parts_all = [p for p in result.get("damaged_parts", []) if isinstance(p, dict)]
+        for p in parts_all:
+            bb = p.get("bounding_box")
+            p["bounding_boxes"] = [dict(bb)] if isinstance(bb, dict) else []
+
+        unboxed = [i for i in range(len(image_paths)) if i not in by_image]
+        if unboxed and parts_all:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=min(4, len(unboxed))) as ex:
+                for idx, located in ex.map(
+                        lambda i: _locate(i, parts_all, strict=True), unboxed):
+                    for p in parts_all:
+                        box = located.get(p.get("part"))
+                        if box:
+                            p["bounding_boxes"].append({"image_index": idx, **box})
 
     @staticmethod
     def _apply_no_damage_guard(result: dict, has_images: bool) -> None:

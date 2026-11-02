@@ -1,224 +1,123 @@
-# ClaimIntel — Agentic Motor Insurance Claim Investigation Platform
+# ClaimIntel — Agentic Motor Insurance Claim Investigation
 
-An AI-powered motor-insurance claim triage system that replaces manual investigation with a pipeline of **5 specialized AI agents**, a local **RAG knowledge base**, **32 deterministic fraud checks**, transparent **IRDAI-aligned settlement math**, and a **human-in-the-loop** adjudicator workflow — running entirely on a laptop.
+A deterministic eligibility gate plus five AI agents investigate a motor claim from its own
+evidence — damage photos, FIR, garage estimate, DL/RC, telematics, dash-cam — and every figure that
+touches money is computed by versioned Python, not by a model.
 
-> No cloud, no database, no managed deployment required. Free APIs only: Groq for inference, Nominatim for geocoding, OpenWeatherMap optional. (AWS Bedrock is an optional add-on for sharper bounding boxes — see [CLAUDE.md](CLAUDE.md).)
-
----
+Runs on a laptop. No database, no managed deployment.
 
 ## What it does
 
-- **Phone-based intake** — the policyholder enters a phone number and the policy auto-fills. No manual policy or amount entry; the claim amount is set by the AI after damage assessment.
-- **5-agent investigation pipeline** — vision damage assessment (estimate-driven verification, not generic detection), fraud scoring, incident reconstruction, geo/policy verification, and a final settlement recommendation, streamed live to the UI over SSE.
-- **32 deterministic fraud checks (FC-01…FC-32)** — every claim runs through an explicit checklist, each recorded as **pass / flag / N/A** and shown in a per-agent **Fraud Check List** panel. A Python-authoritative score drives the Low/Medium/High label.
-- **Multi-source evidence cross-checks** — uploaded **FIR** and **garage-estimate** PDFs are parsed (vision LLM) and cross-checked against the claim; **telematics/IoT** data and **dash-cam video** (auto-split into frames) corroborate or contradict the story.
-- **Cross-claim & historical garage intelligence** — workshops are scored across all prior claims for systematic estimate inflation, plus a standing fraud archive and cross-claimant network detection.
-- **Transparent, IRDAI-aligned settlement** — an itemised breakdown: repair basis − material-wise depreciation − deductibles (− salvage on total loss), GST-consistent throughout.
-- **Anti-inflation cap** — when a garage quote exceeds the AI-assessed fair value by **more than 40%**, the payout is computed on the **AI fair value** and the disallowed excess is booked as **leakage prevented**.
-- **Human-in-the-loop** — every AI decision is a *recommendation*; an adjudicator approves, rejects, escalates, or requests info, with a notes thread.
-- **Deterministic guardrails** — hard rules override the LLM (policy expiry → reject; damage-vs-story mismatch → block auto-approval → escalate; low confidence / failed image gate → human review).
-- **Explainable outputs** — full reasoning trail, KB citations, a downloadable PDF report, and an auto-drafted customer decision letter.
-- **Analytics & governance** — fraud trends, settlement exposure, leakage prevented, garage risk, AI ↔ human agreement, plus Groq token-usage observability.
+| | |
+|---|---|
+| **G0 Eligibility Gate** | Deterministic, no model call. Policy period + scope of cover. An out-of-cover claim is rejected here for **zero agent cost** |
+| **A1 Damage Assessment** | Vision, anchored to the garage estimate's own line items |
+| **A2 Fraud Intelligence** | 32 deterministic checks + a standing fraud archive |
+| **A3 Incident Reconstruction** | Does the visible damage match the claimant's account? |
+| **A4 Context Verification** | Geocoding, weather, telematics GPS — **no LLM at all** |
+| **A5 Settlement Recommendation** | Reads everything; touches no arithmetic |
 
----
+Then: deterministic guards, IRDAI settlement maths, a live SSE stream to the React dashboard, a PDF
+report and a customer letter.
 
-## Architecture
+## The settlement principle
 
-```
-Policyholder files a claim (phone lookup → policy auto-fill → photos + FIR/estimate/telematics/dash-cam)
-        ↓
-┌──────────────────────────────────────────────────────────────────────┐
-│  KNOWLEDGE BASE (RAG — built once, queried per agent)                 │
-│  ├─ fraud_knowledge   : 15 fraud indicators + 5 known schemes         │
-│  ├─ vehicle_catalog   : OEM / aftermarket parts pricing               │
-│  ├─ claim_history     : 20 historical claims with outcomes            │
-│  └─ policy_documents  : customer policy PDFs                          │
-│        ChromaDB + local ONNX embeddings (all-MiniLM-L6-v2, offline)   │
-└───────────────────────────┬──────────────────────────────────────────┘
-                            │  similarity search per agent
-                            ▼
- A1 Damage Assessment       — Groq Vision (+ optional Bedrock grounding) → estimate-verified damage
- A2 Fraud Intelligence      — 32 deterministic checks (FC-01…FC-32) + fraud KB → fraud score 0–100
- A3 Incident Reconstruction — Groq Vision (photos + dash-cam frames) + claim_history → collision type, damage-vs-story match
- A4 Context Verification    — Nominatim geocode + telematics GPS cross-check + OpenWeatherMap + policy KB → eligibility
- A5 Settlement Recommendation — all findings + precedents → Approve / Reject / Escalate
-        ↓
- Deterministic guards + IRDAI settlement math (+ inflation cap)  →  Human adjudicator review  →  Final decision
-        ↓
- Live SSE stream updates the UI as each agent completes
-```
-
-Full backend/frontend file map: [`docs/file-map.md`](docs/file-map.md).
-
----
-
-## The settlement principle (important)
-
-**Fraud detection and payout calculation are deliberately separate concerns**, with one well-defined exception (the inflation cap below).
-
-Settlement is itemised and deterministic (no LLM), IRDAI-aligned:
+**Fraud detection and payout calculation are separate concerns**, with one defined exception — the
+inflation cap.
 
 ```
 Net Payable = Approved Repair Basis − Depreciation (material-wise) − Deductibles (− Salvage on total loss)
 ```
 
-**Fair-Value Analysis** compares the garage quote to the AI's independent estimate (both on the same GST-inclusive basis) and assigns a band:
+The garage quote is compared against the AI's **independent** fair value (part prices come from live
+web lookups needing two corroborating domains — never from the estimate being audited):
 
-| Variance (garage vs. assessed) | Band | Recommended action | Effect on payout |
-|---|---|---|---|
-| within ±20% | Consistent | Auto Process | Repair basis = garage quote |
-| +20% to +40% | Elevated | Review Required | Repair basis = garage quote (flagged for review) |
-| **> +40%** | **Inflated** | **Investigation Required** | **Repair basis capped at the AI fair value; excess = leakage prevented** |
-
----
-
-## Quick Start (Docker — recommended)
-
-**Prerequisites:** Docker Desktop running.
-
-```bash
-# 1. Configure your API key
-cp .env.example .env
-# Edit .env — add GROQ_API_KEY (free at console.groq.com). Everything else is optional.
-
-# 2. Start everything
-docker compose up --build
-
-# 3. Open the app  → http://localhost:3000
-```
-
-`data/` is bind-mounted, so claims, uploads, the vectorstore, and results persist across restarts. The backend is also exposed directly at `http://localhost:8001` for curl/Postman.
-
-### Build the Knowledge Base (RAG — richer, citation-backed outputs)
-
-```bash
-docker compose exec backend python /app/scripts/build_vectorstore.py
-```
-
-> The app works without this — agents gracefully fall back to reasoning without KB context. Policy PDFs are pre-generated in `data/kb/policies/`.
-
-### Stop / restart
-
-```bash
-docker compose down          # stop (data persists)
-docker compose up            # restart without rebuild (fast)
-docker compose up --build    # rebuild after code changes
-```
-
----
-
-## Manual Setup (local dev, no Docker)
-
-```bash
-# 1. API keys
-cp .env.example .env          # fill in GROQ_API_KEY
-
-# 2. Python deps (from project root)
-python -m venv venv
-venv\Scripts\pip install -r requirements.txt          # Windows
-# source venv/bin/activate && pip install -r requirements.txt   # macOS/Linux
-
-# 3. Node deps
-cd frontend && npm install && cd ..
-
-# 4. Build the KB (one-time, ~30s, fully local)
-python scripts/build_vectorstore.py
-
-# 5. Run (two terminals)
-#  Backend (from /backend):
-..\venv\Scripts\uvicorn main:app --reload --port 8001
-#  Frontend (from /frontend):
-npm run dev
-```
-
-Open **http://localhost:5173**.
-
----
-
-## Roles & Login
-
-Two demo roles (click-to-fill on the login screen):
-
-| Role | Credentials | Can do |
+| Variance | Band | Effect on payout |
 |---|---|---|
-| 👤 **Policyholder** | `user` / `user` | File a claim, see submission confirmation |
-| 🛡 **Adjudicator** | `adjudicator` / `adjudicator` | Claims queue, run investigations, make decisions, analytics |
+| within ±20% | Consistent | Basis = garage quote |
+| +20% to +40% | Review | Basis = garage quote, flagged |
+| **> +40%** | **Investigate** | **Basis capped at the AI fair value; the excess is measured leakage prevented** |
 
-Investigation and decision routes are role-guarded on both the frontend and the API (`X-Role` header). **Run investigations as the adjudicator.**
+When too few parts can be priced independently (< 70% coverage), the bands **abstain** — no verdict
+and no cap, rather than a guess.
 
----
-
-## Demo Walkthrough
-
-The claims queue starts empty — you file claims live and watch the agents run. Generate the three showcase cases' evidence into [`test/`](test/):
+## Quick start (Docker)
 
 ```bash
-python scripts/generate_test_cases.py
+cp .env.example .env          # add GROQ_API_KEY (free at console.groq.com); the rest is optional
+docker compose up --build     # → http://localhost:3000
 ```
 
-Each case folder has its own step-by-step `README.md` (there is no single top-level `test/README.md`).
-The 3 cases, their customers, and expected outcomes are documented in
-[CLAUDE.md's demo table](CLAUDE.md#demo-customers--the-3-showcase-cases) — check there rather than
-here, since that's the version kept in sync with the actual fixture data.
+Log in as `adjudicator` / `adjudicator` (or `user` / `user` to file only).
 
-**Steps:** log in as **adjudicator** → *New Claim* → enter the phone (policy auto-fills) → fill incident details per the case's `README.md` → upload the listed files (**leave the garage-amount field blank** so the estimate PDF drives the figure) → open the claim → **Start Investigation** → watch the 5 agents stream → use the adjuster panel to decide, download the PDF report, or draft the customer letter.
+**Optional — build the RAG knowledge base** (richer, citation-backed output; ~30s, fully local).
+Run it on the **host**, not in the container: `dev/` is not copied into the image, and `data/` is
+bind-mounted so the container picks the result up.
 
----
-
-## Decision logic & guardrails
-
-The Agent-5 LLM only **recommends**. Deterministic rules override it:
-
-- **Policy expired / pre-inception** → forced **Reject** (coverage is a binary fact).
-- **Damage doesn't match the story** (reconstruction) → auto-approval **blocked → Escalate**.
-- **Low agent confidence or failed image-quality / authenticity gate** → routed to **Pending Review**.
-- **High-value Escalate** (above the surveyor threshold) → **Survey Required**.
-
-The fraud label is derived from the Python-authoritative score (`<40 Low · 40–69 Medium · 70+ High`) so it always agrees with the Approve / Escalate / Reject bands.
-
----
-
-## Data, privacy & security
-
-- **Third-party transmission:** agent calls send claim data to Groq (US); Context Verification sends `incident_location` to Nominatim and (optionally) OpenWeatherMap; Bedrock grounding (if configured) sends damage photos to AWS.
-- **PII masking before LLM calls** — `services/pii.py` masks `phone` and `claimant` for the two agents that embed the full claim in their prompt.
-- **Encryption at rest** — `services/crypto.py` (Fernet/AES via `ENCRYPTION_KEY`) transparently encrypts the `claimant` and `phone` columns in `claims.csv`. Without a key the app still runs (plaintext).
-- **Token observability** — `services/token_tracker.py` logs every Groq call to `data/token_usage.csv` (git-ignored), surfaced on the Analytics page against the free-tier caps.
-- **Photo authenticity** — three independent signals (vision-model flags, local EXIF check, local AI-forensics model) feed the fraud engine and the image-quality gate.
-
-Full detail: [CLAUDE.md's "Data Residency & PII" section](CLAUDE.md#data-residency--pii).
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|---|---|
-| AI / LLM | Groq — Llama 3.3 70B (text) + Llama 4 Scout 17B (vision); optional AWS Bedrock (Nova/Qwen3-VL) for grounding |
-| RAG | ChromaDB + local ONNX `all-MiniLM-L6-v2` embeddings (fully offline) |
-| Backend | FastAPI + Python 3.10+, SSE for live agent streaming |
-| Frontend | React 19 + Vite + Tailwind CSS 4 + Recharts |
-| Storage | Local CSV + JSON files (no database) |
-| Geocoding / Weather | Nominatim (no key) + OpenWeatherMap (optional) |
-| PDF | fpdf2 (generation) · PyMuPDF/fitz (parsing) · OpenCV (dash-cam frames) |
-| Container | Docker Compose + nginx |
-
----
-
-## Project Structure
-
-Full annotated file map: **[`docs/file-map.md`](docs/file-map.md)**. Top level:
-
-```
-backend/    FastAPI app, orchestrator, 5 agents, services/ (LLM client, Bedrock grounding,
-            pricing, settlement math, fraud intel, document/telematics/video parsing, PDF report)
-frontend/   React 19 app — pages/ + components/ (investigation workflow, evidence panel, analytics)
-data/       claims.csv (empty at rest), policies.csv, kb/ (fraud/vehicle/history/policy KB), vectorstore/
-scripts/    reset_claims.py, generate_test_cases.py, add_demo_exif.py — the only 3 in this branch
-docs/       detailed reference docs (architecture reviews, changelog, costing, presentation content)
-test/       showcase demo assets + per-case README (you add photos / dash-cam)
+```bash
+python dev/scripts/build_vectorstore.py
 ```
 
----
+```bash
+docker compose down           # stop (data persists in ./data)
+docker compose up             # restart, no rebuild
+docker compose up --build     # rebuild after code changes
+```
 
-*Runs entirely on a laptop. No cloud, no database, no external deployment needed.*
+## Manual setup (no Docker)
+
+```bash
+cp .env.example .env
+python -m venv venv && venv\Scripts\pip install -r requirements.txt   # Windows
+# python3 -m venv venv && venv/bin/pip install -r requirements.txt    # macOS / Linux
+cd frontend && npm install && cd ..
+python dev/scripts/build_vectorstore.py        # optional
+
+# two terminals:
+cd backend && ..\venv\Scripts\uvicorn main:app --reload --port 8001
+cd frontend && npm run dev
+```
+
+## Running the demo
+
+```bash
+python dev/scripts/generate_test_cases.py   # refreshes incident dates — run this first
+python dev/scripts/data_sanity.py           # must be 0 FAIL before you present
+```
+
+Then open **New Claim** and click one of the four demo buttons: it fills that case's details and
+attaches its documents. Review, Submit, then Investigate as an adjudicator.
+
+Five showcase cases give one clean outcome each — **Approve · Escalate · Reject · Escalate ·
+Reject(at the gate)** — with three different fraud mechanisms. Per-case detail in
+`data/demo/{n}-.../README.md`.
+
+> `data_sanity.py` is the pre-demo check that matters. It verifies the model IDs are actually
+> servable (Groq **and** Bedrock), the fixtures match `policies.csv`, the fraud-archive linkages
+> that carry 30-point checks are intact, and that no claim on disk was decided on a failed agent.
+
+## Layout
+
+```
+backend/   FastAPI — routes, 5 agents, services
+data/      everything the running app reads or writes (incl. demo/ fixtures, config/)
+frontend/  React + Vite + Tailwind
+dev/       scripts/ and tests/ — not shipped in the Docker image
+docs/      reference + diagrams
+```
+
+- **[CLAUDE.md](CLAUDE.md)** — architecture, key decisions and gotchas (start here to work on it)
+- **[docs/file-map.md](docs/file-map.md)** — where everything lives, and which paths are load-bearing
+- **[docs/costs.md](docs/costs.md)** — ≈ ₹1.40–₹2.40 per investigation, and why
+- **[docs/irdai-compliance.md](docs/irdai-compliance.md)** — the IRDAI register
+
+## Honest limitations
+
+- Claim text and damage photos are sent to **Groq (US-hosted)**; there is no DPA for this use case.
+  Uploaded documents stay in `ap-south-1`. This is a residency-plus-DPA argument, not "nothing
+  leaves the machine".
+- The free tier is **demo-scale**; a real pilot exhausts it in hours.
+- Prompt-injection defence on image prompts is mitigation, not a guarantee.
+- The AI **stands in for** a licensed surveyor's acts — it is not one, and every surface says so.
+- `DEMO_MODE` defaults on and serves fixture files over an unauthenticated route. **Set
+  `DEMO_MODE=false` in any real deployment.**

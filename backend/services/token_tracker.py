@@ -48,7 +48,7 @@ DAILY_VISION_REQUEST_CAP = 1000
 #
 # `kind` drives the free-tier cap split, so it must track llm_client.py /
 # config.py rather than being guessed from the name.
-RATES_VERIFIED_ON = "2026-08-19"
+RATES_VERIFIED_ON = "2026-09-18"
 
 MODEL_RATES: dict[str, dict] = {
     # Groq — text agents (A2 fraud, A4 context, A5 settlement) and document
@@ -73,15 +73,29 @@ MODEL_RATES: dict[str, dict] = {
     # Groq — vision fallback only; fires when a Bedrock vision call fails.
     "qwen/qwen3.6-27b": {
         "provider": "groq", "kind": "vision", "input": 0.30, "output": 0.50},
+    # AWS Bedrock — the primary TEXT path (A2 fraud, A5 settlement, document
+    # field extraction, and ask_json's repair pass). Same open weights as
+    # openai/gpt-oss-120b above; the rate differs because the provider does.
+    "openai.gpt-oss-120b-1:0": {
+        "provider": "bedrock", "kind": "text", "input": 0.18, "output": 0.71},
     # AWS Bedrock ap-south-1 on-demand — the primary vision path (A1 damage,
     # A3 reconstruction, document authenticity).
+    #
+    # CORRECTED 2026-09-18. These three carried us-east-1 prices while every
+    # call this project makes bills in ap-south-1 — 0.53/2.66 is EXACTLY the
+    # us-east-1 figure, so it was a region mix-up rather than a stale quote, and
+    # it under-reported Bedrock spend by ~17% on every FinOps surface. Verified
+    # against the AWS Pricing API (ServiceCode=AmazonBedrock, regionCode=
+    # ap-south-1). Cost is recomputed on read, so this also re-prices history.
     "qwen.qwen3-vl-235b-a22b": {
-        "provider": "bedrock", "kind": "vision", "input": 0.53, "output": 2.66},
-    # AWS Bedrock — document field extraction under DOC_INFERENCE_PROVIDER=bedrock.
+        "provider": "bedrock", "kind": "vision", "input": 0.62, "output": 3.13},
+    # AWS Bedrock — available for document field extraction; superseded as the
+    # default by openai.gpt-oss-120b-1:0, which is both cheaper and the same
+    # weights the Groq path used (see config.BEDROCK_DOC_MODEL).
     "qwen.qwen3-235b-a22b-2507-v1:0": {
-        "provider": "bedrock", "kind": "text", "input": 0.22, "output": 0.88},
+        "provider": "bedrock", "kind": "text", "input": 0.26, "output": 1.04},
     "amazon.nova-lite-v1:0": {
-        "provider": "bedrock", "kind": "vision", "input": 0.06, "output": 0.24},
+        "provider": "bedrock", "kind": "vision", "input": 0.071, "output": 0.284},
 }
 
 # Per-PAGE services. Textract DetectDocumentText is $1.50 per 1,000 pages —

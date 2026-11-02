@@ -40,5 +40,21 @@ GET  /api/fraud/claims         [adjudicator]   every investigated claim projecte
                                                posture + the FRAUD_CHECK_GROUPS taxonomy.
                                                Detail reuses GET /api/claims/{id}.
 GET  /api/sample-telematics/{filename}
+GET  /api/demo/cases                           [DEMO_MODE] showcase cases for the New Claim
+                                               quick-fill buttons — field values with incident
+                                               dates resolved against today, plus a file list.
+                                               Returns {"cases": []} when DEMO_MODE=false or the
+                                               manifest was never generated, so the panel simply
+                                               does not render.
+GET  /api/demo/cases/{case_id}/files/{file_key}
+                                               [DEMO_MODE] one fixture from test/, served under
+                                               its manifest `serve_as` name. `file_key` is a
+                                               manifest key, never a path.
 GET  /uploads/{claim_id}/...                   StaticFiles
 ```
+
+**Demo routes.** Both are gated on `DEMO_MODE` (default true — set `DEMO_MODE=false` in any real
+deployment; they serve files from `test/` unauthenticated). Data comes from
+`data/config/demo_cases.json`, which is **generated** by `scripts/generate_test_cases.py` in the
+same run that writes the fixture PDFs — the incident dates and estimate totals move whenever a
+case is recalibrated, so a hand-maintained copy would drift. See `backend/services/demo_cases.py`.

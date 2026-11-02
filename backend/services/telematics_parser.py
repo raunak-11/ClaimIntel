@@ -3,7 +3,7 @@ insurer telematics box would normally push automatically) into a normalized
 dict consumed by Context Verification, Fraud Intelligence, and Incident
 Reconstruction. There's no real hardware in this project; the demo fixtures are committed in
 data/kb/sample_telematics/ (git-tracked, not generated), and Case 3's variant
-with live timestamps is written by scripts/generate_test_cases.py.
+with live timestamps is written by dev/scripts/generate_test_cases.py.
 """
 
 import csv

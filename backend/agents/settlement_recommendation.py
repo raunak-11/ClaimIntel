@@ -35,6 +35,9 @@ depreciation schedule and deductibles):
 - APPROVE:   fraud_score < 40 AND damage consistent with story AND location plausible
 - ESCALATE:  fraud_score 40–69 OR mixed signals OR incomplete documentation
 - REJECT:    fraud_score >= 70 OR damage severely inconsistent OR known fraud scheme matched
+- Location: location_match_precision "approximate" means the town/area named in the claimed
+  location was found on the map but the exact spot (e.g. a highway stretch) was not — that IS a
+  plausible, verified location, not missing documentation.
 
 Note on recommended_settlement: services/settlement_calc.py recomputes the actual payout
 deterministically from Agent 1's figures (depreciation, deductibles, GST, IDV cap) and
@@ -130,7 +133,7 @@ class SettlementRecommendationAgent(BaseAgent):
         ])
         ctx = agents.get("context_verification", {})
         ctx_summary = _trim(ctx, [
-            "location_verified", "weather_at_investigation_time",
+            "location_verified", "location_match_precision", "weather_at_investigation_time",
             "weather_verification_note", "policy_coverage_note",
         ])
 

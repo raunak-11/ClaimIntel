@@ -1,3 +1,5 @@
+import re
+import time
 from datetime import datetime
 from math import asin, cos, radians, sin, sqrt
 from typing import Any
@@ -19,7 +21,73 @@ OWM_URL = "https://api.openweathermap.org/data/2.5/weather"
 _GEOCODE_CACHE: dict[str, dict | None] = {}
 
 
+# Fallback-query shaping. Indian claim locations are written the way people
+# give directions — "NH-32, near Ulundurpet, Tamil Nadu", "Near Ramanujan IT
+# City Parking, Perungudi, Chennai" — and Nominatim matches none of them as
+# typed (verified live 2026-09-11 on three of the four demo claims), while the
+# town inside each ("Ulundurpet, Tamil Nadu", "Perungudi, Chennai") resolves at
+# once. The miss left the location "unverified", which Agent 5 read as a mixed
+# signal (a clean claim escalated), and blanked the telematics GPS cross-check,
+# which took FC-22 and FC-27 down with it (a staged claim lost 38 points).
+_ROAD_CODE_RE = re.compile(r"^(?:NH|SH|MDR|ODR)[\s\-]*\d+[A-Z]?$", re.IGNORECASE)
+_DIRECTION_WORD_RE = re.compile(
+    r"^(?:near|nr\.?|opp\.?|opposite|behind|beside|next to|close to|after|before|"
+    r"in front of|towards?)\s+", re.IGNORECASE)
+_MAX_FALLBACK_QUERIES = 4
+# Nominatim's usage policy is one request per second.
+_NOMINATIM_INTERVAL_S = 1.0
+# A fallback match must be a town, suburb or anything finer. A district (10) or
+# state (8) centre can sit 50-100 km from the incident — a "verified" location
+# that coarse would verify nothing.
+_MIN_FALLBACK_PLACE_RANK = 16
+
+
+def _fallback_queries(location: str) -> list[str]:
+    """Progressively simpler versions of `location`, most specific first.
+
+    Drops road codes and direction words from each segment, then peels
+    leading segments off one at a time, never going below two segments (a
+    lone "Tamil Nadu" or "Chennai" is not a location check).
+    """
+    segs = []
+    for raw in (location or "").split(","):
+        seg = raw.strip()
+        if not seg or _ROAD_CODE_RE.match(seg):
+            continue
+        seg = _DIRECTION_WORD_RE.sub("", seg).strip()
+        if seg:
+            segs.append(seg)
+    out: list[str] = []
+    original = (location or "").strip().lower()
+    for start in range(len(segs)):
+        if len(segs) - start < 2:
+            break
+        q = ", ".join(segs[start:])
+        if q.lower() != original and q not in out:
+            out.append(q)
+    return out[:_MAX_FALLBACK_QUERIES]
+
+
+def _nominatim(query: str) -> dict | None:
+    r = httpx.get(
+        NOMINATIM_URL,
+        params={"q": query, "format": "json", "limit": 1},
+        headers={"User-Agent": "ClaimIntel/1.0"},
+        timeout=5,
+    )
+    data = r.json()
+    return data[0] if data else None
+
+
 def _geocode(location: str) -> dict | None:
+    """Geocode a free-text incident location.
+
+    Returns {lat, lon, display, precision, matched_query} or None. `precision`
+    is "exact" when the location as typed matched, "approximate" when only a
+    simplified form did (see _fallback_queries) — callers widen the GPS
+    tolerance for an approximate match rather than treat a town centre as the
+    exact spot.
+    """
     key = (location or "").strip().lower()
     if key in _GEOCODE_CACHE:
         # Return a copy so callers can never mutate the shared cached entry.
@@ -27,19 +95,35 @@ def _geocode(location: str) -> dict | None:
         return dict(cached) if cached else None
     result: dict | None = None
     try:
-        r = httpx.get(
-            NOMINATIM_URL,
-            params={"q": location, "format": "json", "limit": 1},
-            headers={"User-Agent": "ClaimIntel/1.0"},
-            timeout=5,
-        )
-        data = r.json()
-        if data:
+        hit = _nominatim(location)
+        if hit:
             result = {
-                "lat": float(data[0]["lat"]),
-                "lon": float(data[0]["lon"]),
-                "display": data[0]["display_name"],
+                "lat": float(hit["lat"]),
+                "lon": float(hit["lon"]),
+                "display": hit["display_name"],
+                "precision": "exact",
+                "matched_query": location,
             }
+        else:
+            for query in _fallback_queries(location):
+                time.sleep(_NOMINATIM_INTERVAL_S)
+                hit = _nominatim(query)
+                if not hit:
+                    continue
+                try:
+                    rank = int(hit.get("place_rank") or 0)
+                except (TypeError, ValueError):
+                    rank = 0
+                if rank < _MIN_FALLBACK_PLACE_RANK:
+                    continue
+                result = {
+                    "lat": float(hit["lat"]),
+                    "lon": float(hit["lon"]),
+                    "display": hit["display_name"],
+                    "precision": "approximate",
+                    "matched_query": query,
+                }
+                break
     except Exception:
         result = None
     # Only cache successful lookups — a transient network failure shouldn't
@@ -142,6 +226,12 @@ def _check_policy_validity(claim: dict) -> str | None:
 
 
 _GPS_MISMATCH_THRESHOLD_KM = 2.0
+# When the location only geocoded approximately (to the town named in it), the
+# point is the town centre, not the incident spot — "NH-32 near Ulundurpet" can
+# be 10-15 km out along the highway. A 2 km tolerance there would flag honest
+# claims; 25 km still catches a trail that is in another city (the staged demo
+# claim's is 1,039 km away).
+_GPS_APPROX_THRESHOLD_KM = 25.0
 
 
 def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -158,9 +248,11 @@ def _check_gps_trail(telematics: dict | None, geocoded: dict | None) -> dict:
     """
     trail = (telematics or {}).get("gps_trail") or []
     if not trail:
-        return {"gps_trail_available": False, "gps_location_match": None, "gps_distance_km": None}
+        return {"gps_trail_available": False, "gps_location_match": None,
+                "gps_distance_km": None, "gps_threshold_km": None}
     if not geocoded:
-        return {"gps_trail_available": True, "gps_location_match": None, "gps_distance_km": None}
+        return {"gps_trail_available": True, "gps_location_match": None,
+                "gps_distance_km": None, "gps_threshold_km": None}
 
     # Nearest point in the trail to the claimed location — the trail may span
     # the approach to the incident, not just the impact point itself.
@@ -171,15 +263,19 @@ def _check_gps_trail(telematics: dict | None, geocoded: dict | None) -> dict:
         # ValueError — which crashed Agent 4 entirely and silently blanked
         # policy_coverage_note downstream (see docs/audit.md A4). A parsing
         # quirk in one optional evidence file must not take out eligibility.
-        return {"gps_trail_available": True, "gps_location_match": None, "gps_distance_km": None}
+        return {"gps_trail_available": True, "gps_location_match": None,
+                "gps_distance_km": None, "gps_threshold_km": None}
     nearest_km = min(
         _haversine_km(geocoded["lat"], geocoded["lon"], p["lat"], p["lon"])
         for p in pts
     )
+    threshold = (_GPS_APPROX_THRESHOLD_KM if geocoded.get("precision") == "approximate"
+                 else _GPS_MISMATCH_THRESHOLD_KM)
     return {
         "gps_trail_available": True,
-        "gps_location_match": nearest_km <= _GPS_MISMATCH_THRESHOLD_KM,
+        "gps_location_match": nearest_km <= threshold,
         "gps_distance_km": round(nearest_km, 2),
+        "gps_threshold_km": threshold,
     }
 
 
@@ -225,6 +321,13 @@ class ContextVerificationAgent(BaseAgent):
         # Geocoding
         geo = _geocode(location)
         location_verified = geo is not None
+        precision = geo.get("precision", "exact") if geo else None
+        if not geo:
+            location_label = "Unverified"
+        elif precision == "approximate":
+            location_label = f"Verified ✓ (approximate — matched '{geo.get('matched_query')}')"
+        else:
+            location_label = "Verified ✓"
 
         # Weather — current conditions only; see _weather_verification_note().
         weather = "Unknown"
@@ -249,6 +352,10 @@ class ContextVerificationAgent(BaseAgent):
         return {
             "status": "completed",
             "location_verified": location_verified,
+            # "exact" = the location as typed resolved; "approximate" = only the
+            # town/area named in it did (see _geocode). None when unverified.
+            "location_match_precision": precision,
+            "geocode_query": geo.get("matched_query") if geo else None,
             "geocoded_location": geo.get("display", location) if geo else location,
             "coordinates": {"lat": geo["lat"], "lon": geo["lon"]} if geo else None,
             # Renamed from "weather" — this is CURRENT weather at investigation
@@ -259,14 +366,15 @@ class ContextVerificationAgent(BaseAgent):
             "gps_trail_available": gps_check["gps_trail_available"],
             "gps_location_match": gps_check["gps_location_match"],
             "gps_distance_km": gps_check["gps_distance_km"],
+            "gps_threshold_km": gps_check.get("gps_threshold_km"),
             "policy_coverage_note": coverage_note,
-            "policy_document_excerpt": policy_summary or "Policy document not indexed — run scripts/build_vectorstore.py",
+            "policy_document_excerpt": policy_summary or "Policy document not indexed — run dev/scripts/build_vectorstore.py",
             "policy_document_full": policy_full,
             "summary": (
                 f"Weather (current, not historical): {weather} | "
-                f"Location: {'Verified ✓' if location_verified else 'Unverified'} | "
+                f"Location: {location_label} | "
                 f"Policy: {coverage_note[:60]}..."
                 if len(coverage_note) > 60 else
-                f"Weather (current, not historical): {weather} | Location: {'Verified ✓' if location_verified else 'Unverified'} | Policy: {coverage_note}"
+                f"Weather (current, not historical): {weather} | Location: {location_label} | Policy: {coverage_note}"
             ),
         }

@@ -6,7 +6,7 @@ image reading as an instruction to the model (a doctored caption, an overlay
 saying "ignore previous instructions", a QR code, a fake system-prompt-style
 block) — an emerging, realistic attack surface for any vision-LLM claims
 tool. This is a mitigation, not a guarantee: it should be red-teamed with
-adversarial test images before any real pilot (see newupdates.md item #21).
+adversarial test images before any real pilot (see docs/newupdates.md item #21).
 """
 
 IMAGE_INJECTION_DEFENSE = """

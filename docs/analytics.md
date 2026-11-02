@@ -28,7 +28,7 @@ components under `pages/analytics/`:
 
 **Metric changes made at the same time:**
 
-- **`leakage_prevented` narrowed to the honest definition** (§16 of `newplan.md`): inflation
+- **`leakage_prevented` narrowed to the honest definition** (§16 of `architecture-v2.md`): inflation
   disallowed on claims that were *paid*. v1 summed the full ask of every rejected claim, which
   counted legitimately-rejected genuine claims as savings — and made this figure numerically
   identical to fraud exposure, so the dashboard printed the same rupees twice under two names.

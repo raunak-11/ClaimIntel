@@ -1,0 +1,525 @@
+<mxfile host="app.diagrams.net" agent="ClaimIntel" type="device">
+  <diagram id="claimintel-process-flow" name="ClaimIntel Process Flow">
+    <mxGraphModel dx="1600" dy="900" grid="0" gridSize="10" guides="1" tooltips="1" connect="1"
+        arrows="1" fold="1" page="1" pageScale="1" pageWidth="3300" pageHeight="2100"
+        background="#FFFFFF" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="c1" value="ClaimIntel" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=bottom;fontSize=30;fontStyle=1;fontColor=#12203A;fontFamily=Helvetica;" vertex="1" parent="1">
+          <mxGeometry x="40" y="26" width="340" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="c2" value="Agentic Motor-Claim Triage" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=bottom;fontSize=20;fontColor=#6B7891;fontFamily=Helvetica;" vertex="1" parent="1">
+          <mxGeometry x="280" y="26" width="560" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="c3" value="A first notice of loss becomes a settled, auditable decision from the claim&#x27;s own evidence. A deterministic gate screens first, five agents investigate the photos and paperwork, and every figure that touches money is computed by versioned Python &amp;#8212; never by a model." style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=13;fontColor=#3C4A63;fontFamily=Helvetica;" vertex="1" parent="1">
+          <mxGeometry x="40" y="68" width="1500" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="c4" value="&lt;div style=&#x27;font-size:26px;font-weight:bold;color:#12203A&#x27;&gt;5&lt;/div&gt;&lt;div style=&#x27;font-size:10px;letter-spacing:1.5px;color:#6B7891;margin-top:4px&#x27;&gt;AI AGENTS&lt;/div&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Helvetica;" vertex="1" parent="1">
+          <mxGeometry x="2412" y="34" width="200" height="72" as="geometry"/>
+        </mxCell>
+        <mxCell id="c5" value="&lt;div style=&#x27;font-size:26px;font-weight:bold;color:#12203A&#x27;&gt;32&lt;/div&gt;&lt;div style=&#x27;font-size:10px;letter-spacing:1.5px;color:#6B7891;margin-top:4px&#x27;&gt;FRAUD CHECKS&lt;/div&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Helvetica;" vertex="1" parent="1">
+          <mxGeometry x="2622" y="34" width="200" height="72" as="geometry"/>
+        </mxCell>
+        <mxCell id="c6" value="&lt;div style=&#x27;font-size:26px;font-weight:bold;color:#12203A&#x27;&gt;0&lt;/div&gt;&lt;div style=&#x27;font-size:10px;letter-spacing:1.5px;color:#6B7891;margin-top:4px&#x27;&gt;MODEL-SET RUPEES&lt;/div&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Helvetica;" vertex="1" parent="1">
+          <mxGeometry x="2832" y="34" width="200" height="72" as="geometry"/>
+        </mxCell>
+        <mxCell id="c7" value="&lt;div style=&#x27;font-size:26px;font-weight:bold;color:#12203A&#x27;&gt;554&lt;/div&gt;&lt;div style=&#x27;font-size:10px;letter-spacing:1.5px;color:#6B7891;margin-top:4px&#x27;&gt;TESTS&lt;/div&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Helvetica;" vertex="1" parent="1">
+          <mxGeometry x="3042" y="34" width="200" height="72" as="geometry"/>
+        </mxCell>
+        <mxCell id="c8" value="" style="line;strokeWidth=2;html=1;strokeColor=#12203A;" vertex="1" parent="1">
+          <mxGeometry x="40" y="118" width="3212" height="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="c9" value="CLAIM JOURNEY &amp;#8212; FIRST NOTICE OF LOSS TO SETTLEMENT" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=12;fontColor=#6B7891;fontFamily=Helvetica;letterSpacing=2;" vertex="1" parent="1">
+          <mxGeometry x="40" y="132" width="900" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c10" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D2DAE7;strokeWidth=1;verticalAlign=top;align=left;container=1;collapsible=0;childLayout=none;movable=1;resizable=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="162" width="370" height="372" as="geometry"/>
+        </mxCell>
+        <mxCell id="c11" value="1  INTAKE" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#1F5FA9;strokeColor=none;fontColor=#FFFFFF;fontStyle=1;fontSize=15;align=left;verticalAlign=middle;spacingLeft=12;fontFamily=Helvetica;movable=0;resizable=0;deletable=1;" vertex="1" parent="c10">
+          <mxGeometry x="0" y="0" width="370" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="c12" value="&lt;ul style=&#x27;margin:0;padding-left:16px;text-align:left;font-size:12px;line-height:1.35;color:#3C4A63&#x27;&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Phone lookup pulls the &lt;b&gt;policy on record&lt;/b&gt;&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Claim form auto-fills from the DL / RC photo&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Evidence in: damage photos, FIR, garage estimate, DL, RC, telematics CSV, dash-cam&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Claim ID issued &amp;#8212; never reused&lt;/li&gt;&lt;/ul&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c10">
+          <mxGeometry x="10" y="42" width="350" height="304" as="geometry"/>
+        </mxCell>
+        <mxCell id="c13" value="" style="line;strokeWidth=1;html=1;strokeColor=#D2DAE7;movable=0;resizable=0;" vertex="1" parent="c10">
+          <mxGeometry x="0" y="346" width="370" height="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="c14" value="CLM-YYYY-MM-000001" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=10;fontColor=#6B7891;fontFamily=Helvetica;spacingLeft=12;movable=0;resizable=0;" vertex="1" parent="c10">
+          <mxGeometry x="0" y="346" width="370" height="26" as="geometry"/>
+        </mxCell>
+        <mxCell id="c15" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D2DAE7;strokeWidth=1;verticalAlign=top;align=left;container=1;collapsible=0;childLayout=none;movable=1;resizable=1;" vertex="1" parent="1">
+          <mxGeometry x="446" y="162" width="370" height="372" as="geometry"/>
+        </mxCell>
+        <mxCell id="c16" value="2  G0 ELIGIBILITY GATE" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#B0700D;strokeColor=none;fontColor=#FFFFFF;fontStyle=1;fontSize=15;align=left;verticalAlign=middle;spacingLeft=12;fontFamily=Helvetica;movable=0;resizable=0;deletable=1;" vertex="1" parent="c15">
+          <mxGeometry x="0" y="0" width="370" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="c17" value="&lt;ul style=&#x27;margin:0;padding-left:16px;text-align:left;font-size:12px;line-height:1.35;color:#3C4A63&#x27;&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;&lt;b&gt;Deterministic &amp;#8212; no model call&lt;/b&gt;&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;13 metadata checks on the claim record&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Was the policy &lt;b&gt;in force&lt;/b&gt; on the incident date?&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Does the &lt;b&gt;cover&lt;/b&gt; extend to this loss? A third-party-only policy cannot file own damage&lt;/li&gt;&lt;/ul&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c15">
+          <mxGeometry x="10" y="42" width="350" height="276" as="geometry"/>
+        </mxCell>
+        <mxCell id="c18" value="&lt;b&gt;HARD STOP&lt;/b&gt; &amp;#8212; a rejection here costs zero model calls, and the letter cites the actual reason." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FCF3F4;strokeColor=#B4283C;dashed=1;dashPattern=4 3;align=left;verticalAlign=middle;fontSize=11;fontColor=#B4283C;fontFamily=Helvetica;spacingLeft=6;spacingRight=6;movable=0;" vertex="1" parent="c15">
+          <mxGeometry x="10" y="314" width="350" height="48" as="geometry"/>
+        </mxCell>
+        <mxCell id="c19" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D2DAE7;strokeWidth=1;verticalAlign=top;align=left;container=1;collapsible=0;childLayout=none;movable=1;resizable=1;" vertex="1" parent="1">
+          <mxGeometry x="852" y="162" width="370" height="372" as="geometry"/>
+        </mxCell>
+        <mxCell id="c20" value="3  EVIDENCE PARSING" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#0F7A73;strokeColor=none;fontColor=#FFFFFF;fontStyle=1;fontSize=15;align=left;verticalAlign=middle;spacingLeft=12;fontFamily=Helvetica;movable=0;resizable=0;deletable=1;" vertex="1" parent="c19">
+          <mxGeometry x="0" y="0" width="370" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="c21" value="&lt;ul style=&#x27;margin:0;padding-left:16px;text-align:left;font-size:12px;line-height:1.35;color:#3C4A63&#x27;&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Born-digital PDF reads &lt;b&gt;its own text layer&lt;/b&gt; &amp;#8212; free, exact, stays on the machine&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Scans go to OCR; line structure is the contract&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Model extraction, then an authenticity read&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Telematics GPS and dash-cam frames decoded&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;&lt;b&gt;PII masked at every egress&lt;/b&gt;&lt;/li&gt;&lt;/ul&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c19">
+          <mxGeometry x="10" y="42" width="350" height="304" as="geometry"/>
+        </mxCell>
+        <mxCell id="c22" value="" style="line;strokeWidth=1;html=1;strokeColor=#D2DAE7;movable=0;resizable=0;" vertex="1" parent="c19">
+          <mxGeometry x="0" y="346" width="370" height="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="c23" value="&amp;#8594; shared claim context" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=10;fontColor=#6B7891;fontFamily=Helvetica;spacingLeft=12;movable=0;resizable=0;" vertex="1" parent="c19">
+          <mxGeometry x="0" y="346" width="370" height="26" as="geometry"/>
+        </mxCell>
+        <mxCell id="c24" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D2DAE7;strokeWidth=1;verticalAlign=top;align=left;container=1;collapsible=0;childLayout=none;movable=1;resizable=1;" vertex="1" parent="1">
+          <mxGeometry x="1258" y="162" width="370" height="372" as="geometry"/>
+        </mxCell>
+        <mxCell id="c25" value="4  CONTEXT CHECKPOINT" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#4B3FA3;strokeColor=none;fontColor=#FFFFFF;fontStyle=1;fontSize=15;align=left;verticalAlign=middle;spacingLeft=12;fontFamily=Helvetica;movable=0;resizable=0;deletable=1;" vertex="1" parent="c24">
+          <mxGeometry x="0" y="0" width="370" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="c26" value="&lt;ul style=&#x27;margin:0;padding-left:16px;text-align:left;font-size:12px;line-height:1.35;color:#3C4A63&#x27;&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Parsed docs, policy and claim assembled &lt;b&gt;once&lt;/b&gt;&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;All five agents read the same context&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;The damage read is keyed on a hash of image bytes + estimate line items + claim fields&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;&lt;b&gt;Identical evidence replays&lt;/b&gt;; a changed photo re-reads&lt;/li&gt;&lt;/ul&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c24">
+          <mxGeometry x="10" y="42" width="350" height="304" as="geometry"/>
+        </mxCell>
+        <mxCell id="c27" value="" style="line;strokeWidth=1;html=1;strokeColor=#D2DAE7;movable=0;resizable=0;" vertex="1" parent="c24">
+          <mxGeometry x="0" y="346" width="370" height="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="c28" value="no re-parsing &amp;#183; no re-billing" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=10;fontColor=#6B7891;fontFamily=Helvetica;spacingLeft=12;movable=0;resizable=0;" vertex="1" parent="c24">
+          <mxGeometry x="0" y="346" width="370" height="26" as="geometry"/>
+        </mxCell>
+        <mxCell id="c29" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D2DAE7;strokeWidth=1;verticalAlign=top;align=left;container=1;collapsible=0;childLayout=none;movable=1;resizable=1;" vertex="1" parent="1">
+          <mxGeometry x="1664" y="162" width="370" height="372" as="geometry"/>
+        </mxCell>
+        <mxCell id="c30" value="5  INVESTIGATION" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#2A4D93;strokeColor=none;fontColor=#FFFFFF;fontStyle=1;fontSize=15;align=left;verticalAlign=middle;spacingLeft=12;fontFamily=Helvetica;movable=0;resizable=0;deletable=1;" vertex="1" parent="c29">
+          <mxGeometry x="0" y="0" width="370" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="c31" value="&lt;ul style=&#x27;margin:0;padding-left:16px;text-align:left;font-size:12px;line-height:1.35;color:#3C4A63&#x27;&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;A1&amp;#8211;A5 run async over the shared context&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Each agent&#x27;s verdict streams to the adjudicator as it lands&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;The claim record is written after every agent, not at the end&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;An errored agent &lt;b&gt;blocks approval&lt;/b&gt; &amp;#8212; it never quietly scores zero&lt;/li&gt;&lt;/ul&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c29">
+          <mxGeometry x="10" y="42" width="350" height="304" as="geometry"/>
+        </mxCell>
+        <mxCell id="c32" value="" style="line;strokeWidth=1;html=1;strokeColor=#D2DAE7;movable=0;resizable=0;" vertex="1" parent="c29">
+          <mxGeometry x="0" y="346" width="370" height="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="c33" value="reload mid-run and rejoin the live pipeline" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=10;fontColor=#6B7891;fontFamily=Helvetica;spacingLeft=12;movable=0;resizable=0;" vertex="1" parent="c29">
+          <mxGeometry x="0" y="346" width="370" height="26" as="geometry"/>
+        </mxCell>
+        <mxCell id="c34" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D2DAE7;strokeWidth=1;verticalAlign=top;align=left;container=1;collapsible=0;childLayout=none;movable=1;resizable=1;" vertex="1" parent="1">
+          <mxGeometry x="2070" y="162" width="370" height="372" as="geometry"/>
+        </mxCell>
+        <mxCell id="c35" value="6  MONEY MATHS" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#1F5FA9;strokeColor=none;fontColor=#FFFFFF;fontStyle=1;fontSize=15;align=left;verticalAlign=middle;spacingLeft=12;fontFamily=Helvetica;movable=0;resizable=0;deletable=1;" vertex="1" parent="c34">
+          <mxGeometry x="0" y="0" width="370" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="c36" value="&lt;ul style=&#x27;margin:0;padding-left:16px;text-align:left;font-size:12px;line-height:1.35;color:#3C4A63&#x27;&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Fraud score = &lt;b&gt;sum of check weights&lt;/b&gt;; the model may move it &amp;#177;15, never past the band&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Parts priced OEM catalogue &amp;#8594; live web &amp;#8594; unpriced. An unpriced part is reported, not invented&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Labour per operation from config&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Net = Basis &amp;#8722; Depreciation &amp;#8722; Deductibles&lt;/li&gt;&lt;/ul&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c34">
+          <mxGeometry x="10" y="42" width="350" height="304" as="geometry"/>
+        </mxCell>
+        <mxCell id="c37" value="" style="line;strokeWidth=1;html=1;strokeColor=#D2DAE7;movable=0;resizable=0;" vertex="1" parent="c34">
+          <mxGeometry x="0" y="346" width="370" height="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="c38" value="Python-authoritative &amp;#183; no LLM" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=10;fontColor=#6B7891;fontFamily=Helvetica;spacingLeft=12;movable=0;resizable=0;" vertex="1" parent="c34">
+          <mxGeometry x="0" y="346" width="370" height="26" as="geometry"/>
+        </mxCell>
+        <mxCell id="c39" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D2DAE7;strokeWidth=1;verticalAlign=top;align=left;container=1;collapsible=0;childLayout=none;movable=1;resizable=1;" vertex="1" parent="1">
+          <mxGeometry x="2476" y="162" width="370" height="372" as="geometry"/>
+        </mxCell>
+        <mxCell id="c40" value="7  GUARDS &amp;amp; DECISION" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#B4283C;strokeColor=none;fontColor=#FFFFFF;fontStyle=1;fontSize=15;align=left;verticalAlign=middle;spacingLeft=12;fontFamily=Helvetica;movable=0;resizable=0;deletable=1;" vertex="1" parent="c39">
+          <mxGeometry x="0" y="0" width="370" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="c41" value="&lt;ul style=&#x27;margin:0;padding-left:16px;text-align:left;font-size:12px;line-height:1.35;color:#3C4A63&#x27;&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;&lt;b&gt;Hard guards override the model&lt;/b&gt;&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Fraud &amp;#8805; 70 &amp;#8594; Reject &amp;#183; 40&amp;#8211;69 &amp;#8594; Escalate&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Damage that contradicts the story &amp;#8594; Escalate&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Quote &amp;gt; 40% over fair value &amp;#8594; capped, the excess booked as prevented leakage&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;&lt;b&gt;The cap runs before the total-loss test&lt;/b&gt;, so an inflated write-off collapses on its own arithmetic&lt;/li&gt;&lt;/ul&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c39">
+          <mxGeometry x="10" y="42" width="350" height="304" as="geometry"/>
+        </mxCell>
+        <mxCell id="c42" value="" style="line;strokeWidth=1;html=1;strokeColor=#D2DAE7;movable=0;resizable=0;" vertex="1" parent="c39">
+          <mxGeometry x="0" y="346" width="370" height="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="c43" value="fails closed" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=10;fontColor=#6B7891;fontFamily=Helvetica;spacingLeft=12;movable=0;resizable=0;" vertex="1" parent="c39">
+          <mxGeometry x="0" y="346" width="370" height="26" as="geometry"/>
+        </mxCell>
+        <mxCell id="c44" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D2DAE7;strokeWidth=1;verticalAlign=top;align=left;container=1;collapsible=0;childLayout=none;movable=1;resizable=1;" vertex="1" parent="1">
+          <mxGeometry x="2882" y="162" width="370" height="372" as="geometry"/>
+        </mxCell>
+        <mxCell id="c45" value="8  DECISION OUT" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#2E7D46;strokeColor=none;fontColor=#FFFFFF;fontStyle=1;fontSize=15;align=left;verticalAlign=middle;spacingLeft=12;fontFamily=Helvetica;movable=0;resizable=0;deletable=1;" vertex="1" parent="c44">
+          <mxGeometry x="0" y="0" width="370" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="c46" value="&lt;ul style=&#x27;margin:0;padding-left:16px;text-align:left;font-size:12px;line-height:1.35;color:#3C4A63&#x27;&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Adjudicator dashboard, damage boxes drawn on the photo&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Surveyor-style PDF report + customer letter&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Every IRDAI clock computed on read, its ruleset hash stamped into the record&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Cost of the claim logged per billable call&lt;/li&gt;&lt;/ul&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c44">
+          <mxGeometry x="10" y="42" width="350" height="304" as="geometry"/>
+        </mxCell>
+        <mxCell id="c47" value="" style="line;strokeWidth=1;html=1;strokeColor=#D2DAE7;movable=0;resizable=0;" vertex="1" parent="c44">
+          <mxGeometry x="0" y="346" width="370" height="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="c48" value="Approve &amp;#183; Escalate &amp;#183; Reject &amp;#183; Pending" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=10;fontColor=#6B7891;fontFamily=Helvetica;spacingLeft=12;movable=0;resizable=0;" vertex="1" parent="c44">
+          <mxGeometry x="0" y="346" width="370" height="26" as="geometry"/>
+        </mxCell>
+        <mxCell id="e49" value="" style="edgeStyle=none;html=1;rounded=0;strokeColor=#12203A;strokeWidth=2;endArrow=block;endFill=1;endSize=6;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="c10" target="c15">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e50" value="" style="edgeStyle=none;html=1;rounded=0;strokeColor=#12203A;strokeWidth=2;endArrow=block;endFill=1;endSize=6;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="c15" target="c19">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e51" value="" style="edgeStyle=none;html=1;rounded=0;strokeColor=#12203A;strokeWidth=2;endArrow=block;endFill=1;endSize=6;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="c19" target="c24">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e52" value="" style="edgeStyle=none;html=1;rounded=0;strokeColor=#12203A;strokeWidth=2;endArrow=block;endFill=1;endSize=6;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="c24" target="c29">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e53" value="" style="edgeStyle=none;html=1;rounded=0;strokeColor=#12203A;strokeWidth=2;endArrow=block;endFill=1;endSize=6;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="c29" target="c34">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e54" value="" style="edgeStyle=none;html=1;rounded=0;strokeColor=#12203A;strokeWidth=2;endArrow=block;endFill=1;endSize=6;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="c34" target="c39">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e55" value="" style="edgeStyle=none;html=1;rounded=0;strokeColor=#12203A;strokeWidth=2;endArrow=block;endFill=1;endSize=6;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="c39" target="c44">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="c56" value="WHAT THE PIPELINE IS BUILT FROM" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=12;fontColor=#6B7891;fontFamily=Helvetica;letterSpacing=2;" vertex="1" parent="1">
+          <mxGeometry x="40" y="566" width="900" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c57" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D2DAE7;strokeWidth=1;verticalAlign=top;align=left;container=1;collapsible=0;childLayout=none;movable=1;resizable=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="596" width="539" height="470" as="geometry"/>
+        </mxCell>
+        <mxCell id="c58" value="KNOWLEDGE BASE  (RAG)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#0F7A73;strokeColor=none;fontColor=#FFFFFF;fontStyle=1;fontSize=15;align=left;verticalAlign=middle;spacingLeft=12;fontFamily=Helvetica;movable=0;resizable=0;deletable=1;" vertex="1" parent="c57">
+          <mxGeometry x="0" y="0" width="539" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="c59" value="&lt;ul style=&#x27;margin:0;padding-left:16px;text-align:left;font-size:12px;line-height:1.35;color:#3C4A63&#x27;&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;&lt;code&gt;fraud_knowledge&lt;/code&gt; &amp;#8212; indicator patterns and the historical fraud archive&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;&lt;code&gt;claim_history&lt;/code&gt; &amp;#8212; what this claimant and this garage did before&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;&lt;code&gt;policy_documents&lt;/code&gt; &amp;#8212; wordings, endorsements, IRDAI glossary&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;ChromaDB with &lt;b&gt;local ONNX embeddings&lt;/b&gt; &amp;#8212; no API, no key, works offline&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;No vector store &amp;#8594; agents still run, just without recall&lt;/li&gt;&lt;/ul&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c57">
+          <mxGeometry x="10" y="42" width="519" height="402" as="geometry"/>
+        </mxCell>
+        <mxCell id="c60" value="" style="line;strokeWidth=1;html=1;strokeColor=#D2DAE7;movable=0;resizable=0;" vertex="1" parent="c57">
+          <mxGeometry x="0" y="444" width="539" height="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="c61" value="data/kb/ &amp;#183; built by dev/scripts/build_vectorstore.py" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=10;fontColor=#6B7891;fontFamily=Helvetica;spacingLeft=12;movable=0;resizable=0;" vertex="1" parent="c57">
+          <mxGeometry x="0" y="444" width="539" height="26" as="geometry"/>
+        </mxCell>
+        <mxCell id="c62" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D2DAE7;strokeWidth=1;verticalAlign=top;align=left;container=1;collapsible=0;childLayout=none;movable=1;resizable=1;" vertex="1" parent="1">
+          <mxGeometry x="603" y="596" width="539" height="470" as="geometry"/>
+        </mxCell>
+        <mxCell id="c63" value="TOOLS  (CAPABILITIES)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#1F5FA9;strokeColor=none;fontColor=#FFFFFF;fontStyle=1;fontSize=15;align=left;verticalAlign=middle;spacingLeft=12;fontFamily=Helvetica;movable=0;resizable=0;deletable=1;" vertex="1" parent="c62">
+          <mxGeometry x="0" y="0" width="539" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="c64" value="&lt;ul style=&#x27;margin:0;padding-left:16px;text-align:left;font-size:12px;line-height:1.35;color:#3C4A63&#x27;&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;PDF text layer + Textract OCR&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Nominatim geocoding &amp;#183; OpenWeatherMap on the incident date&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Serper / Tavily part pricing, two independent domains minimum&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;OEM price catalogue, 90-day freshness&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Labour, depreciation and settlement calculators&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;PyMuPDF &amp;#183; OpenCV frame extraction&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;PDF report and letter generation&lt;/li&gt;&lt;/ul&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c62">
+          <mxGeometry x="10" y="42" width="519" height="402" as="geometry"/>
+        </mxCell>
+        <mxCell id="c65" value="" style="line;strokeWidth=1;html=1;strokeColor=#D2DAE7;movable=0;resizable=0;" vertex="1" parent="c62">
+          <mxGeometry x="0" y="444" width="539" height="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="c66" value="backend/services/" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=10;fontColor=#6B7891;fontFamily=Helvetica;spacingLeft=12;movable=0;resizable=0;" vertex="1" parent="c62">
+          <mxGeometry x="0" y="444" width="539" height="26" as="geometry"/>
+        </mxCell>
+        <mxCell id="c67" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D2DAE7;strokeWidth=1;verticalAlign=top;align=left;container=1;collapsible=0;childLayout=none;movable=1;resizable=1;" vertex="1" parent="1">
+          <mxGeometry x="1166" y="596" width="927" height="470" as="geometry"/>
+        </mxCell>
+        <mxCell id="c68" value="ORCHESTRATION LAYER  &amp;#8212;  FastAPI async" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#4B3FA3;strokeColor=none;fontColor=#FFFFFF;fontStyle=1;fontSize=15;align=left;verticalAlign=middle;spacingLeft=12;fontFamily=Helvetica;movable=0;resizable=0;deletable=1;" vertex="1" parent="c67">
+          <mxGeometry x="0" y="0" width="927" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="c69" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D2DAE7;verticalAlign=top;align=left;container=1;collapsible=0;movable=0;" vertex="1" parent="c67">
+          <mxGeometry x="14" y="50" width="290" height="300" as="geometry"/>
+        </mxCell>
+        <mxCell id="c70" value="PHASE 1  &amp;#8212;  PREPARE" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F7FB;strokeColor=none;fontColor=#4B3FA3;fontStyle=1;fontSize=12;align=left;verticalAlign=middle;spacingLeft=8;fontFamily=Helvetica;movable=0;" vertex="1" parent="c69">
+          <mxGeometry x="0" y="0" width="290" height="26" as="geometry"/>
+        </mxCell>
+        <mxCell id="c71" value="&lt;ol style=&#x27;margin:0;padding-left:18px;font-size:12px;line-height:1.4;color:#3C4A63&#x27;&gt;&lt;li style=&#x27;margin-bottom:6px&#x27;&gt;Eligibility gate &amp;#8212; &lt;b&gt;before any parsing&lt;/b&gt;&lt;/li&gt;&lt;li style=&#x27;margin-bottom:6px&#x27;&gt;Document parse + authenticity&lt;/li&gt;&lt;li style=&#x27;margin-bottom:6px&#x27;&gt;Telematics trace&lt;/li&gt;&lt;li style=&#x27;margin-bottom:6px&#x27;&gt;Dash-cam frames&lt;/li&gt;&lt;/ol&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c69">
+          <mxGeometry x="6" y="34" width="278" height="256" as="geometry"/>
+        </mxCell>
+        <mxCell id="c72" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F6F5FD;strokeColor=#4B3FA3;strokeWidth=2;verticalAlign=top;align=left;container=1;collapsible=0;movable=0;" vertex="1" parent="c67">
+          <mxGeometry x="318" y="50" width="280" height="300" as="geometry"/>
+        </mxCell>
+        <mxCell id="c73" value="CHECKPOINT" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#4B3FA3;strokeColor=none;fontColor=#FFFFFF;fontStyle=1;fontSize=12;align=center;verticalAlign=middle;fontFamily=Helvetica;movable=0;" vertex="1" parent="c72">
+          <mxGeometry x="0" y="0" width="280" height="26" as="geometry"/>
+        </mxCell>
+        <mxCell id="c74" value="&lt;div style=&#x27;font-size:12px;line-height:1.4;color:#3C4A63&#x27;&gt;&lt;b style=&#x27;color:#12203A&#x27;&gt;Shared claim context&lt;/b&gt;&lt;br&gt;parsed docs &amp;#183; policy &amp;#183; claim fields&lt;br&gt;&lt;br&gt;&lt;b style=&#x27;color:#12203A&#x27;&gt;Assessment cache&lt;/b&gt;&lt;br&gt;keyed by evidence hash&lt;/div&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c72">
+          <mxGeometry x="10" y="36" width="260" height="150" as="geometry"/>
+        </mxCell>
+        <mxCell id="c75" value="BUILT ONCE,&lt;br&gt;READ BY ALL FIVE" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=11;fontStyle=1;fontColor=#4B3FA3;fontFamily=Helvetica;movable=0;" vertex="1" parent="c72">
+          <mxGeometry x="10" y="230" width="260" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="c76" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D2DAE7;verticalAlign=top;align=left;container=1;collapsible=0;movable=0;" vertex="1" parent="c67">
+          <mxGeometry x="612" y="50" width="290" height="300" as="geometry"/>
+        </mxCell>
+        <mxCell id="c77" value="PHASE 2  &amp;#8212;  INVESTIGATE" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F7FB;strokeColor=none;fontColor=#4B3FA3;fontStyle=1;fontSize=12;align=left;verticalAlign=middle;spacingLeft=8;fontFamily=Helvetica;movable=0;" vertex="1" parent="c76">
+          <mxGeometry x="0" y="0" width="290" height="26" as="geometry"/>
+        </mxCell>
+        <mxCell id="c78" value="&lt;ol style=&#x27;margin:0;padding-left:18px;font-size:12px;line-height:1.4;color:#3C4A63&#x27;&gt;&lt;li style=&#x27;margin-bottom:6px&#x27;&gt;A1 anchors damage to the estimate&lt;/li&gt;&lt;li style=&#x27;margin-bottom:6px&#x27;&gt;A2 &amp;#183; A3 &amp;#183; A4 in parallel&lt;/li&gt;&lt;li style=&#x27;margin-bottom:6px&#x27;&gt;A5 reads every finding&lt;/li&gt;&lt;li style=&#x27;margin-bottom:6px&#x27;&gt;Guards, then settlement maths&lt;/li&gt;&lt;/ol&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c76">
+          <mxGeometry x="6" y="34" width="278" height="256" as="geometry"/>
+        </mxCell>
+        <mxCell id="e79" value="" style="edgeStyle=none;html=1;strokeColor=#4B3FA3;strokeWidth=2;endArrow=block;endFill=1;endSize=5;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="c69" target="c72">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e80" value="" style="edgeStyle=none;html=1;strokeColor=#4B3FA3;strokeWidth=2;endArrow=block;endFill=1;endSize=5;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="c72" target="c76">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="c81" value="&lt;span style=&#x27;color:#6B7891;font-size:11px;letter-spacing:1px&#x27;&gt;LIVE STREAM&lt;/span&gt;&amp;nbsp;&amp;nbsp;&lt;span style=&#x27;color:#4B3FA3;font-size:12px&#x27;&gt;agent_start &amp;#183; agent_done &amp;#183; agent_error &amp;#183; agent_skipped &amp;#183; done &amp;#183; ping&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F7FB;strokeColor=#D2DAE7;align=left;verticalAlign=middle;spacingLeft=12;fontFamily=Helvetica;movable=0;" vertex="1" parent="c67">
+          <mxGeometry x="14" y="368" width="899" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="c82" value="" style="line;strokeWidth=1;html=1;strokeColor=#D2DAE7;movable=0;resizable=0;" vertex="1" parent="c67">
+          <mxGeometry x="0" y="444" width="927" height="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="c83" value="a skipped agent renders as skipped &amp;#8212; without that event the dashboard waits forever" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=10;fontColor=#6B7891;fontFamily=Helvetica;spacingLeft=12;movable=0;resizable=0;" vertex="1" parent="c67">
+          <mxGeometry x="0" y="444" width="927" height="26" as="geometry"/>
+        </mxCell>
+        <mxCell id="c84" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D2DAE7;strokeWidth=1;verticalAlign=top;align=left;container=1;collapsible=0;childLayout=none;movable=1;resizable=1;" vertex="1" parent="1">
+          <mxGeometry x="2117" y="596" width="571" height="470" as="geometry"/>
+        </mxCell>
+        <mxCell id="c85" value="THE FIVE AGENTS" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#2A4D93;strokeColor=none;fontColor=#FFFFFF;fontStyle=1;fontSize=15;align=left;verticalAlign=middle;spacingLeft=12;fontFamily=Helvetica;movable=0;resizable=0;deletable=1;" vertex="1" parent="c84">
+          <mxGeometry x="0" y="0" width="571" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="c86" value="A1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#2A4D93;strokeColor=none;fontColor=#FFFFFF;fontStyle=1;fontSize=12;align=center;verticalAlign=middle;fontFamily=Helvetica;movable=0;" vertex="1" parent="c84">
+          <mxGeometry x="12" y="46" width="34" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="c87" value="&lt;div style=&#x27;font-size:12px;line-height:1.35;color:#3C4A63&#x27;&gt;&lt;b style=&#x27;color:#12203A&#x27;&gt;Damage Assessment&lt;/b&gt; &amp;#8212; vision, anchored to the estimate&#x27;s own line items&lt;/div&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c84">
+          <mxGeometry x="54" y="44" width="503" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="c88" value="A2" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#2A4D93;strokeColor=none;fontColor=#FFFFFF;fontStyle=1;fontSize=12;align=center;verticalAlign=middle;fontFamily=Helvetica;movable=0;" vertex="1" parent="c84">
+          <mxGeometry x="12" y="122" width="34" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="c89" value="&lt;div style=&#x27;font-size:12px;line-height:1.35;color:#3C4A63&#x27;&gt;&lt;b style=&#x27;color:#12203A&#x27;&gt;Fraud Intelligence&lt;/b&gt; &amp;#8212; 32 checks over claim, documents and archive&lt;/div&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c84">
+          <mxGeometry x="54" y="120" width="503" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="c90" value="A3" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#2A4D93;strokeColor=none;fontColor=#FFFFFF;fontStyle=1;fontSize=12;align=center;verticalAlign=middle;fontFamily=Helvetica;movable=0;" vertex="1" parent="c84">
+          <mxGeometry x="12" y="198" width="34" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="c91" value="&lt;div style=&#x27;font-size:12px;line-height:1.35;color:#3C4A63&#x27;&gt;&lt;b style=&#x27;color:#12203A&#x27;&gt;Incident Reconstruction&lt;/b&gt; &amp;#8212; vision over photos and dash-cam frames&lt;/div&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c84">
+          <mxGeometry x="54" y="196" width="503" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="c92" value="A4" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#6B7891;strokeColor=none;fontColor=#FFFFFF;fontStyle=1;fontSize=12;align=center;verticalAlign=middle;fontFamily=Helvetica;movable=0;" vertex="1" parent="c84">
+          <mxGeometry x="12" y="274" width="34" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="c93" value="&lt;div style=&#x27;font-size:12px;line-height:1.35;color:#3C4A63&#x27;&gt;&lt;b style=&#x27;color:#12203A&#x27;&gt;Context Verification&lt;/b&gt; &amp;#8212; location, GPS and weather &amp;#8212; &lt;i&gt;makes no model call at all&lt;/i&gt;&lt;/div&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c84">
+          <mxGeometry x="54" y="272" width="503" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="c94" value="A5" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#2A4D93;strokeColor=none;fontColor=#FFFFFF;fontStyle=1;fontSize=12;align=center;verticalAlign=middle;fontFamily=Helvetica;movable=0;" vertex="1" parent="c84">
+          <mxGeometry x="12" y="350" width="34" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="c95" value="&lt;div style=&#x27;font-size:12px;line-height:1.35;color:#3C4A63&#x27;&gt;&lt;b style=&#x27;color:#12203A&#x27;&gt;Settlement Recommendation&lt;/b&gt; &amp;#8212; reasons over every finding; the rupees come from Python&lt;/div&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c84">
+          <mxGeometry x="54" y="348" width="503" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="c96" value="" style="line;strokeWidth=1;html=1;strokeColor=#D2DAE7;movable=0;resizable=0;" vertex="1" parent="c84">
+          <mxGeometry x="0" y="444" width="571" height="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="c97" value="A1 never sees the registration number &amp;#8212; it copied it into the plate reading" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=10;fontColor=#6B7891;fontFamily=Helvetica;spacingLeft=12;movable=0;resizable=0;" vertex="1" parent="c84">
+          <mxGeometry x="0" y="444" width="571" height="26" as="geometry"/>
+        </mxCell>
+        <mxCell id="c98" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D2DAE7;strokeWidth=1;verticalAlign=top;align=left;container=1;collapsible=0;childLayout=none;movable=1;resizable=1;" vertex="1" parent="1">
+          <mxGeometry x="2712" y="596" width="539" height="470" as="geometry"/>
+        </mxCell>
+        <mxCell id="c99" value="STATE &amp;amp; AUDIT" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#8A5A10;strokeColor=none;fontColor=#FFFFFF;fontStyle=1;fontSize=15;align=left;verticalAlign=middle;spacingLeft=12;fontFamily=Helvetica;movable=0;resizable=0;deletable=1;" vertex="1" parent="c98">
+          <mxGeometry x="0" y="0" width="539" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="c100" value="&lt;div style=&#x27;font-size:11px;font-weight:bold;letter-spacing:1.5px;color:#8A5A10&#x27;&gt;IN FLIGHT&lt;/div&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c98">
+          <mxGeometry x="12" y="46" width="515" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c101" value="&lt;ul style=&#x27;margin:0;padding-left:16px;text-align:left;font-size:12px;line-height:1.35;color:#3C4A63&#x27;&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Shared claim context&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Assessment cache &amp;#8212; evidence-hash keyed&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Live agent stream, rejoinable&lt;/li&gt;&lt;/ul&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c98">
+          <mxGeometry x="12" y="68" width="515" height="92" as="geometry"/>
+        </mxCell>
+        <mxCell id="c102" value="" style="line;strokeWidth=1;html=1;strokeColor=#D2DAE7;movable=0;resizable=0;" vertex="1" parent="c98">
+          <mxGeometry x="12" y="170" width="515" height="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="c103" value="&lt;div style=&#x27;font-size:11px;font-weight:bold;letter-spacing:1.5px;color:#8A5A10&#x27;&gt;DURABLE&lt;/div&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c98">
+          <mxGeometry x="12" y="184" width="515" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c104" value="&lt;ul style=&#x27;margin:0;padding-left:16px;text-align:left;font-size:12px;line-height:1.35;color:#3C4A63&#x27;&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;&lt;code&gt;claims.csv&lt;/code&gt; &amp;#8212; claimant and phone encrypted at rest&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;&lt;code&gt;result.json&lt;/code&gt; per claim &amp;#8212; the full audit trail&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Token and cost ledger, recosted on read&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Live part prices written back to the catalogue&lt;/li&gt;&lt;/ul&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c98">
+          <mxGeometry x="12" y="206" width="515" height="200" as="geometry"/>
+        </mxCell>
+        <mxCell id="c105" value="" style="line;strokeWidth=1;html=1;strokeColor=#D2DAE7;movable=0;resizable=0;" vertex="1" parent="c98">
+          <mxGeometry x="0" y="444" width="539" height="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="c106" value="no database &amp;#183; runs on a laptop" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=10;fontColor=#6B7891;fontFamily=Helvetica;spacingLeft=12;movable=0;resizable=0;" vertex="1" parent="c98">
+          <mxGeometry x="0" y="444" width="539" height="26" as="geometry"/>
+        </mxCell>
+        <mxCell id="c107" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D2DAE7;strokeWidth=1;verticalAlign=top;align=left;container=1;collapsible=0;childLayout=none;movable=1;resizable=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1110" width="3212" height="310" as="geometry"/>
+        </mxCell>
+        <mxCell id="c108" value="MODEL ROUTING LAYER  &amp;#8212;  where claim data is allowed to go" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#5A3E9B;strokeColor=none;fontColor=#FFFFFF;fontStyle=1;fontSize=15;align=left;verticalAlign=middle;spacingLeft=12;fontFamily=Helvetica;movable=0;resizable=0;deletable=1;" vertex="1" parent="c107">
+          <mxGeometry x="0" y="0" width="3212" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="c109" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D2DAE7;dashed=0;verticalAlign=top;align=left;container=1;collapsible=0;movable=0;" vertex="1" parent="c107">
+          <mxGeometry x="20" y="48" width="779" height="218" as="geometry"/>
+        </mxCell>
+        <mxCell id="c110" value="" style="ellipse;html=1;fillColor=#5A3E9B;strokeColor=#5A3E9B;" vertex="1" parent="c109">
+          <mxGeometry x="12" y="14" width="12" height="12" as="geometry"/>
+        </mxCell>
+        <mxCell id="c111" value="&lt;span style=&#x27;font-size:11px;letter-spacing:1.5px;color:#6B7891&#x27;&gt;VISION &amp;#183; PRIMARY&lt;/span&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c109">
+          <mxGeometry x="32" y="12" width="735" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c112" value="&lt;span style=&#x27;font-size:15px;color:#12203A;font-weight:bold&#x27;&gt;qwen3-vl-235b&lt;/span&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c109">
+          <mxGeometry x="12" y="38" width="755" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="c113" value="&lt;div style=&#x27;font-size:12px;line-height:1.4;color:#3C4A63&#x27;&gt;Damage assessment, incident reconstruction, document authenticity&lt;/div&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c109">
+          <mxGeometry x="12" y="66" width="755" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="c114" value="&lt;span style=&#x27;font-size:11px;letter-spacing:1px;font-weight:bold;color:#5A3E9B&#x27;&gt;BEDROCK &amp;#183; ap-south-1&lt;/span&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c109">
+          <mxGeometry x="12" y="192" width="755" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c115" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D2DAE7;dashed=0;verticalAlign=top;align=left;container=1;collapsible=0;movable=0;" vertex="1" parent="c107">
+          <mxGeometry x="817" y="48" width="779" height="218" as="geometry"/>
+        </mxCell>
+        <mxCell id="c116" value="" style="ellipse;html=1;fillColor=#5A3E9B;strokeColor=#5A3E9B;" vertex="1" parent="c115">
+          <mxGeometry x="12" y="14" width="12" height="12" as="geometry"/>
+        </mxCell>
+        <mxCell id="c117" value="&lt;span style=&#x27;font-size:11px;letter-spacing:1.5px;color:#6B7891&#x27;&gt;TEXT &amp;#183; PRIMARY&lt;/span&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c115">
+          <mxGeometry x="32" y="12" width="735" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c118" value="&lt;span style=&#x27;font-size:15px;color:#12203A;font-weight:bold&#x27;&gt;gpt-oss-120b&lt;/span&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c115">
+          <mxGeometry x="12" y="38" width="755" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="c119" value="&lt;div style=&#x27;font-size:12px;line-height:1.4;color:#3C4A63&#x27;&gt;Fraud reasoning, settlement narrative, document extraction&lt;/div&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c115">
+          <mxGeometry x="12" y="66" width="755" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="c120" value="&lt;span style=&#x27;font-size:11px;letter-spacing:1px;font-weight:bold;color:#5A3E9B&#x27;&gt;BEDROCK &amp;#183; ap-south-1&lt;/span&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c115">
+          <mxGeometry x="12" y="192" width="755" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c121" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D2DAE7;dashed=0;verticalAlign=top;align=left;container=1;collapsible=0;movable=0;" vertex="1" parent="c107">
+          <mxGeometry x="1614" y="48" width="779" height="218" as="geometry"/>
+        </mxCell>
+        <mxCell id="c122" value="" style="ellipse;html=1;fillColor=#6B7891;strokeColor=#6B7891;" vertex="1" parent="c121">
+          <mxGeometry x="12" y="14" width="12" height="12" as="geometry"/>
+        </mxCell>
+        <mxCell id="c123" value="&lt;span style=&#x27;font-size:11px;letter-spacing:1.5px;color:#6B7891&#x27;&gt;FALLBACK ONLY&lt;/span&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c121">
+          <mxGeometry x="32" y="12" width="735" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c124" value="&lt;span style=&#x27;font-size:15px;color:#12203A;font-weight:bold&#x27;&gt;groq / gpt-oss-120b&lt;/span&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c121">
+          <mxGeometry x="12" y="38" width="755" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="c125" value="&lt;div style=&#x27;font-size:12px;line-height:1.4;color:#3C4A63&#x27;&gt;Reached only when a model ID goes &lt;b&gt;permanently&lt;/b&gt; bad. A throttle waits instead &amp;#8212; silently downgrading for the day is worse&lt;/div&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c121">
+          <mxGeometry x="12" y="66" width="755" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="c126" value="&lt;span style=&#x27;font-size:11px;letter-spacing:1px;font-weight:bold;color:#6B7891&#x27;&gt;UNITED STATES&lt;/span&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c121">
+          <mxGeometry x="12" y="192" width="755" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c127" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F7FB;strokeColor=#D2DAE7;dashed=1;dashPattern=4 4;verticalAlign=top;align=left;container=1;collapsible=0;movable=0;" vertex="1" parent="c107">
+          <mxGeometry x="2411" y="48" width="779" height="218" as="geometry"/>
+        </mxCell>
+        <mxCell id="c128" value="" style="ellipse;html=1;fillColor=none;strokeColor=#6B7891;" vertex="1" parent="c127">
+          <mxGeometry x="12" y="14" width="12" height="12" as="geometry"/>
+        </mxCell>
+        <mxCell id="c129" value="&lt;span style=&#x27;font-size:11px;letter-spacing:1.5px;color:#6B7891&#x27;&gt;NO MODEL&lt;/span&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c127">
+          <mxGeometry x="32" y="12" width="735" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c130" value="&lt;span style=&#x27;font-size:15px;color:#12203A;font-weight:bold&#x27;&gt;deterministic&lt;/span&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c127">
+          <mxGeometry x="12" y="38" width="755" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="c131" value="&lt;div style=&#x27;font-size:12px;line-height:1.4;color:#3C4A63&#x27;&gt;The eligibility gate, context verification, and every rupee of the settlement&lt;/div&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c127">
+          <mxGeometry x="12" y="66" width="755" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="c132" value="&lt;span style=&#x27;font-size:11px;letter-spacing:1px;font-weight:bold;color:#6B7891&#x27;&gt;ON THE MACHINE&lt;/span&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c127">
+          <mxGeometry x="12" y="192" width="755" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c133" value="" style="line;strokeWidth=1;html=1;strokeColor=#D2DAE7;movable=0;resizable=0;" vertex="1" parent="c107">
+          <mxGeometry x="0" y="282" width="3212" height="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="c134" value="Model IDs live in environment config, never in code &amp;#183; a preflight endpoint proves every configured model answers before a demo &amp;#183; uploaded documents never leave the region on the normal path" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=10;fontColor=#6B7891;fontFamily=Helvetica;spacingLeft=12;movable=0;resizable=0;" vertex="1" parent="c107">
+          <mxGeometry x="0" y="282" width="3212" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="vl1" style="edgeStyle=none;html=1;strokeColor=#3C4A63;strokeWidth=2;endArrow=block;endFill=1;startArrow=block;startFill=1;endSize=5;startSize=5;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1646" y="1070" as="sourcePoint"/>
+            <mxPoint x="1646" y="1106" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c135" value="FOUNDATION" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=12;fontColor=#6B7891;fontFamily=Helvetica;letterSpacing=2;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1448" width="600" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c136" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F7FB;strokeColor=#D2DAE7;strokeWidth=1;verticalAlign=top;align=left;container=1;collapsible=0;childLayout=none;movable=1;resizable=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1478" width="623" height="330" as="geometry"/>
+        </mxCell>
+        <mxCell id="c137" value="DATA SOURCES" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#1F5FA9;strokeColor=none;fontColor=#FFFFFF;fontStyle=1;fontSize=15;align=left;verticalAlign=middle;spacingLeft=12;fontFamily=Helvetica;movable=0;resizable=0;deletable=1;" vertex="1" parent="c136">
+          <mxGeometry x="0" y="0" width="623" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="c138" value="&lt;ul style=&#x27;margin:0;padding-left:16px;text-align:left;font-size:12px;line-height:1.35;color:#3C4A63&#x27;&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Policy master and claim register&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Historical fraud archive &amp;#8212; what makes repeat-garage and repeat-claimant checks work on day one&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;IRDAI ruleset, range-validated on load&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Labour rate card and OEM price catalogue&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Uploaded claim evidence&lt;/li&gt;&lt;/ul&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c136">
+          <mxGeometry x="10" y="42" width="603" height="288" as="geometry"/>
+        </mxCell>
+        <mxCell id="c139" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F7FB;strokeColor=#D2DAE7;strokeWidth=1;verticalAlign=top;align=left;container=1;collapsible=0;childLayout=none;movable=1;resizable=1;" vertex="1" parent="1">
+          <mxGeometry x="687" y="1478" width="623" height="330" as="geometry"/>
+        </mxCell>
+        <mxCell id="c140" value="EXTERNAL SIGNALS" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#0F7A73;strokeColor=none;fontColor=#FFFFFF;fontStyle=1;fontSize=15;align=left;verticalAlign=middle;spacingLeft=12;fontFamily=Helvetica;movable=0;resizable=0;deletable=1;" vertex="1" parent="c139">
+          <mxGeometry x="0" y="0" width="623" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="c141" value="&lt;ul style=&#x27;margin:0;padding-left:16px;text-align:left;font-size:12px;line-height:1.35;color:#3C4A63&#x27;&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Geocoding for the incident location&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Weather as it was, on the date claimed&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Live part prices, corroborated across domains&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;OCR for scanned paperwork&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Offline degrades the finding &amp;#8212; it never crashes the claim&lt;/li&gt;&lt;/ul&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c139">
+          <mxGeometry x="10" y="42" width="603" height="288" as="geometry"/>
+        </mxCell>
+        <mxCell id="c142" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F7FB;strokeColor=#D2DAE7;strokeWidth=1;verticalAlign=top;align=left;container=1;collapsible=0;childLayout=none;movable=1;resizable=1;" vertex="1" parent="1">
+          <mxGeometry x="1334" y="1478" width="623" height="330" as="geometry"/>
+        </mxCell>
+        <mxCell id="c143" value="DETERMINISTIC CORE" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#1F5FA9;strokeColor=none;fontColor=#FFFFFF;fontStyle=1;fontSize=15;align=left;verticalAlign=middle;spacingLeft=12;fontFamily=Helvetica;movable=0;resizable=0;deletable=1;" vertex="1" parent="c142">
+          <mxGeometry x="0" y="0" width="623" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="c144" value="&lt;ul style=&#x27;margin:0;padding-left:16px;text-align:left;font-size:12px;line-height:1.35;color:#3C4A63&#x27;&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Eligibility and scope of cover&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Pricing engine with coverage abstention &amp;#8212; a fair value from three of nine parts is not a benchmark&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Per-operation labour&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Material-wise depreciation and settlement&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;IRDAI timeline, elapsed time computed on read&lt;/li&gt;&lt;/ul&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c142">
+          <mxGeometry x="10" y="42" width="603" height="288" as="geometry"/>
+        </mxCell>
+        <mxCell id="c145" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F7FB;strokeColor=#D2DAE7;strokeWidth=1;verticalAlign=top;align=left;container=1;collapsible=0;childLayout=none;movable=1;resizable=1;" vertex="1" parent="1">
+          <mxGeometry x="1981" y="1478" width="623" height="330" as="geometry"/>
+        </mxCell>
+        <mxCell id="c146" value="OUTPUT ARTIFACTS" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#2E7D46;strokeColor=none;fontColor=#FFFFFF;fontStyle=1;fontSize=15;align=left;verticalAlign=middle;spacingLeft=12;fontFamily=Helvetica;movable=0;resizable=0;deletable=1;" vertex="1" parent="c145">
+          <mxGeometry x="0" y="0" width="623" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="c147" value="&lt;ul style=&#x27;margin:0;padding-left:16px;text-align:left;font-size:12px;line-height:1.35;color:#3C4A63&#x27;&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Adjudicator dashboard &amp;#8212; flags and gaps surfaced, passes hidden&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Investigation report PDF&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Customer decision letter&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Machine-readable claim record&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Analytics: claims &amp;#183; solution performance &amp;#183; cost&lt;/li&gt;&lt;/ul&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c145">
+          <mxGeometry x="10" y="42" width="603" height="288" as="geometry"/>
+        </mxCell>
+        <mxCell id="c148" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F7FB;strokeColor=#D2DAE7;strokeWidth=1;verticalAlign=top;align=left;container=1;collapsible=0;childLayout=none;movable=1;resizable=1;" vertex="1" parent="1">
+          <mxGeometry x="2628" y="1478" width="623" height="330" as="geometry"/>
+        </mxCell>
+        <mxCell id="c149" value="GOVERNANCE" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#8A5A10;strokeColor=none;fontColor=#FFFFFF;fontStyle=1;fontSize=15;align=left;verticalAlign=middle;spacingLeft=12;fontFamily=Helvetica;movable=0;resizable=0;deletable=1;" vertex="1" parent="c148">
+          <mxGeometry x="0" y="0" width="623" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="c150" value="&lt;ul style=&#x27;margin:0;padding-left:16px;text-align:left;font-size:12px;line-height:1.35;color:#3C4A63&#x27;&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;PII masked before every model call &amp;#8212; including inside quoted free text&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Claimant and phone encrypted at rest&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Injection defence on every image prompt&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Cost attributed per claim&lt;/li&gt;&lt;li style=&#x27;margin-bottom:5px&#x27;&gt;Every surface states the AI &lt;b&gt;stands in for&lt;/b&gt; a licensed surveyor rather than being one&lt;/li&gt;&lt;/ul&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=12;fontColor=#3C4A63;fontFamily=Helvetica;spacingLeft=2;spacingTop=0;movable=0;resizable=0;" vertex="1" parent="c148">
+          <mxGeometry x="10" y="42" width="603" height="288" as="geometry"/>
+        </mxCell>
+        <mxCell id="vl2" style="edgeStyle=none;html=1;strokeColor=#3C4A63;strokeWidth=2;endArrow=block;endFill=1;startArrow=block;startFill=1;endSize=5;startSize=5;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1646" y="1424" as="sourcePoint"/>
+            <mxPoint x="1646" y="1474" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c151" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F7FB;strokeColor=#D2DAE7;verticalAlign=top;align=left;container=1;collapsible=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1848" width="3212" height="132" as="geometry"/>
+        </mxCell>
+        <mxCell id="c152" value="CALIBRATION&lt;br&gt;LOOP" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=13;fontStyle=1;fontColor=#2E7D46;fontFamily=Helvetica;letterSpacing=1;movable=0;" vertex="1" parent="c151">
+          <mxGeometry x="16" y="0" width="150" height="132" as="geometry"/>
+        </mxCell>
+        <mxCell id="c153" value="&lt;div style=&#x27;font-size:12px;font-weight:bold;letter-spacing:1px;color:#12203A&#x27;&gt;ADJUDICATOR ACTS&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#3C4A63;margin-top:4px;line-height:1.3&#x27;&gt;Approve, escalate or override&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D2DAE7;align=center;verticalAlign=middle;fontFamily=Helvetica;movable=0;" vertex="1" parent="c151">
+          <mxGeometry x="180" y="26" width="460" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="c154" value="&lt;div style=&#x27;font-size:12px;font-weight:bold;letter-spacing:1px;color:#12203A&#x27;&gt;OUTCOME RECORDED&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#3C4A63;margin-top:4px;line-height:1.3&#x27;&gt;Decision and reasons kept with the claim&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D2DAE7;align=center;verticalAlign=middle;fontFamily=Helvetica;movable=0;" vertex="1" parent="c151">
+          <mxGeometry x="662" y="26" width="460" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="c155" value="&lt;div style=&#x27;font-size:12px;font-weight:bold;letter-spacing:1px;color:#12203A&#x27;&gt;PRICES LEARNED&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#3C4A63;margin-top:4px;line-height:1.3&#x27;&gt;Live lookups written back to the catalogue&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D2DAE7;align=center;verticalAlign=middle;fontFamily=Helvetica;movable=0;" vertex="1" parent="c151">
+          <mxGeometry x="1144" y="26" width="460" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="c156" value="&lt;div style=&#x27;font-size:12px;font-weight:bold;letter-spacing:1px;color:#12203A&#x27;&gt;ARCHIVE GROWS&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#3C4A63;margin-top:4px;line-height:1.3&#x27;&gt;Confirmed fraud feeds the repeat checks&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D2DAE7;align=center;verticalAlign=middle;fontFamily=Helvetica;movable=0;" vertex="1" parent="c151">
+          <mxGeometry x="1626" y="26" width="460" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="c157" value="&lt;div style=&#x27;font-size:12px;font-weight:bold;letter-spacing:1px;color:#12203A&#x27;&gt;THRESHOLDS RETUNED&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#3C4A63;margin-top:4px;line-height:1.3&#x27;&gt;Weights and bands edited in config, not code&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D2DAE7;align=center;verticalAlign=middle;fontFamily=Helvetica;movable=0;" vertex="1" parent="c151">
+          <mxGeometry x="2108" y="26" width="460" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="c158" value="&lt;div style=&#x27;font-size:12px;font-weight:bold;letter-spacing:1px;color:#12203A&#x27;&gt;PROVEN AGAIN&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#3C4A63;margin-top:4px;line-height:1.3&#x27;&gt;Sanity sweep and the test suite gate the change&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D2DAE7;align=center;verticalAlign=middle;fontFamily=Helvetica;movable=0;" vertex="1" parent="c151">
+          <mxGeometry x="2590" y="26" width="460" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="e159" value="" style="edgeStyle=none;html=1;strokeColor=#2E7D46;strokeWidth=2;endArrow=block;endFill=1;endSize=5;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="c153" target="c154">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e160" value="" style="edgeStyle=none;html=1;strokeColor=#2E7D46;strokeWidth=2;endArrow=block;endFill=1;endSize=5;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="c154" target="c155">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e161" value="" style="edgeStyle=none;html=1;strokeColor=#2E7D46;strokeWidth=2;endArrow=block;endFill=1;endSize=5;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="c155" target="c156">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e162" value="" style="edgeStyle=none;html=1;strokeColor=#2E7D46;strokeWidth=2;endArrow=block;endFill=1;endSize=5;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="c156" target="c157">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e163" value="" style="edgeStyle=none;html=1;strokeColor=#2E7D46;strokeWidth=2;endArrow=block;endFill=1;endSize=5;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="c157" target="c158">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="c164" value="&amp;#8634;&lt;br&gt;sharper&lt;br&gt;next claim" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=11;fontStyle=1;fontColor=#2E7D46;fontFamily=Helvetica;movable=0;" vertex="1" parent="c151">
+          <mxGeometry x="3062" y="26" width="134" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="c165" value="" style="line;strokeWidth=1;html=1;strokeColor=#D2DAE7;" vertex="1" parent="1">
+          <mxGeometry x="40" y="2004" width="3212" height="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="c166" value="FastAPI &amp;#183; Python 3.10+ &amp;#183; React 19 &amp;#183; ChromaDB &amp;#183; AWS Bedrock ap-south-1 &amp;#8212; no database, no managed deployment; the whole system runs on a laptop." style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=12;fontColor=#6B7891;fontFamily=Helvetica;" vertex="1" parent="1">
+          <mxGeometry x="40" y="2010" width="1800" height="26" as="geometry"/>
+        </mxCell>
+        <mxCell id="c167" value="ClaimIntel &amp;#183; process flow &amp;#183; 2026-09" style="text;html=1;strokeColor=none;fillColor=none;align=right;verticalAlign=middle;fontSize=12;fontColor=#6B7891;fontFamily=Helvetica;" vertex="1" parent="1">
+          <mxGeometry x="2452" y="2010" width="800" height="26" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

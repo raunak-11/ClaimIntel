@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ClaimIntel: Evidence-Led Motor Claim Triage</title>
+<style>
+/* ── Palette ──────────────────────────────────────────────────────────────
+   Taken from the LakeSight X sheet: indigo primary, orange accent, deep navy
+   panels. Every colour is a variable, so these six lines re-skin the sheet. */
+:root{
+  --brand:#2E23D9;
+  --brand-deep:#181254;
+  --brand-tint:#EFEEFF;
+  --accent:#FF6A13;
+  --accent-tint:#FFF3EA;
+  --ink:#0E1020;
+  --muted:#5B6172;
+  --faint:#8A90A2;
+  --line:#E4E6F0;
+  --paper:#FFFFFF;
+  --logo:#4F46E5;   /* report_generator C_INDIGO (79,70,229) */
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;background:#9aa0b4;}
+body{
+  font-family:"Inter","Segoe UI",system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;
+  color:var(--ink);font-size:9.1pt;line-height:1.42;
+  -webkit-font-smoothing:antialiased;
+}
+.page{
+  width:210mm;height:297mm;background:var(--paper);
+  /* Vertical padding is deliberately symmetric: the 6.5mm bottom it used to
+     carry made every footer sit tighter to the sheet edge than the next
+     page's header did, so the page-1 footer to page-2 header break read as
+     lopsided. Top and bottom are now the same 10mm on both pages. */
+  padding:10mm 12mm;margin:0 auto 6mm;position:relative;overflow:hidden;
+  display:flex;flex-direction:column;
+}
+@page{size:A4;margin:0;}
+@media print{
+  html,body{background:#fff;}
+  .page{margin:0;page-break-after:always;box-shadow:none;}
+  .page:last-child{page-break-after:auto;}
+}
+
+/* ── Type ─────────────────────────────────────────────────────────────── */
+h1{font-size:25.5pt;line-height:1.1;letter-spacing:-.6pt;margin:0 0 7px;font-weight:800;}
+h1 .hl{color:var(--brand);}
+h2{font-size:14.5pt;line-height:1.18;letter-spacing:-.25pt;margin:0 0 6px;font-weight:750;}
+h3{font-size:9.6pt;margin:0 0 3px;font-weight:700;letter-spacing:-.05pt;}
+p{margin:0;}
+.lede{font-size:10.3pt;color:var(--muted);line-height:1.56;max-width:135mm;}
+.eyebrow{
+  font-size:7.1pt;font-weight:750;letter-spacing:1.3pt;text-transform:uppercase;
+  color:var(--accent);display:flex;align-items:center;gap:6px;margin-bottom:9px;
+}
+.eyebrow::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent);flex:none;}
+.kicker{
+  font-size:7.1pt;font-weight:750;letter-spacing:1.15pt;text-transform:uppercase;
+  color:var(--brand);display:flex;align-items:center;gap:7px;margin-bottom:7px;
+}
+.kicker::before{content:"";width:14px;height:2.5px;background:var(--accent);border-radius:2px;flex:none;}
+.sm{font-size:8.1pt;color:var(--muted);line-height:1.44;}
+.xs{font-size:7.2pt;color:var(--faint);line-height:1.4;}
+.rule{height:1px;background:var(--line);margin:4px 0;}
+
+/* ── Layout helpers ───────────────────────────────────────────────────── */
+.row{display:flex;gap:7mm;}
+.grid{display:grid;gap:2.5mm;}
+.g2{grid-template-columns:1fr 1fr;}
+.g3{grid-template-columns:repeat(3,1fr);}
+.g4{grid-template-columns:repeat(4,1fr);}
+.g5{grid-template-columns:repeat(5,1fr);}
+.spacer{flex:1 1 auto;min-height:0;}
+.page > *{flex:0 0 auto;}
+.page > .spacer{flex:1 1 auto;}
+
+/* ── Components ───────────────────────────────────────────────────────── */
+.card{border:1px solid var(--line);border-radius:7px;padding:3.2mm 3.6mm;background:#fff;}
+.card.lb{border-left:3px solid var(--brand);}
+.card.la{border-left:3px solid var(--accent);}
+.tag{
+  display:inline-block;font-size:6.5pt;font-weight:750;letter-spacing:.7pt;
+  text-transform:uppercase;padding:2.5px 7px;border-radius:20px;margin-top:5px;
+}
+.tag.b{background:var(--brand-tint);color:var(--brand);}
+.tag.a{background:var(--accent-tint);color:#C24A00;}
+
+.num{display:flex;gap:11px;align-items:flex-start;margin-bottom:15px;}
+.num .n{
+  flex:none;width:21px;height:21px;border-radius:5px;background:var(--brand-tint);
+  color:var(--brand);font-size:7.4pt;font-weight:800;display:flex;
+  align-items:center;justify-content:center;margin-top:1px;
+}
+.num.alt .n{background:var(--accent-tint);color:#C24A00;}
+
+.panel{background:var(--brand-deep);color:#fff;border-radius:10px;padding:4.6mm 5mm;position:relative;overflow:hidden;}
+.panel::after{
+  content:"";position:absolute;right:-29mm;top:-29mm;width:48mm;height:48mm;
+  border-radius:50%;background:rgba(255,106,19,.72);
+}
+.panel h2{color:#fff;position:relative;z-index:1;padding-right:13mm;}
+.panel-head h2{padding-right:0;}
+.panel .hl{color:var(--accent);}
+.panel .sm{color:#BFC2E8;}
+.panel .col h3{color:#fff;font-size:8.3pt;letter-spacing:.55pt;text-transform:uppercase;}
+.panel .col p{color:#B9BCE4;font-size:7.5pt;line-height:1.4;}
+.panel .cols{display:grid;grid-template-columns:repeat(3,1fr);gap:5mm;position:relative;z-index:1;
+  border-top:1px solid rgba(255,255,255,.17);padding-top:4.6mm;margin-top:4.6mm;}
+.chip{
+  background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);
+  border-radius:6px;padding:1.7mm 2.3mm;position:relative;z-index:1;
+}
+.panel-head{position:relative;z-index:1;margin-bottom:2.4mm;max-width:148mm;}
+.panel-head h2{font-size:12.6pt;margin-bottom:3px;}
+.chip h3{color:#fff;font-size:7.9pt;margin-bottom:1.5px;}
+.chip p{color:#ADB1DC;font-size:6.9pt;line-height:1.32;}
+
+/* Pipeline: evidence in -> ClaimIntel -> answers out, read left to right.
+   Replaces the stacked seven-box / five-stage / five-question grid: same
+   content, a third of the height, and the arrows carry the flow instead of
+   three separate section labels. */
+.kicker.acc{color:var(--accent);}
+.pipeflow{display:flex;align-items:stretch;gap:2.4mm;}
+.pf{flex:1;border:1px solid var(--line);border-radius:8px;padding:4mm 3.8mm;background:#FBFBFE;}
+.pf-lbl{
+  font-size:6.6pt;font-weight:750;letter-spacing:.95pt;text-transform:uppercase;
+  color:var(--faint);margin-bottom:2.2mm;
+}
+.pf ul{margin:0;padding-left:3.8mm;}
+.pf li{font-size:7.9pt;line-height:1.55;color:var(--ink);margin-bottom:1.5mm;}
+.pf li:last-child{margin-bottom:0;}
+.pf li::marker{color:var(--brand);}
+.pf-arrow{flex:none;align-self:center;color:var(--faint);font-size:11pt;font-weight:700;line-height:1;}
+.pf.core{flex:1.2;background:var(--brand-deep);border-color:var(--brand-deep);padding:4mm 4.2mm;}
+.pf.core .pf-lbl{color:var(--accent);letter-spacing:1.05pt;margin-bottom:1.6mm;}
+.pf.core h3{
+  color:#fff;font-size:10.4pt;line-height:1.26;font-weight:750;
+  letter-spacing:-.2pt;margin:0 0 2.6mm;
+}
+.pf.core li{color:#CFD2F0;font-size:7.7pt;line-height:1.5;}
+.pf.core li::marker{color:var(--accent);}
+.band{
+  background:var(--brand-deep);color:#fff;border-radius:7px;padding:2.1mm 4mm;
+  font-size:7.5pt;font-weight:600;text-align:center;letter-spacing:.2pt;margin-top:2.2mm;
+}
+.band b{color:var(--accent);font-weight:750;}
+
+.mark{
+  font-weight:750;color:#C24A00;background:var(--accent-tint);
+  border-radius:3px;padding:0 3.5px;white-space:nowrap;
+}
+/* Closes "The problem" column: the four items are one gap, stated once. */
+.close{
+  border:1px solid #D9D7FA;border-left:3px solid var(--brand);border-radius:7px;
+  padding:3.4mm 4mm;background:var(--brand-tint);
+}
+.close-k{
+  font-size:7.1pt;font-weight:800;letter-spacing:1.05pt;text-transform:uppercase;
+  color:var(--brand);margin-bottom:3.5px;
+}
+.close p{font-size:8.5pt;color:var(--ink);line-height:1.47;font-weight:500;}
+
+.problem h2{font-size:16.5pt;margin-bottom:8px;}
+.problem h3{font-size:10.1pt;margin-bottom:3.5px;}
+.problem .sm{font-size:8.6pt;line-height:1.5;}
+
+/* Outcomes + metrics */
+.out{border-top:3px solid var(--brand);padding:4.8mm 0 0;}
+.out h3{font-size:9.6pt;color:var(--brand);margin-bottom:2.5px;letter-spacing:.3pt;text-transform:uppercase;}
+.out p{font-size:8.5pt;color:var(--muted);line-height:1.45;}
+.residency{
+  display:flex;align-items:center;gap:9px;margin-top:3mm;
+  border:1px solid var(--line);border-left:3px solid var(--accent);
+  border-radius:6px;padding:3.6mm 4mm;background:#FBFBFE;
+}
+.residency b{font-size:8.1pt;letter-spacing:.3pt;text-transform:uppercase;color:#C24A00;}
+.proof{border-left:2.5px solid var(--brand);padding:0 0 0 4mm;margin-bottom:4.5mm;}
+.proof.last{margin-bottom:0;}
+.proof .v{font-size:16.5pt;font-weight:800;color:var(--brand);letter-spacing:-.5pt;line-height:1.05;}
+.proof .k{font-size:7.5pt;color:var(--muted);line-height:1.38;margin-top:1.5px;}
+.metricbar{display:grid;grid-template-columns:repeat(4,1fr);gap:1.8mm;}
+.metric{display:flex;align-items:baseline;gap:6px;border:1px solid var(--line);border-radius:6px;
+  padding:1.2mm 2mm;background:var(--brand-tint);}
+.metric .v{font-size:10.5pt;font-weight:800;color:var(--brand);letter-spacing:-.4pt;line-height:1;flex:none;}
+.metric .k{font-size:6.6pt;color:var(--muted);line-height:1.3;}
+
+.card.cap{padding:2.5mm 3.2mm;}
+.card.cap .sm{font-size:7.9pt;line-height:1.4;}
+
+/* Pilot path, inlined above the CTA */
+.path{
+  font-size:7.1pt;font-weight:800;letter-spacing:.9pt;text-transform:uppercase;
+  color:#C24A00;margin-bottom:4px;
+}
+
+/* CTA */
+.cta{
+  background:var(--accent-tint);border:1px solid #FFD9BF;border-radius:8px;
+  padding:2.4mm 4mm;display:flex;align-items:center;justify-content:space-between;gap:5mm;
+}
+.btn{
+  display:inline-block;text-decoration:none;cursor:pointer;
+  background:var(--accent);color:#fff;font-size:7.6pt;font-weight:750;letter-spacing:.6pt;
+  text-transform:uppercase;padding:2.8mm 4.4mm;border-radius:6px;white-space:nowrap;
+}
+.mail{color:inherit;text-decoration:none;border-bottom:1px solid rgba(194,74,0,.5);}
+.foot{display:flex;justify-content:space-between;align-items:baseline;margin-top:auto;padding-top:2mm;border-top:1px solid var(--line);}
+.brandmark{font-size:9.5pt;font-weight:800;letter-spacing:-.2pt;color:var(--logo);}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════ PAGE 1: the business proposition ══════════════════════ -->
+<section class="page">
+
+  <div class="eyebrow">Evidence-led motor claim triage</div>
+
+  <div class="row" style="gap:7mm;align-items:flex-start;">
+    <div style="flex:1.42;">
+      <h1>Turn claim evidence into a<br><span class="hl">defensible decision.</span></h1>
+      <p class="lede">ClaimIntel turns the evidence already collected for a motor claim (photographs, garage
+      estimate, FIR, licence, RC, telematics and dash-cam) into an evidence-led assessment, a fraud analysis,
+      an independent repair-cost benchmark and an auditable settlement recommendation.</p>
+      <p class="lede" style="margin-top:6px;color:var(--ink);font-weight:600;font-size:9.6pt;">
+      AI assesses the evidence. Deterministic rules calculate the financial outcome.</p>
+    </div>
+    <div style="flex:.58;padding-top:3mm;">
+      <div class="proof"><div class="v">30+</div><div class="k">deterministic fraud checks<br>run on every claim</div></div>
+      <div class="proof"><div class="v">Under &#8377;3</div><div class="k">of AI cost to assess<br>one complete claim file</div></div>
+      <div class="proof last"><div class="v">100%</div><div class="k">of settlement figures computed<br>by versioned, auditable rules</div></div>
+    </div>
+  </div>
+
+  <div class="rule"></div>
+
+  <div class="row" style="gap:6mm;">
+    <div style="flex:1.02;" class="problem">
+      <div class="kicker">The problem</div>
+      <h2>Surveyors do not scale.<br>Independent evidence does.</h2>
+      <p class="sm" style="margin-bottom:14px;">Every insurer already has surveyors and a fraud unit. What no one has is
+      an independent second look at <i>every</i> claim <span class="mark">within minutes</span> of it arriving, one that can still be
+      explained line by line months later.</p>
+
+      <div class="num"><div class="n">01</div><div>
+        <h3>Inflated repair estimates become overpayments</h3>
+        <p class="sm">When nothing prices the parts independently, an inflated estimate is settled at face value.
+        The overpayment never appears as a loss. It appears as a settled claim.</p></div></div>
+
+      <div class="num alt"><div class="n">02</div><div>
+        <h3>Fraud is visible in the portfolio, not in the queue</h3>
+        <p class="sm">Repeat garages, recycled playbooks and staged collisions show up clearly in claim history,
+        but not in front of the adjudicator making today's decision.</p></div></div>
+
+      <div class="num"><div class="n">03</div><div>
+        <h3>The regulatory clock does not flex with volume</h3>
+        <p class="sm">Surveyor appointment, report and settlement deadlines stay the same through festival spikes
+        and monsoon surges, whatever the queue looks like.</p></div></div>
+
+      <div class="num alt"><div class="n">04</div><div>
+        <h3>A figure you cannot explain cannot settle a claim</h3>
+        <p class="sm">Any assessment has to survive an Ombudsman query, an internal audit and the claimant's lawyer
+        asking exactly how the number was reached.</p></div></div>
+
+      <div class="close">
+        <div class="close-k">All four are one gap</div>
+        <p>Evidence arrives faster than anyone can independently check it. ClaimIntel closes that gap on
+        every claim that comes in, not only the ones somebody had time to question.</p>
+      </div>
+    </div>
+
+    <div style="flex:.98;">
+      <div class="panel">
+        <div style="font-size:7pt;font-weight:750;letter-spacing:1.1pt;text-transform:uppercase;color:#9B9FD8;position:relative;z-index:1;margin-bottom:5px;">The shift</div>
+        <h2>From manual review of every claim to <span class="hl">evidence-led triage on every claim.</span></h2>
+        <p class="sm" style="position:relative;z-index:1;">ClaimIntel does not replace investigation. It gives every
+        incoming claim a first, evidence-led layer of assessment, so investigators reach the claims that need
+        them sooner, with the groundwork already done.</p>
+        <div class="cols">
+          <div class="col"><h3>Assess</h3><p>Read damage from the photographs and reconcile it against the garage estimate.</p></div>
+          <div class="col"><h3>Verify</h3><p>Run fraud and consistency checks across documents, pricing, telematics and claim history.</p></div>
+          <div class="col"><h3>Decide</h3><p>Apply deterministic settlement rules to produce an auditable recommendation.</p></div>
+        </div>
+      </div>
+
+      <div style="margin-top:5mm;" class="grid g2">
+        <div class="card la"><h3>Priced against the market</h3>
+          <p class="sm">Parts are benchmarked against independent OEM and market sources, never against the
+          estimate being audited.</p></div>
+        <div class="card lb"><h3>AI informs. Rules decide.</h3>
+          <p class="sm">The assessment is one input. Versioned rules govern the money, and anything that fails to
+          complete holds the claim for review rather than passing it.</p></div>
+        <div class="card la" style="grid-column:1 / -1;"><h3>Ineligible claims cost nothing</h3>
+          <p class="sm">A deterministic eligibility check runs before any AI processing, so a claim outside its
+          policy period or scope of cover is closed without model spend.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="spacer"></div>
+
+  <div class="rule"></div>
+
+  <div class="kicker">What the insurer gets</div>
+  <div class="grid g4">
+    <div class="out"><h3>Stop leakage</h3><p>Identify inflated repair estimates before payout.</p></div>
+    <div class="out"><h3>Decide faster</h3><p>Assess every claim on arrival and surface the claims that need deeper investigation.</p></div>
+    <div class="out"><h3>Defend every figure</h3><p>Trace each financial calculation to a rule and a source.</p></div>
+    <div class="out"><h3>Control AI spend</h3><p>Meter and attribute model usage at claim level.</p></div>
+  </div>
+  <div class="residency">
+    <b>Keep data in India</b>
+    <p class="sm" style="flex:1;">Every model call, text and vision alike, runs in the AWS Mumbai region (ap-south-1).</p>
+  </div>
+
+  <div class="foot">
+    <div class="brandmark">ClaimIntel</div>
+    <div class="xs">Evidence-led claim triage for Indian motor insurers &nbsp;·&nbsp; Page 1 of 2</div>
+  </div>
+</section>
+
+<!-- ══════════════════════ PAGE 2: how it works, and how it fits ══════════════════════ -->
+<section class="page">
+
+  <div class="eyebrow">How ClaimIntel works</div>
+
+  <h1 style="font-size:16.5pt;margin-bottom:4px;">From the evidence you already collect<br>to <span class="hl">a decision you can defend.</span></h1>
+  <p class="lede" style="font-size:9pt;max-width:178mm;">ClaimIntel reads the documents and photographs a claim already carries, checks them against each other and against the market, and returns a recommendation with the reasoning attached. All in minutes, before the claim is decided.</p>
+
+  <div style="height:3.4mm;"></div>
+
+  <div class="kicker acc">The ClaimIntel pipeline</div>
+
+  <div class="pipeflow">
+    <div class="pf">
+      <div class="pf-lbl">Evidence in</div>
+      <ul>
+        <li>Damage photographs</li>
+        <li>Garage estimate &amp; FIR</li>
+        <li>Driving licence, RC</li>
+        <li>Telematics, dash-cam</li>
+        <li>Policy &amp; claim history</li>
+      </ul>
+    </div>
+
+    <div class="pf-arrow">&rarr;</div>
+
+    <div class="pf core">
+      <div class="pf-lbl">ClaimIntel</div>
+      <h3>Gate &rarr; Assess &rarr; Investigate<br>&rarr; Settle</h3>
+      <ul>
+        <li>Eligibility gate, before any AI spend</li>
+        <li>Damage, fraud, reconstruction, context</li>
+        <li>Independent pricing and labour</li>
+        <li>Deterministic guards and IRDAI maths</li>
+      </ul>
+    </div>
+
+    <div class="pf-arrow">&rarr;</div>
+
+    <div class="pf">
+      <div class="pf-lbl">Answers out</div>
+      <ul>
+        <li>What is actually damaged?</li>
+        <li>What should it cost?</li>
+        <li>Is this claim honest?</li>
+        <li>What do we pay?</li>
+        <li>Can we defend the figure?</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="band" style="margin-top:2.6mm;">AI informs the assessment. <b>Versioned rules govern pricing, depreciation, deductibles and
+  payout</b>, all testable and replayable.</div>
+
+  <div style="height:7mm;"></div>
+
+  <div class="rule"></div>
+
+  <div class="kicker">What ClaimIntel brings together</div>
+  <div class="grid g2">
+    <div class="card cap lb">
+      <h3>Damage assessment</h3>
+      <p class="sm">Reads damage from the photographs and reconciles it against the garage estimate: every
+      claimed part confirmed, contradicted or flagged as undeclared, with the evidence marked on the image.</p>
+    </div>
+    <div class="card cap la">
+      <h3>Fraud intelligence</h3>
+      <p class="sm">Runs 30+ deterministic checks across claim evidence, pricing, documents, telematics and claim
+      history, and scores the claim in code, so the same evidence always scores the same way.</p>
+    </div>
+    <div class="card cap lb">
+      <h3>Independent pricing</h3>
+      <p class="sm">Benchmarks parts against independent market and OEM sources rather than the estimate being
+      audited, and gives no verdict at all when too few parts can be priced.</p>
+    </div>
+    <div class="card cap la">
+      <h3>Auditable settlement</h3>
+      <p class="sm">Applies versioned rules for depreciation, deductibles, total-loss tests and settlement
+      calculations. A regulatory change updates the ruleset, not the code.</p>
+    </div>
+  </div>
+
+  <div style="height:9mm;"></div>
+
+  <div class="panel" style="padding:3.4mm 4.2mm;">
+    <div class="panel-head">
+      <h2>Enterprise-ready without replacing your claims system.</h2>
+      <p class="sm">ClaimIntel sits alongside the claims, policy and fraud systems you already use. It adds an
+      evidence-led triage layer without replacing your system of record.</p>
+    </div>
+    <div class="grid g3" style="position:relative;z-index:1;gap:2mm;">
+      <div class="chip"><h3>Runs in your AWS account</h3><p>Every model call runs in ap-south-1 and stays in the region.</p></div>
+      <div class="chip"><h3>No new database, no migration</h3><p>Runs on files, not a new database. Nothing to migrate.</p></div>
+      <div class="chip"><h3>Uses evidence you already collect</h3><p>Photos, FIR, estimate, licence and RC. Telematics optional.</p></div>
+      <div class="chip"><h3>Fails closed by design</h3><p>If a check cannot complete, the claim is held for review.</p></div>
+      <div class="chip"><h3>Configurable thresholds</h3><p>Score bands, check weights and rules are settings, not code.</p></div>
+      <div class="chip"><h3>Cost metered per claim</h3><p>Every model call is logged and costed against the claim.</p></div>
+    </div>
+  </div>
+
+  <div class="metricbar" style="margin-top:8mm;">
+    <div class="metric"><div class="v">Under &#8377;3</div><div class="k">of AI cost per claim assessed</div></div>
+    <div class="metric"><div class="v">30+</div><div class="k">deterministic fraud checks per claim</div></div>
+    <div class="metric"><div class="v">100%</div><div class="k">of settlement figures computed by rules</div></div>
+    <div class="metric"><div class="v">ap-south-1</div><div class="k">AWS Mumbai region</div></div>
+  </div>
+  <div class="spacer"></div>
+
+  <div class="cta" style="margin-top:3mm;">
+    <div>
+      <div class="path">01 Assess &nbsp;&rarr;&nbsp; 02 Shadow pilot &nbsp;&rarr;&nbsp; 03 Prove &nbsp;&rarr;&nbsp; 04 Scale</div>
+      <h2 style="font-size:12.5pt;margin-bottom:3px;">See ClaimIntel run on your own claims.</h2>
+      <p class="sm">A focused assessment, then a shadow-mode pilot on a defined claim category, with no live
+      decision changes. <b style="color:var(--ink);">Write to <a class="mail" href="mailto:genai.marketing@ganitinc.com?subject=ClaimIntel%20demo%20request&amp;body=Hello%20ClaimIntel%20team%2C%0D%0A%0D%0AWe%20would%20like%20to%20see%20ClaimIntel%20run%20on%20our%20own%20motor%20claims.%0D%0A%0D%0AOrganisation%3A%0D%0AContact%20name%20and%20role%3A%0D%0AClaim%20categories%20we%20would%20like%20to%20start%20with%3A%0D%0AApproximate%20monthly%20motor%20claim%20volume%3A%0D%0APreferred%20time%20for%20an%20introductory%20call%3A%0D%0A%0D%0AAnything%20else%20you%20should%20know%3A%0D%0A%0D%0AThank%20you.%0D%0A">genai.marketing@ganitinc.com</a> to start your ClaimIntel journey.</b></p>
+    </div>
+    <a class="btn" href="mailto:genai.marketing@ganitinc.com?subject=ClaimIntel%20demo%20request&amp;body=Hello%20ClaimIntel%20team%2C%0D%0A%0D%0AWe%20would%20like%20to%20see%20ClaimIntel%20run%20on%20our%20own%20motor%20claims.%0D%0A%0D%0AOrganisation%3A%0D%0AContact%20name%20and%20role%3A%0D%0AClaim%20categories%20we%20would%20like%20to%20start%20with%3A%0D%0AApproximate%20monthly%20motor%20claim%20volume%3A%0D%0APreferred%20time%20for%20an%20introductory%20call%3A%0D%0A%0D%0AAnything%20else%20you%20should%20know%3A%0D%0A%0D%0AThank%20you.%0D%0A">Request a demo &rarr;</a>
+  </div>
+
+  <div class="foot">
+    <div class="brandmark">ClaimIntel</div>
+    <div class="xs">AI assists the assessment; a licensed surveyor and your adjudicator remain accountable for the decision. &nbsp;·&nbsp; Page 2 of 2</div>
+  </div>
+</section>
+
+</body>
+</html>

@@ -7,8 +7,17 @@ instead of hallucinated by the LLM.
 
 The old static segment catalog / per-vehicle KB pricing was REMOVED — it was
 fabricated demo data and drifted far from live market prices. Pricing per part:
-  1. Live web lookup (services/price_lookup — Serper/Tavily)   → current OEM price
-  2. Unpriced (min=max=0, pricing_source="unpriced")           → surfaced, never invented
+  1. OEM price catalogue (services/oem_catalog), ≤90 days old  → "oem_catalog"
+  2. Live web lookup (services/price_lookup — Serper/Tavily)   → "live_web", written
+                                                                  back to the catalogue
+  3. OEM catalogue entry past its TTL (refresh failed)         → "oem_catalog", flagged stale
+  4. Unpriced (min=max=0, pricing_source="unpriced")           → surfaced, never invented
+
+The catalogue is NOT a return of the fabricated one: every entry was fetched
+from the same Serper/Tavily API under the same corroboration rule as tier 2,
+and carries its fetch date and source domains. It exists for run-to-run
+stability (the same part no longer re-prices on every investigation) and so a
+fresh clone prices the demo claims without spending API quota.
 
 The garage-estimate line amount used to sit between those two as a fallback
 basis. It was REMOVED (2026-08-13) because it made the assessed fair value
@@ -18,9 +27,6 @@ zero and quietly weakening FC-17, FC-23, FC-24 and the inflation cap. The
 assessed value is now independent by construction; where live web finds nothing,
 the part is reported as unpriced and `pricing_coverage` records the shortfall so
 `settlement_calc` can abstain from a verdict rather than act on a partial figure.
-
-An OEM/insurer price catalog is the intended second source — the waterfall is
-shaped for it — but nothing fabricated fills that slot in the meantime.
 
 Labour is NOT computed here. It comes from services/labour_engine (rule-based,
 explainable, per-operation), which this module calls once per claim.
@@ -53,14 +59,19 @@ try:
 except Exception:      # importable standalone (tests, scripts) without .env
     MIN_COVERAGE_PCT = 70.0
 
-# Damaged glass, lights, mirrors, wheels and the radiator are never repaired — always replaced
+# Damaged glass, lights, mirrors, wheels, the radiator and the AC condenser are
+# never repaired — always replaced
 _REPLACE_ONLY = {
     "windshield_front", "windshield_rear", "headlight_left", "headlight_right",
     "tail_light_left", "tail_light_right", "side_mirror_left", "side_mirror_right",
-    "alloy_wheel", "foglight_left", "foglight_right", "radiator",
+    "alloy_wheel", "foglight_left", "foglight_right", "radiator", "ac_condenser",
 }
 
 _ACTION_MULT = {"Replace": 1.0, "Repair": 0.40, "Paint": 0.15}
+
+# Pricing sources that count as an independent market price, in the order
+# `pricing_method` names them ("oem_catalog", "live_web", "oem_catalog+live_web").
+MARKET_SOURCES = ("oem_catalog", "live_web")
 
 
 # ── Part-name canonicalisation ──────────────────────────────────────────────────
@@ -148,7 +159,45 @@ _ALIASES = {
     "radiator_assembly": "radiator",
     "radiator_core": "radiator",
     "radiator_support": "radiator",
-    "condenser": "radiator",
+    # An AC condenser is its own part (it sits ahead of the radiator), and has
+    # its own OEM-catalogue entry — it used to be priced as a radiator.
+    "condenser": "ac_condenser",
+    # Further drift, found on the four 2026-09 demo claims. Each of these gave a
+    # second key — and so a second OEM-catalogue entry and a second price — to a
+    # part that already had one.
+    "bonnet_panel": "bonnet",
+    "hood_panel": "bonnet",
+    "front_door_left": "front_left_door",
+    "front_door_right": "front_right_door",
+    "rear_door_left": "rear_left_door",
+    "rear_door_right": "rear_right_door",
+    "headlight_housing_left": "headlight_left",
+    "headlight_housing_right": "headlight_right",
+    "front_bumper_reinforcement_bar": "bumper_reinforcer",
+    "bumper_reinforcement_bar": "bumper_reinforcer",
+    # Liners are sold side-agnostic at one price, and price_lookup only has a
+    # side-less entry for them — a sided name never found its search phrasing.
+    "wheel_arch_liner_left": "wheel_arch_liner",
+    "wheel_arch_liner_right": "wheel_arch_liner",
+    "front_wheel_arch_liner_left": "wheel_arch_liner",
+    "front_wheel_arch_liner_right": "wheel_arch_liner",
+    # Structural / safety lines on the demo estimates, under the names the
+    # vision model tends to use for them.
+    "airbag_module": "airbag_module_set",
+    "airbag_modules": "airbag_module_set",
+    "airbags": "airbag_module_set",
+    "front_airbags": "airbag_module_set",
+    "front_crossmember": "front_suspension_crossmember",
+    "front_subframe": "front_suspension_crossmember",
+    "subframe": "front_suspension_crossmember",
+    "steering_rack": "power_steering_rack",
+    "engine_undercover": "engine_undertray",
+    "engine_under_cover": "engine_undertray",
+    "skid_plate": "engine_undertray",
+    "engine_mount": "engine_mounts",
+    "parking_sensors": "front_bumper_sensors",
+    "bumper_sensors": "front_bumper_sensors",
+    "seat_belt_pretensioners": "seat_belt_pretensioner",
 }
 
 # Garage estimates use trade shorthand — normalise before token matching.
@@ -156,7 +205,7 @@ _ALIASES = {
 # Verified directly against real Indian garage-estimate shorthand (2026-07-14):
 # abbreviations like "FRT BPR ASSY", "RH HDLMP", "LH FDR", "WHL ARCH LINER" were
 # going unrecognized, which silently bucketed a genuine estimate-matched part
-# into `undeclared_parts` (a false estimate-mismatch signal — see newupdates.md
+# into `undeclared_parts` (a false estimate-mismatch signal — see docs/newupdates.md
 # item #25). A synonym VALUE may itself be multi-word ("tail_light") — see
 # _expand_tokens below, which splits those back into separate tokens so
 # "TL" still correctly matches a "tail_light_left" part.
@@ -184,8 +233,20 @@ _TEXT_SYNONYMS = {
 }
 
 
+# Tokens normalised inside a part NAME before the alias lookup. The vision model
+# borrows the estimate's shorthand: on the 2026-09-11 run of the Baleno claim it
+# named four claimed parts `front_fender_lh`, `front_door_lh_skin`, `orvm_lh` and
+# `wheel_arch_liner_lh`. None matched an alias or an OEM-catalogue key, so they
+# went unpriced, coverage fell to 50%, and the fair-value bands abstained — the
+# inflation cap never fired on the inflated-estimate showcase case.
+_CANON_SIDE = {"lh": "left", "rh": "right"}
+_CANON_NOISE = {"skin", "shell", "assy", "assembly", "oem"}
+
+
 def _canon(part: str) -> str:
     p = re.sub(r"[^a-z0-9]+", "_", (part or "").strip().lower()).strip("_")
+    tokens = [_CANON_SIDE.get(t, t) for t in p.split("_") if t and t not in _CANON_NOISE]
+    p = "_".join(tokens) or p
     return _ALIASES.get(p, p)
 
 
@@ -268,7 +329,17 @@ def _r(x: float) -> int:
 
 def price_part(vehicle: str, part: str, severity: str, repair_type: str = "",
                live: bool = True) -> dict:
-    """Price one part from live web market data, or report it unpriced.
+    """Price one part from market data, or report it unpriced.
+
+    Order:
+      1. OEM catalogue entry fetched within the TTL      → "oem_catalog"
+      2. live web lookup (only when `live`), written back → "live_web"
+      3. OEM catalogue entry past the TTL (the refresh     → "oem_catalog",
+         failed or `live` is off)                             price_stale=True
+      4. nothing                                          → "unpriced"
+
+    The catalogue is a local file, so tier 1 and tier 3 work offline. Every
+    figure in it came from the same API as tier 2 — see services/oem_catalog.
 
     Deliberately takes no garage-estimate anchor: the assessed value must be
     independent of the document it is checking (see the module docstring).
@@ -282,24 +353,53 @@ def price_part(vehicle: str, part: str, severity: str, repair_type: str = "",
     obs_low = obs_high = 0.0
     sources_n = 0
     source = "unpriced"
+    fetched_on = None
+    stale = False
 
-    # Live web price — currently the only independent market source. A future
-    # OEM/insurer catalog slots in here as a second tier.
-    if live:
+    try:
+        from services import oem_catalog
+        entry = oem_catalog.get(vehicle, canon)
+    except Exception:
+        oem_catalog, entry = None, None
+
+    def _take(hit_price, low, high, n, src, when, is_stale):
+        nonlocal market, obs_low, obs_high, sources_n, source, fetched_on, stale
+        market = float(hit_price)
+        obs_low, obs_high = float(low), float(high)
+        sources_n, source, fetched_on, stale = n, src, when, is_stale
+
+    if entry and not entry["stale"]:
+        _take(entry["price"], entry["low"], entry["high"], entry["source_count"],
+              "oem_catalog", entry["fetched_on"], False)
+    elif live:
         try:
             from services.price_lookup import lookup_market_price
             hit = lookup_market_price(vehicle, canon)
-            if hit:
-                market = float(hit["price"])
-                obs_low, obs_high = float(hit["low"]), float(hit["high"])
-                sources_n = hit["sources"]
-                source = "live_web"
         except Exception:
-            pass
+            hit = None
+        if hit:
+            when = hit.get("fetched_at")
+            _take(hit["price"], hit["low"], hit["high"], hit["sources"], "live_web",
+                  oem_catalog.format_ts(when) if (oem_catalog and when) else None, False)
+            if oem_catalog:
+                # Write-back: the next claim on this model reads it from the
+                # catalogue instead of searching again, and a stale entry is
+                # overwritten with today's price.
+                try:
+                    oem_catalog.upsert(vehicle, canon, hit, fetched_at=when, origin="runtime")
+                except Exception:
+                    pass
+
+    if source == "unpriced" and entry:
+        # Past the TTL and the refresh did not produce a price (or live pricing
+        # is off). The old price is used, but flagged — never passed off as fresh.
+        _take(entry["price"], entry["low"], entry["high"], entry["source_count"],
+              "oem_catalog", entry["fetched_on"], True)
 
     if source == "unpriced":
         return {"min": 0, "max": 0, "part_min": 0, "part_max": 0, "labour": 0,
                 "market": 0, "observed_low": 0, "observed_high": 0, "price_sources": 0,
+                "price_fetched_on": None, "price_stale": False,
                 "action": action, "pricing_source": source, "canonical_part": canon}
 
     # The band is the OBSERVED spread between the independent retailers that
@@ -329,6 +429,10 @@ def price_part(vehicle: str, part: str, severity: str, repair_type: str = "",
         "observed_low": _r(obs_low or market),
         "observed_high": _r(obs_high or market),
         "price_sources": sources_n,
+        # When the API returned this price, and whether that is past the OEM
+        # catalogue TTL — shown next to the figure on every surface.
+        "price_fetched_on": fetched_on,
+        "price_stale": stale,
         "action": action, "pricing_source": source, "canonical_part": canon,
     }
 
@@ -427,6 +531,8 @@ def estimate_damage(vehicle: str, damaged_parts: list, undeclared_parts: list | 
             p["market_price_INR"] = pr["market"]
             p["price_range_INR"] = {"low": pr["observed_low"], "high": pr["observed_high"]}
             p["price_sources"] = pr["price_sources"]
+            p["price_fetched_on"] = pr["price_fetched_on"]
+            p["price_stale"] = pr["price_stale"]
             p["labour_INR"] = part_labour
             p["repair_estimate_INR"] = {
                 "min": pr["part_min"] + part_labour,
@@ -474,21 +580,30 @@ def estimate_damage(vehicle: str, damaged_parts: list, undeclared_parts: list | 
     # about how trustworthy THAT figure is, so counting undeclared parts in the
     # denominator would understate it (and counting them in the numerator would
     # overstate it).
-    priced = [p for i, p in enumerate(damaged_parts) if results[i]["pricing_source"] == "live_web"]
+    # Both market tiers are independent of the garage quote — the catalogue is
+    # the same API's output, just fetched earlier — so both count as priced.
+    priced_idx = [i for i in range(len(damaged_parts))
+                  if results[i]["pricing_source"] in MARKET_SOURCES]
     unpriced = [p.get("part", "") for i, p in enumerate(damaged_parts)
                 if results[i]["pricing_source"] == "unpriced"]
     coverage = {
-        "priced_count": len(priced),
+        "priced_count": len(priced_idx),
         "total_count": len(damaged_parts),
-        "coverage_pct": round(len(priced) / len(damaged_parts) * 100) if damaged_parts else 0,
+        "coverage_pct": round(len(priced_idx) / len(damaged_parts) * 100) if damaged_parts else 0,
         "unpriced_parts": unpriced,
+        # Priced from a catalogue entry past its TTL because the refresh failed.
+        # Over all priced parts (matched and undeclared), since every one of them
+        # is displayed with its figure.
+        "stale_parts": [p.get("part", "") for i, p in enumerate(all_parts)
+                        if results[i].get("price_stale")],
     }
 
     if not damaged_parts:
         method = "unpriced"
     elif coverage["coverage_pct"] >= MIN_COVERAGE_PCT:
-        method = "live_web"
-    elif priced:
+        used = {results[i]["pricing_source"] for i in priced_idx}
+        method = "+".join(s for s in MARKET_SOURCES if s in used)
+    elif priced_idx:
         method = "insufficient_coverage"
     else:
         method = "unpriced"
@@ -521,7 +636,9 @@ def estimate_damage(vehicle: str, damaged_parts: list, undeclared_parts: list | 
                 "(only these carry bounding boxes). Undeclared = visible damage the "
                 "garage estimate omits. Unverified = claimed in the estimate but no photo "
                 "angle confirms it — not priced, listed at the estimate's own claimed "
-                "amount for visibility only. Part prices are live-web market data only; "
+                "amount for visibility only. Part prices are market data from the OEM "
+                "price catalogue (API-fetched, dated) or a live web search — never the "
+                "garage estimate; "
                 "labour is assessed independently by the rule-based labour engine, and the "
                 "garage's own labour total is shown alongside purely for comparison. "
                 "SCOPE: total_repair_estimate, the labour assessment and pricing_coverage "

@@ -3,6 +3,27 @@ import { ImageOff, CheckCircle2, X } from 'lucide-react'
 import { Badge } from '../ui'
 import { SEVERITY_HEX, severityTone, inr } from '../ui/tokens'
 
+// A part's boxes for one photo. `bounding_boxes` is the full list (primary box
+// plus any the per-image backfill found); `bounding_box` is the singular
+// original and stays the fallback so results cached before the backfill, and
+// any consumer that never got the list, still draw exactly as they did.
+function boxesForImage(parts, activeIdx) {
+  return (parts || []).flatMap((part) => {
+    const all =
+      Array.isArray(part.bounding_boxes) && part.bounding_boxes.length
+        ? part.bounding_boxes
+        : part.bounding_box
+          ? [part.bounding_box]
+          : []
+    return all
+      .filter((bb) => {
+        const idx = bb?.image_index
+        return idx === undefined || idx === null ? activeIdx === 0 : idx === activeIdx
+      })
+      .map((bb) => ({ part, bb }))
+  })
+}
+
 export default function VisualEvidenceAnalysis({ imageUrls, damagedParts, noDamage, noDamageReason, onDeleteImage }) {
   const [activeIdx, setActiveIdx] = useState(0)
   const [imgError, setImgError] = useState(false)
@@ -42,10 +63,7 @@ export default function VisualEvidenceAnalysis({ imageUrls, damagedParts, noDama
 
     if (!damagedParts?.length) return
 
-    const visibleParts = damagedParts.filter((p) => {
-      const idx = p.bounding_box?.image_index
-      return idx === undefined || idx === null ? activeIdx === 0 : idx === activeIdx
-    })
+    const visibleBoxes = boxesForImage(damagedParts, activeIdx)
 
     const fontSize = Math.max(9, Math.min(12, dispW / 35))
     ctx.font = `600 ${fontSize}px "Inter Variable", system-ui, sans-serif`
@@ -57,10 +75,7 @@ export default function VisualEvidenceAnalysis({ imageUrls, damagedParts, noDama
     // Pass 1 — geometry + box art. Boxes are drawn together so a later
     // translucent fill can never tint an already-drawn label chip.
     const items = []
-    visibleParts.forEach((part) => {
-      const bb = part.bounding_box
-      if (!bb) return
-
+    visibleBoxes.forEach(({ part, bb }) => {
       const x = offX + (bb.x / 100) * dispW
       const y = offY + (bb.y / 100) * dispH
       const w = (bb.w / 100) * dispW
@@ -239,10 +254,9 @@ export default function VisualEvidenceAnalysis({ imageUrls, damagedParts, noDama
     )
   }
 
-  const visibleParts = (damagedParts || []).filter((p) => {
-    const idx = p.bounding_box?.image_index
-    return idx === undefined || idx === null ? activeIdx === 0 : idx === activeIdx
-  })
+  // De-duplicated back to parts: one row per part on this photo, even if the
+  // part somehow carries two boxes for it.
+  const visibleParts = [...new Set(boxesForImage(damagedParts, activeIdx).map((b) => b.part))]
 
   return (
     <div className="space-y-3">

@@ -6,7 +6,7 @@ localization step in damage_assessment.py — see
 DAMAGE_VALIDATION_ARCHITECTURE.md §E for why: Amazon Nova is natively trained
 for bbox output on a documented [0,1000) coordinate scale, whereas the
 general-purpose Groq/Llama-4-Scout model this project otherwise uses is not,
-and this project's own empirical testing (newupdates.md #10b) confirmed the
+and this project's own empirical testing (docs/newupdates.md #10b) confirmed the
 resulting box-overlap problem is a real model-capability gap, not something
 prompt tuning alone can close.
 
@@ -31,7 +31,7 @@ from config import (
 
 # Bedrock Converse base64-encodes every image into the JSON request body at a
 # fixed 4:3 (1.3333x) ratio (measured directly against the real wire payload,
-# newupdates.md #34's ValidationException investigation) and enforces a real
+# docs/newupdates.md #34's ValidationException investigation) and enforces a real
 # ceiling on the encoded body — AWS documents 3.75MB raw / ~5MB encoded per
 # image. This project has no upload-time size cap (main.py accepts any JPEG a
 # phone camera produces, commonly 3-12MB), so a raw claim photo can silently
@@ -156,12 +156,49 @@ Return ONLY valid JSON, no markdown fences, no explanation text:
 """
 
 
-def locate_boxes(image_path: str, parts: list[dict]) -> dict[str, dict]:
+_BACKFILL_PROMPT = """You are shown ONE photo of a damaged vehicle. The damage assessment was
+already completed on a DIFFERENT photo of the same vehicle. Your job here is NOT to assume the
+listed parts are present: it is to decide which of them are genuinely visible AND visibly damaged
+in THIS photo, and to box only those.
+
+This photo may be taken from a completely different angle to the one the assessment used. It is
+normal and expected that MOST of the listed parts are not visible in it. Returning an empty list is
+the correct answer when the angle does not show them.
+
+Candidate parts:
+{parts_list}
+
+Include a part ONLY if BOTH of these are true:
+  1. the part itself is clearly visible in this photo - not occluded, not cut off by the frame, and
+     not on the far side of the vehicle from the camera; and
+  2. that part's damage is actually visible in this photo.
+
+If you are unsure, leave it out. A part left out costs nothing, because it is already boxed on the
+photo the assessment used. A box drawn on a part that is not in this photo is a factual error in a
+document that reaches the claimant and the adjudicator.
+
+Coordinate system: [x1, y1, x2, y2] on a 0-1000 scale, (x1,y1) = top-left, (x2,y2) = bottom-right,
+relative to the full image. The box must tightly enclose ONLY that part's damaged region.
+
+Return ONLY valid JSON, no markdown fences, no explanation text:
+{{"boxes": [{{"part_id": "bonnet", "box_1000": [100, 600, 500, 800]}}]}}
+"""
+
+
+def locate_boxes(image_path: str, parts: list[dict], strict: bool = False) -> dict[str, dict]:
     """
     `parts`: [{"part_id": "front_bumper", "label": "front bumper - crushed lower
     section"}, ...] — already-confirmed-damaged parts needing a box for THIS
     ONE image. Never called for undeclared/unverified parts (undeclared parts
     are never boxed at all, per the existing estimate-anchoring guardrail).
+
+    `strict` switches to the BACKFILL prompt, for the different question asked
+    when annotating a photo the assessment did not box anything on. There the
+    part list is a set of CANDIDATES rather than confirmed contents: the model
+    is being asked "is this part even in this photo?", which is detection, not
+    localization. Using the localization prompt for it produced boxes for a wing
+    mirror and a front door on a head-on shot that showed neither, and varied
+    between 4 and 7 parts across two runs of the same image.
 
     Returns {part_id: {"x": .., "y": .., "w": .., "h": ..}} in this project's
     existing percentage-based box format (0-100 scale, no image_index — the
@@ -177,7 +214,8 @@ def locate_boxes(image_path: str, parts: list[dict]) -> dict[str, dict]:
         parts_list_text = "\n".join(
             f"  - {p['part_id']} ({p.get('label', p['part_id'])})" for p in parts
         )
-        prompt = _GROUNDING_PROMPT.format(parts_list=parts_list_text)
+        template = _BACKFILL_PROMPT if strict else _GROUNDING_PROMPT
+        prompt = template.format(parts_list=parts_list_text)
 
         response = _client().converse(
             modelId=BEDROCK_GROUNDING_MODEL,

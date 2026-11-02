@@ -133,7 +133,7 @@ _PROMPTS = {
 
 # The vision model sometimes flags our OWN "FOR DEMO PURPOSES ONLY" disclaimer
 # text (baked into every synthetic DL/RC/FIR/estimate for responsible-AI
-# reasons — see scripts/generate_test_cases.py's _demo_disclaimer()) as an
+# reasons — see dev/scripts/generate_test_cases.py's _demo_disclaimer()) as an
 # authenticity concern, even when the prompt explicitly says not to
 # (_DOC_AUTHENTICITY_SECTION's "EXPLICIT SELF-DISCLOSURE" rule) — verified
 # live: it sometimes reasons "this disclaimer alone does not raise flags" and

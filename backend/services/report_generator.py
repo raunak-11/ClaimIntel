@@ -215,10 +215,22 @@ def _kb_glossary_list(pdf: ClaimPDF, entries: list[dict], color: tuple = C_INDIG
 
 
 _PRICE_SOURCE_LABELS = {
+    "oem_catalog": "OEM catalogue",
     "live_web": "Live web",
     "unpriced": "Not priced",
     "garage_estimate": "Garage (legacy)",
 }
+
+
+def _price_fetched_cell(p: dict) -> str:
+    """Short fetch-date marker for the parts table: 'STALE' when the price is
+    past the OEM catalogue TTL, else the fetch date as dd/mm/yy."""
+    if p.get("price_stale"):
+        return "STALE"
+    raw = str(p.get("price_fetched_on") or "")
+    if len(raw) >= 10 and raw[4] == "-" and raw[7] == "-":
+        return f"{raw[8:10]}/{raw[5:7]}/{raw[2:4]}"
+    return ""
 
 _VARIANCE_COLORS = {
     "NORMAL": C_APPROVE,
@@ -619,7 +631,7 @@ def generate_claim_report(claim: dict, result: dict) -> bytes:
         pdf.set_text_color(*C_WHITE)
         pdf.set_font("Helvetica", "B", 7.5)
         col_widths = [52, 24, 40, 30, 26, 14]
-        headers    = ["Part", "Severity", "Estimate (Rs.)", "Repair Type", "Pricing", ""]
+        headers    = ["Part", "Severity", "Estimate (Rs.)", "Repair Type", "Pricing", "Fetched"]
         for w, h in zip(col_widths, headers):
             pdf.cell(w, 6, h, fill=True)
         pdf.ln()
@@ -648,14 +660,21 @@ def generate_claim_report(claim: dict, result: dict) -> bytes:
             pdf.cell(col_widths[3], 6, _s(p.get("repair_type", "—")), fill=True)
             pdf.cell(col_widths[4], 6, _s(_PRICE_SOURCE_LABELS.get(
                 p.get("pricing_source"), p.get("pricing_source", "—"))), fill=True)
-            pdf.cell(col_widths[5], 6, "", fill=True)
+            fetched = _price_fetched_cell(p)
+            if fetched == "STALE":
+                pdf.set_text_color(*C_ESCALATE)
+                pdf.set_font("Helvetica", "B", 7)
+            else:
+                pdf.set_font("Helvetica", "", 6.5)
+            pdf.cell(col_widths[5], 6, fetched, fill=True)
+            pdf.set_text_color(*C_DARK)
             pdf.ln()
         pdf.ln(2)
     else:
         pdf.set_font("Helvetica", "I", 8)
         pdf.cell(0, 5, "No damaged parts identified.", new_x="LMARGIN", new_y="NEXT")
 
-    # ── Unverified claimed parts (estimate-driven verification — newupdates.md #34) ──
+    # ── Unverified claimed parts (estimate-driven verification — docs/newupdates.md #34) ──
     # Parts the garage estimate claims but no photo angle confirms. Never priced
     # (see pricing_engine.py's `unverified` bucket) — surfaced here so the
     # adjudicator sees exactly what's being paid for without photographic
@@ -720,15 +739,27 @@ def generate_claim_report(claim: dict, result: dict) -> bytes:
     _kv_row(pdf, "Assessed Fair Value", est_line, alt=False)
 
     # ── Independent pricing coverage ─────────────────────────────────────────
-    # Part prices come from live web market data only; the garage-line fallback
-    # was removed because an "independent" value built from the audited document
-    # is not independent. How much of the claim priced therefore decides whether
-    # the fair-value verdict below is trustworthy — record it in the report.
+    # Part prices come from market data only (the API-fetched OEM catalogue, or
+    # a live web search); the garage-line fallback was removed because an
+    # "independent" value built from the audited document is not independent.
+    # How much of the claim priced therefore decides whether the fair-value
+    # verdict below is trustworthy — record it in the report.
     cov = (damage.get("fair_value_breakdown") or {}).get("pricing_coverage") or {}
     if cov.get("total_count"):
         _kv_row(pdf, "Pricing Coverage",
                 f"{cov.get('priced_count', 0)}/{cov['total_count']} parts "
-                f"({cov.get('coverage_pct', 0)}%) priced from live web market data", alt=True)
+                f"({cov.get('coverage_pct', 0)}%) priced from market data", alt=True)
+        stale = cov.get("stale_parts") or []
+        if stale:
+            pdf.set_font("Helvetica", "I", 7.5)
+            pdf.set_text_color(*C_ESCALATE)
+            pdf.multi_cell(0, 4.5, _s(
+                "STALE PRICE: " + ", ".join(str(p).replace("_", " ") for p in stale)
+                + " priced from an OEM catalogue entry older than its validity window — "
+                  "the refresh from the price API failed, so the last fetched price is "
+                  "used. Check the fetch dates above before relying on these figures."),
+                new_x="LMARGIN", new_y="NEXT")
+            pdf.set_text_color(*C_DARK)
         unpriced = cov.get("unpriced_parts") or []
         if unpriced:
             pdf.set_font("Helvetica", "I", 7.5)
@@ -899,14 +930,24 @@ def generate_claim_report(claim: dict, result: dict) -> bytes:
         _bullet_list(pdf, fb if fb else ["Insufficient data to generate plain-language reasons."], color=dec_rgb)
     pdf.ln(4)
 
-    # ── Settlement breakdown (IRDAI-aligned itemised math) ───────────────────
+    # ── Settlement breakdown (itemised math) ─────────────────────────────────
     # Mirrors the SettlementBreakdown.jsx panel so the downloadable report
     # reconciles the headline figure with visible line items. .get() throughout
     # so a partial/missing breakdown can never raise.
+    #
+    # The header deliberately does NOT say "IRDAI-aligned". Most rows here are
+    # (depreciation per GR.9, compulsory excess, salvage, the IDV basis on a
+    # total loss) — but the inflation-cap basis and the capped-quote row come
+    # from our own fair-value bands, and GST is the GST Act. Labelling the whole
+    # table "IRDAI-aligned" claims regulatory backing for all three.
+    # docs/irdai-compliance.md §6 lists "Regulatory inflation limits" under
+    # Never say, and over-claiming IRDAI in a client-facing document is the
+    # exact defect that got this area escalated in the first place. The UI panel
+    # this mirrors never made the claim; the PDF did.
     bd = (summary.get("settlement_breakdown")
           or settlement.get("settlement_breakdown") or {})
     if bd:
-        _section_header(pdf, "Settlement Breakdown (IRDAI-aligned)")
+        _section_header(pdf, "Settlement Breakdown")
         cap = bd.get("inflation_cap_applied")
         is_tl = bd.get("is_total_loss")
 

@@ -701,12 +701,21 @@ def _run_fraud_checks(claim: dict, damage: dict, docs: dict | None = None) -> tu
                 geo = _geocode(claim.get("incident_location", ""))
                 gps_check = _check_gps_trail(telematics, geo)
                 match = gps_check["gps_location_match"]
+                # An approximate geocode is the town named in the location, not
+                # the spot itself, and is checked against a wider tolerance —
+                # say so, so the distance is read with the right precision.
+                approx = (geo or {}).get("precision") == "approximate"
+                basis = (f" (claimed location matched approximately via "
+                         f"'{geo.get('matched_query')}'; tolerance "
+                         f"{gps_check.get('gps_threshold_km')}km)" if approx else "")
                 if match is False:
                     emit("FC-22", "flag",
                          f"CRITICAL: Telematics GPS trail is {gps_check['gps_distance_km']}km from "
-                         f"the claimed incident location — vehicle was not where the claim says it was")
+                         f"the claimed incident location — vehicle was not where the claim says it was"
+                         + basis)
                 elif match is True:
-                    emit("FC-22", "pass", "Telematics GPS trail matches the claimed incident location.")
+                    emit("FC-22", "pass",
+                         "Telematics GPS trail matches the claimed incident location." + basis)
                 else:
                     # match is None — claimed location could not be geocoded, so the
                     # trail can't be verified either way. Not a pass.
